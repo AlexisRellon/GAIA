@@ -50,6 +50,13 @@
 - **Google reCAPTCHA**: Bot prevention for public forms
 - **Role-Based Access Control (RBAC)**: Master Admin, Report Validator, LGU Responder roles
 
+### Deployment & Containerization
+- **Docker**: Containerization for consistent development and production environments
+- **Docker Compose**: Local development orchestration (backend, frontend, Supabase)
+- **Heroku**: Cloud platform for production deployment with Docker containers
+- **Heroku Container Registry**: Docker image management and deployment
+- **GitHub Actions**: CI/CD pipeline for automated testing and Heroku deployment
+
 ### Storage & Real-Time
 - **Supabase Storage**: For citizen-uploaded images/media
 - **Supabase Realtime**: For live hazard/event notifications and updates
@@ -132,7 +139,11 @@
   - `docs: description` for documentation updates
   - `refactor(module): description` for code improvements
 - **Pull Requests**: Require code review before merging to `main`
-- **Deployment**: CI/CD pipeline for automated testing and deployment
+- **Deployment**: 
+  - **Local Development**: `docker-compose up` to start all services (backend, frontend, Supabase)
+  - **Production**: GitHub Actions → Docker build → Heroku Container Registry → Heroku deployment
+  - **Hot Reload**: Volume mounts in docker-compose.yml for live code changes during development
+  - **Environment Variables**: Managed via `.env` files (local) and Heroku config vars (production)
 
 ## Domain Context
 
@@ -166,6 +177,9 @@
 3. **Confidence Threshold**: AI predictions below minimum confidence score require human review
 4. **Internet Dependency**: Relies on online news sources (limited coverage in areas with poor connectivity)
 5. **Unstructured Text Quality**: Accuracy depends on clarity of source text (ambiguous reports reduce precision)
+6. **Container Environment**: All services must run in Docker containers for consistent deployment
+7. **Environment Isolation**: Secrets and credentials must use environment variables, never hardcoded in images
+8. **Service Communication**: In Docker Compose, services communicate using service names (e.g., `http://backend:8000`), not `localhost`
 
 ### Business Constraints
 1. **Data Privacy**: Citizen reports are anonymous; no personally identifiable information collected
@@ -201,9 +215,11 @@
 - **Scikit-learn**: Machine learning utilities for model evaluation
 
 ### Cloud Services
-- **Cloud Identity Provider**: (TBD - e.g., Firebase Auth, Auth0, AWS Cognito)
+- **Cloud Identity Provider**: Supabase Auth (email/password + social login)
 - **Google reCAPTCHA v3**: https://www.google.com/recaptcha/
-- **Hosting/Infrastructure**: (TBD - e.g., AWS, Azure, Google Cloud)
+- **Hosting/Infrastructure**: Heroku with Docker containers (https://www.heroku.com/)
+- **Container Registry**: Heroku Container Registry for Docker image management
+- **CI/CD**: GitHub Actions for automated testing and deployment pipeline
 
 ### Geospatial Services
 - **Leaflet**: Open-source JavaScript library for interactive maps (https://leafletjs.com/)
@@ -214,7 +230,10 @@
 - **Black**: Python code formatter
 - **ESLint**: JavaScript linter
 - **Pytest**: Python testing framework
-- **Jest**: JavaScript testing framework (if applicable)
+- **Jest**: JavaScript testing framework
+- **Docker**: Containerization platform (https://www.docker.com/)
+- **Docker Compose**: Multi-container orchestration for local development
+- **Heroku CLI**: Command-line tools for Heroku deployment and management
 
 ### Monitoring & Logging
 - **Activity Logger**: Custom session and activity tracking system
