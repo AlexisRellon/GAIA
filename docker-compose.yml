@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # Backend Python AI/ML Pipeline
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gaia-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - CLIMATE_NLI_MODEL_PATH=${CLIMATE_NLI_MODEL_PATH:-models/climate-nli}
+      - GEO_NER_MODEL_PATH=${GEO_NER_MODEL_PATH:-models/geo-ner}
+      - MIN_CONFIDENCE_THRESHOLD=${MIN_CONFIDENCE_THRESHOLD:-0.7}
+      - API_PORT=8000
+      - API_HOST=0.0.0.0
+    volumes:
+      - ./backend/python:/app/backend/python
+      - ./models:/app/models
+    networks:
+      - gaia-network
+    depends_on:
+      - supabase-db
+    restart: unless-stopped
+
+  # Frontend React PWA
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: builder
+    container_name: gaia-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_SUPABASE_URL=${REACT_APP_SUPABASE_URL}
+      - REACT_APP_SUPABASE_ANON_KEY=${REACT_APP_SUPABASE_ANON_KEY}
+      - REACT_APP_API_URL=http://backend:8000
+      - REACT_APP_MAPBOX_TOKEN=${REACT_APP_MAPBOX_TOKEN}
+      - REACT_APP_DEFAULT_CENTER_LAT=12.8797
+      - REACT_APP_DEFAULT_CENTER_LNG=121.7740
+      - REACT_APP_DEFAULT_ZOOM=6
+      - REACT_APP_RECAPTCHA_SITE_KEY=${REACT_APP_RECAPTCHA_SITE_KEY}
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - gaia-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    command: npm start
+
+  # Supabase Local Stack (PostgreSQL + PostGIS)
+  supabase-db:
+    image: supabase/postgres:15.1.0.117
+    container_name: gaia-supabase-db
+    ports:
+      - "54322:5432"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=postgres
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./backend/supabase/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - gaia-network
+    restart: unless-stopped
+    command: postgres -c wal_level=logical
+
+  # Supabase Studio (Database UI)
+  supabase-studio:
+    image: supabase/studio:20231123-64e39c1
+    container_name: gaia-supabase-studio
+    ports:
+      - "54323:3000"
+    environment:
+      - SUPABASE_URL=http://supabase-kong:8000
+      - STUDIO_PG_META_URL=http://supabase-meta:8080
+    networks:
+      - gaia-network
+    depends_on:
+      - supabase-db
+    restart: unless-stopped
+
+networks:
+  gaia-network:
+    driver: bridge
+
+volumes:
+  supabase-db-data:
+    driver: local
