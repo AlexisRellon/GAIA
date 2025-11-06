@@ -98,12 +98,17 @@ app = FastAPI(
     ]
 )
 
+# Determine environment for security and CORS configuration
+ENV = os.getenv("ENV", "development")
+
 # Configure CORS with environment-based whitelist
 # Support for Railway deployment, localhost development, and future custom domains
-default_origins = "http://localhost:3000,http://localhost:8000"
-if security_env == "production":
-    # Production: Railway domains + custom domains
+if ENV == "production":
+    # Production: Railway domains + custom domains (wildcard support)
     default_origins = "https://*.up.railway.app,https://*.railway.app,https://gaia.railway.app"
+else:
+    # Development: localhost only
+    default_origins = "http://localhost:3000,http://localhost:8000"
 
 allowed_origins_str = os.getenv("CORS_ORIGINS", default_origins)
 
@@ -134,8 +139,8 @@ app.add_middleware(
 )
 
 # Add security headers middleware (SECURITY_AUDIT.md #5)
-security_env = os.getenv("ENV", "development")
-enable_hsts = security_env == "production"
+# Use ENV variable defined above - enable HSTS only in production
+enable_hsts = ENV == "production"
 app.add_middleware(
     SecurityHeadersMiddleware,
     enable_hsts=enable_hsts,
