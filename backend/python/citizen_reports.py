@@ -47,7 +47,8 @@ class ReportTrackingResponse(BaseModel):
     tracking_id: str
     status: str
     hazard_type: str
-    location_description: str
+    location_name: str
+    description: str
     submitted_at: datetime
     verified_at: Optional[datetime] = None
     confidence_score: float = Field(..., description="AI confidence score (0.0-1.0)")
@@ -130,11 +131,12 @@ async def submit_citizen_report(
     captcha_token: Optional[str] = Form(None, description="Cloudflare Turnstile token (optional)"),
     hazard_type: str = Form(..., description="Type of hazard"),
     description: str = Form(..., min_length=10, max_length=2000, description="Hazard description"),
-    location_description: str = Form(..., description="Location description"),
+    location_name: str = Form(..., description="Location name"),
     latitude: Optional[float] = Form(None, ge=-90, le=90, description="Latitude coordinate (optional)"),
     longitude: Optional[float] = Form(None, ge=-180, le=180, description="Longitude coordinate (optional)"),
     contact_method: Optional[str] = Form(None, description="Optional contact method"),
-    image: Optional[UploadFile] = File(None, description="Optional hazard photo")
+    image: Optional[UploadFile] = File(None, description="Optional hazard photo"),
+    image_metadata: Optional[dict] = Form(None, description="Metadata of the uploaded image")
 ):
     """
     Submit a citizen hazard report (CR-01, CR-03, CR-04)
@@ -142,7 +144,7 @@ async def submit_citizen_report(
     - **captcha_token**: Cloudflare Turnstile token for bot prevention
     - **hazard_type**: Type of hazard (flood, typhoon, etc.)
     - **description**: Detailed description of the hazard (10-2000 characters)
-    - **location_description**: Human-readable location description
+    - **location_name**: Human-readable location name
     - **latitude/longitude**: GPS coordinates
     - **contact_method**: Optional contact information
     - **image**: Optional photo of the hazard
@@ -227,18 +229,18 @@ async def submit_citizen_report(
             "tracking_id": tracking_id,
             "hazard_type": hazard_type,
             "description": description,
-            "location_description": location_description,
+            "location_name": location_name,
             "latitude": latitude,
             "longitude": longitude,
-            "coordinates": f"POINT({longitude} {latitude})" if latitude and longitude else None,  # PostGIS format
+            "location": f"POINT({longitude} {latitude})" if latitude and longitude else None,  # Supabase format: geometry
             "contact_method": contact_method,
             "image_url": image_url,
             "image_metadata": image_metadata,
             "source": "citizen_unverified",
             "confidence_score": 0.30,  # CR-04: Low base confidence for unverified reports
-            "status": "pending_verification",
+            "status": "unverified",
             # "recaptcha_score": recaptcha_result.get("score", 0.0),  # TEMPORARILY DISABLED
-            "recaptcha_score": 0.0,  # CAPTCHA temporarily disabled
+            "captcha_token": "<TOKEN PLACEHOLDER>",  # Edit This when re-enabling CAPTCHA
             "submitted_at": datetime.utcnow().isoformat(),
             "created_at": datetime.utcnow().isoformat()
         }
@@ -300,7 +302,8 @@ async def track_citizen_report(tracking_id: str):
             tracking_id=report["tracking_id"],
             status=report["status"],
             hazard_type=report["hazard_type"],
-            location_description=report["location_description"],
+            location_name=report["location_name"],
+            description=report["description"],
             submitted_at=datetime.fromisoformat(report["submitted_at"]),
             verified_at=datetime.fromisoformat(report["verified_at"]) if report.get("verified_at") else None,
             confidence_score=report["confidence_score"],
@@ -313,5 +316,5 @@ async def track_citizen_report(tracking_id: str):
         logger.error(f"Error tracking citizen report: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error retrieving report status"
+            detail={"Error retrieving report status": str(e)},
         )
