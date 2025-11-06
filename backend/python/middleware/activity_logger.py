@@ -41,7 +41,7 @@ class ActivityLogger:
     
     @staticmethod
     async def log_activity(
-        user_context: UserContext,
+        user_context: Optional[UserContext],
         action: str,
         request: Optional[Request] = None,
         resource_type: Optional[str] = None,
@@ -66,17 +66,32 @@ class ActivityLogger:
             # Extract IP and user agent
             ip_address = None
             user_agent = None
-            
+
             if request:
                 forwarded = request.headers.get("X-Forwarded-For")
                 ip_address = forwarded.split(",")[0] if forwarded else request.client.host
                 user_agent = request.headers.get("User-Agent")
             
             # Build activity log entry
+            # Allow logging for anonymous/public actions (user_context may be None)
+            user_id = None
+            user_email = "anonymous"
+            user_role = "anonymous"
+
+            if user_context:
+                user_id = getattr(user_context, "user_id", None)
+                user_email = getattr(user_context, "email", "anonymous")
+                # role may be an Enum
+                role_attr = getattr(user_context, "role", None)
+                try:
+                    user_role = role_attr.value if role_attr is not None else str(role_attr)
+                except Exception:
+                    user_role = str(role_attr)
+
             log_entry = {
-                "user_id": user_context.user_id,
-                "user_email": user_context.email,
-                "user_role": user_context.role.value,
+                "user_id": user_id,
+                "user_email": user_email,
+                "user_role": user_role,
                 "action": action,
                 "resource_type": resource_type,
                 "resource_id": resource_id,
@@ -90,7 +105,7 @@ class ActivityLogger:
             response = supabase.schema("gaia").from_("activity_logs").insert(log_entry).execute()
             
             if response.data:
-                logger.info(f"Activity logged: {user_context.email} - {action}")
+                logger.info(f"Activity logged: {user_email} - {action}")
                 return True
             else:
                 logger.warning(f"Activity log returned no data: {action}")

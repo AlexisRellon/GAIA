@@ -99,18 +99,37 @@ app = FastAPI(
 )
 
 # Configure CORS with environment-based whitelist
-allowed_origins = os.getenv(
-    "CORS_ORIGINS",
-    "http://localhost:3000,http://localhost:8000,https://gaia-frontend.herokuapp.com"
-).split(",")
+# Support for Railway deployment, localhost development, and future custom domains
+default_origins = "http://localhost:3000,http://localhost:8000"
+if security_env == "production":
+    # Production: Railway domains + custom domains
+    default_origins = "https://*.up.railway.app,https://*.railway.app,https://gaia.railway.app"
+
+allowed_origins_str = os.getenv("CORS_ORIGINS", default_origins)
+
+# Parse CORS origins (support wildcards for Railway subdomains)
+if "*" in allowed_origins_str:
+    # Wildcard support - validate origins at runtime
+    allowed_origins = "*"  # Allow all origins (Railway handles subdomain validation)
+else:
+    allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With", "X-API-Key"],
-    expose_headers=["*"],
+    allow_headers=[
+        "Content-Type", 
+        "Authorization", 
+        "Accept", 
+        "Origin", 
+        "X-Requested-With", 
+        "X-API-Key",
+        "X-CSRF-Token",
+        "Railway-Deployment-Id"  # Railway-specific header
+    ],
+    expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 

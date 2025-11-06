@@ -15,6 +15,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
 import sys
 
+from realtime import Field
+
 # Add parent directory to path for lib imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -263,6 +265,7 @@ require_researcher_role = require_role(
 async def log_admin_action(
     user: UserContext,
     action: str,
+    event_type: str,
     action_description: str,
     resource_type: str,
     resource_id: Optional[str] = None,
@@ -270,7 +273,9 @@ async def log_admin_action(
     new_values: Optional[dict] = None,
     success: bool = True,
     error_message: Optional[str] = None,
-    request: Optional[Request] = None
+    request: Optional[Request] = None,
+    severity: Optional[str] = "INFO",
+    status: Optional[str] = "success" # ANY (ARRAY['success'::text, 'failure'::text, 'pending'::text])
 ):
     """
     Log administrative actions to audit_logs table.
@@ -302,7 +307,10 @@ async def log_admin_action(
             "ip_address": ip_address,
             "user_agent": user_agent,
             "success": success,
-            "error_message": error_message
+            "error_message": error_message,
+            "event_type": event_type,
+            "severity": severity,
+            "status": status
         }).execute()
         
         logger.info(f"Audit log: {user.email} - {action} - {action_description}")

@@ -68,6 +68,7 @@ class UserProfileResponse(BaseModel):
     created_at: str
     updated_at: Optional[str]  # Added: exists in database
 
+# status = ANY (ARRAY['success'::text, 'failure'::text, 'pending'::text])
 
 class CreateUserRequest(BaseModel):
     """Request body for creating a new user"""
@@ -79,6 +80,9 @@ class CreateUserRequest(BaseModel):
     department: Optional[str] = Field(None, max_length=255)
     position: Optional[str] = Field(None, max_length=255)
     phone_number: Optional[str] = Field(None, max_length=20)
+    event_type: Optional[str] = Field(None, description="Type of event for logging purposes")
+    severity: str = Field("INFO", description="Severity level of the event")
+    status: str = Field("success", description="Initial status of the user account")
     
     class Config:
         schema_extra = {
@@ -96,13 +100,20 @@ class CreateUserRequest(BaseModel):
 
 class UpdateUserRoleRequest(BaseModel):
     """Request body for updating user role"""
+    event_type: Optional[str] = Field(None, description="Type of event for logging purposes")
+    severity: str = Field("INFO", description="Severity level of the event")
     role: UserRole
     reason: Optional[str] = Field(None, max_length=500, description="Reason for role change")
+    status: str = Field("success", description="Status of the role change operation")
+
 
 
 class DeactivateUserRequest(BaseModel):
+    event_type: Optional[str] = Field(None, description="Type of event for logging purposes")
+    severity: str = Field("WARNING", description="Severity level of the event")
     """Request body for deactivating a user"""
     reason: Optional[str] = Field(None, max_length=500, description="Reason for deactivation")
+    status: str = Field("success", description="Status of the deactivation operation")
 
 
 class AuditLogResponse(BaseModel):
@@ -122,7 +133,8 @@ class AuditLogResponse(BaseModel):
     success: bool
     error_message: Optional[str]
     created_at: str
-
+    event_type: Optional[str]  # Added: exists in database  
+    status: str
 
 class SystemConfigResponse(BaseModel):
     """System configuration parameter"""
@@ -160,9 +172,13 @@ class TriageReportResponse(BaseModel):
     description: str
     confidence_score: Optional[float]
     status: str
-    validated: bool
+    validated: bool = False  # Add default value to match database schema
     submitted_at: str
-    image_urls: Optional[List[str]]
+    image_urls: Optional[List[str]] = None  # Add default value, matches database TEXT[] array
+    
+    class Config:
+        # Allow extra fields from database that aren't in model
+        extra = 'allow'
 
 
 # ============================================================================
@@ -266,7 +282,8 @@ async def create_user(
             resource_type="user_profiles",
             resource_id=new_user_id,
             new_values={"email": user_data.email, "role": user_data.role.value},
-            request=request
+            request=request,
+            event_type="CREATE USER"
         )
         
         logger.info(f"Master Admin {current_user.email} created user: {user_data.email} ({user_data.role.value})")
@@ -328,7 +345,8 @@ async def update_user_role(
             resource_id=user_id,
             old_values={"role": old_role},
             new_values={"role": role_update.role.value},
-            request=request
+            request=request,
+            event_type="ROLE_CHANGED"
         )
         
         logger.info(f"Master Admin {current_user.email} changed role: {current_profile['email']} {old_role} -> {role_update.role.value}")
@@ -399,7 +417,8 @@ async def deactivate_user(
             resource_id=user_id,
             old_values={"status": current_profile["status"]},
             new_values={"status": UserStatus.INACTIVE.value},
-            request=request
+            request=request,
+            event_type="USER_DEACTIVATED"
         )
         
         logger.info(f"Master Admin {current_user.email} deactivated user: {current_profile['email']}")
@@ -603,12 +622,249 @@ async def get_triage_queue(
         # Execute query with pagination, ordered by submission time (oldest first for FIFO triage)
         response = query.order("submitted_at", desc=False).range(offset, offset + limit - 1).execute()
         
-        logger.info(f"User {current_user.email} retrieved {len(response.data)} reports for triage")
-        return response.data
+        # Transform database fields to match Pydantic model
+        # Database has 'image_url' (TEXT[]), model expects 'image_urls' (List[str])
+        transformed_data = []
+        for report in response.data:
+            # Map image_url -> image_urls (handle both column names)
+            report['image_urls'] = report.get('image_url') or report.get('image_urls') or []
+            # Ensure validated field exists (computed column or manual calculation)
+            if 'validated' not in report:
+                report['validated'] = report.get('validated_by') is not None
+            transformed_data.append(report)
+        
+        logger.info(f"User {current_user.email} retrieved {len(transformed_data)} reports for triage")
+        return transformed_data
         
     except Exception as e:
         logger.error(f"Error fetching triage queue: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch triage queue")
+
+
+class ReportTriageActionRequest(BaseModel):
+    """Request body for validating or rejecting a citizen report"""
+    notes: Optional[str] = Field(None, max_length=500, description="Optional validation/rejection notes")
+
+
+class ReportTriageActionResponse(BaseModel):
+    """Response after validating/rejecting a report"""
+    tracking_id: str
+    action: str  # 'validated' or 'rejected'
+    status: str
+    validated_by: Optional[str]
+    validated_at: Optional[str]
+    message: str
+
+
+@router.post("/reports/{tracking_id}/validate", response_model=ReportTriageActionResponse)
+async def validate_citizen_report(
+    tracking_id: str,
+    request_body: ReportTriageActionRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_admin)
+):
+    """
+    Validate a citizen report and add it to the hazard map.
+    
+    **Permissions**: Master Admin, Validator, LGU Responder
+    **Module**: AC-04 (Unverified Report Triage)
+    **Action**: Sets status to 'verified', marks validated_by, creates hazard record
+    """
+    try:
+        # 1. Fetch the citizen report
+        report_response = supabase.schema("gaia").from_("citizen_reports") \
+            .select("*") \
+            .eq("tracking_id", tracking_id) \
+            .execute()
+        
+        if not report_response.data or len(report_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Report not found: {tracking_id}"
+            )
+        
+        report = report_response.data[0]
+        
+        # 2. Check if already validated
+        if report.get('validated_by'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Report has already been validated"
+            )
+        
+        # 3. Update citizen_reports table
+        update_data = {
+            "status": "verified",
+            "validated_by": current_user.user_id,
+            "validated_at": datetime.utcnow().isoformat(),
+            "validation_notes": request_body.notes
+        }
+        
+        update_response = supabase.schema("gaia").from_("citizen_reports") \
+            .update(update_data) \
+            .eq("tracking_id", tracking_id) \
+            .execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update report status"
+            )
+        
+        # 4. Create hazard record for validated report
+        hazard_data = {
+            "hazard_type": report['hazard_type'],
+            "location_name": report['location_name'],
+            "latitude": report.get('latitude'),
+            "longitude": report.get('longitude'),
+            "location": report.get('location'),  # PostGIS geometry
+            "severity": "moderate",  # Default severity for citizen reports
+            "confidence_score": min(report.get('confidence_score', 0.3) + 0.4, 1.0),  # Boost confidence after validation
+            "source_type": "citizen_report",
+            "source_content": report['description'],
+            "validated": True,
+            "validated_by": current_user.user_id,
+            "validated_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        hazard_response = supabase.schema("gaia").from_("hazards") \
+            .insert(hazard_data) \
+            .execute()
+        
+        if not hazard_response.data:
+            logger.warning(f"Failed to create hazard record for validated report {tracking_id}")
+        
+        # 5. Log activity (fire and forget)
+        try:
+            ActivityLogger.log_activity(
+                user_context=current_user,
+                action="VALIDATE_CITIZEN_REPORT",
+                request=request,
+                resource_type="citizen_report",
+                resource_id=tracking_id,
+                details={
+                    "hazard_type": report['hazard_type'],
+                    "location": report['location_name'],
+                    "notes": request_body.notes
+                }
+            )
+        except Exception as log_error:
+            logger.warning(f"Failed to log activity: {log_error}")
+        
+        logger.info(f"User {current_user.email} validated report {tracking_id}")
+        
+        return ReportTriageActionResponse(
+            tracking_id=tracking_id,
+            action="validated",
+            status="verified",
+            validated_by=current_user.email,
+            validated_at=update_data["validated_at"],
+            message="Report validated successfully and added to hazard map"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error validating report {tracking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate report: {str(e)}"
+        )
+
+
+@router.post("/reports/{tracking_id}/reject", response_model=ReportTriageActionResponse)
+async def reject_citizen_report(
+    tracking_id: str,
+    request_body: ReportTriageActionRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_admin)
+):
+    """
+    Reject a citizen report.
+    
+    **Permissions**: Master Admin, Validator, LGU Responder
+    **Module**: AC-04 (Unverified Report Triage)
+    **Action**: Sets status to 'rejected', marks validated_by (rejection is a form of validation)
+    """
+    try:
+        # 1. Fetch the citizen report
+        report_response = supabase.schema("gaia").from_("citizen_reports") \
+            .select("*") \
+            .eq("tracking_id", tracking_id) \
+            .execute()
+        
+        if not report_response.data or len(report_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Report not found: {tracking_id}"
+            )
+        
+        report = report_response.data[0]
+        
+        # 2. Check if already processed
+        if report.get('validated_by'):
+            current_status = report.get('status', 'unknown')
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Report has already been processed (status: {current_status})"
+            )
+        
+        # 3. Update citizen_reports table
+        update_data = {
+            "status": "rejected",
+            "validated_by": current_user.user_id,
+            "validated_at": datetime.utcnow().isoformat(),
+            "validation_notes": request_body.notes or "Report rejected by validator"
+        }
+        
+        update_response = supabase.schema("gaia").from_("citizen_reports") \
+            .update(update_data) \
+            .eq("tracking_id", tracking_id) \
+            .execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update report status"
+            )
+        
+        # 4. Log activity (fire and forget)
+        try:
+            ActivityLogger.log_activity(
+                user_context=current_user,
+                action="REJECT_CITIZEN_REPORT",
+                request=request,
+                resource_type="citizen_report",
+                resource_id=tracking_id,
+                details={
+                    "hazard_type": report['hazard_type'],
+                    "location": report['location_name'],
+                    "reason": request_body.notes
+                }
+            )
+        except Exception as log_error:
+            logger.warning(f"Failed to log activity: {log_error}")
+        
+        logger.info(f"User {current_user.email} rejected report {tracking_id}")
+        
+        return ReportTriageActionResponse(
+            tracking_id=tracking_id,
+            action="rejected",
+            status="rejected",
+            validated_by=current_user.email,
+            validated_at=update_data["validated_at"],
+            message="Report rejected successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error rejecting report {tracking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reject report: {str(e)}"
+        )
 
 
 # ============================================================================

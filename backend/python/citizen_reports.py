@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 import httpx
-from fastapi import APIRouter, File, Form, UploadFile, HTTPException, status
+from fastapi import APIRouter, File, Form, UploadFile, HTTPException, status, Request
 from pydantic import BaseModel, Field, validator
 
 # Add parent directory to path for lib imports
@@ -127,6 +127,7 @@ async def verify_turnstile(token: str, remoteip: Optional[str] = None) -> dict:
 
 @router.post("/submit", response_model=ReportSubmissionResponse, status_code=status.HTTP_201_CREATED)
 async def submit_citizen_report(
+    request: Request,
     # captcha_token: str = Form(..., description="Cloudflare Turnstile token"),  # TEMPORARILY DISABLED
     captcha_token: Optional[str] = Form(None, description="Cloudflare Turnstile token (optional)"),
     hazard_type: str = Form(..., description="Type of hazard"),
@@ -225,14 +226,12 @@ async def submit_citizen_report(
     
     # 5. Insert report into database with UNVERIFIED status and 30% confidence (CR-04)
     try:
+        # Build report data - only include location if coordinates are provided
         report_data = {
             "tracking_id": tracking_id,
             "hazard_type": hazard_type,
             "description": description,
             "location_name": location_name,
-            "latitude": latitude,
-            "longitude": longitude,
-            "location": f"POINT({longitude} {latitude})" if latitude and longitude else None,  # Supabase format: geometry
             "contact_method": contact_method,
             "image_url": image_url,
             "image_metadata": image_metadata,
@@ -245,13 +244,36 @@ async def submit_citizen_report(
             "created_at": datetime.utcnow().isoformat()
         }
         
+        # Add coordinates only if provided (location column has NOT NULL constraint in DB)
+        if latitude is not None and longitude is not None:
+            report_data["latitude"] = latitude
+            report_data["longitude"] = longitude
+            report_data["location"] = f"POINT({longitude} {latitude})"
+        
         result = supabase.schema("gaia").from_("citizen_reports").insert(report_data).execute()
         
         if not result.data:
             raise Exception("Database insert failed - no data returned")
         
         logger.info(f"Citizen report created: {tracking_id}")
-        
+        # Log public submission activity (anonymous user)
+        try:
+            await ActivityLogger.log_activity(
+                user_context=None,
+                action="SUBMIT_CITIZEN_REPORT",
+                request=request,
+                resource_type="citizen_report",
+                resource_id=tracking_id,
+                details={
+                    "hazard_type": hazard_type,
+                    "location_name": location_name,
+                    "confidence_score": 0.30,
+                    "source": "citizen_unverified"
+                }
+            )
+        except Exception:
+            logger.warning("ActivityLogger failed for submit_citizen_report; continuing.")
+
         return ReportSubmissionResponse(
             tracking_id=tracking_id,
             message="Thank you for your report! It will be reviewed by authorities.",
@@ -268,7 +290,7 @@ async def submit_citizen_report(
 
 
 @router.get("/track/{tracking_id}", response_model=ReportTrackingResponse)
-async def track_citizen_report(tracking_id: str):
+async def track_citizen_report(tracking_id: str, request: Request):
     """
     Track the status of a submitted citizen report
     
@@ -297,7 +319,20 @@ async def track_citizen_report(tracking_id: str):
             )
         
         report = result.data[0]
-        
+
+        # Log report tracking/view action (anonymous/public)
+        try:
+            await ActivityLogger.log_activity(
+                user_context=None,
+                action="VIEW_REPORT_TRACK",
+                request=request,
+                resource_type="citizen_report",
+                resource_id=tracking_id,
+                details={"status": report.get("status")}
+            )
+        except Exception:
+            logger.debug("ActivityLogger failed for track_citizen_report; continuing.")
+
         return ReportTrackingResponse(
             tracking_id=report["tracking_id"],
             status=report["status"],
