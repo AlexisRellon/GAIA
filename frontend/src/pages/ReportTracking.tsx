@@ -16,7 +16,8 @@ interface ReportStatus {
   tracking_id: string;
   status: string;
   hazard_type: string;
-  location_description: string;
+  location_name: string;
+  description: string;
   submitted_at: string;
   verified_at?: string;
   confidence_score: number;
@@ -64,33 +65,37 @@ export function ReportTracking() {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+    const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode; hover: string }> = {
       pending_verification: {
         label: 'Pending Verification',
         color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-        icon: <Clock className="w-4 h-4" />
+        icon: <Clock className="w-4 h-4" />,
+        hover: 'hover:bg-yellow-200'
       },
       verified: {
         label: 'Verified',
         color: 'bg-green-100 text-green-800 border-green-300',
-        icon: <CheckCircle className="w-4 h-4" />
+        icon: <CheckCircle className="w-4 h-4" />,
+        hover: 'hover:bg-green-200'
       },
       rejected: {
         label: 'Rejected',
         color: 'bg-red-100 text-red-800 border-red-300',
-        icon: <XCircle className="w-4 h-4" />
+        icon: <XCircle className="w-4 h-4" />,
+        hover: 'hover:bg-red-200'
       },
       under_review: {
         label: 'Under Review',
         color: 'bg-blue-100 text-blue-800 border-blue-300',
-        icon: <AlertTriangle className="w-4 h-4" />
+        icon: <AlertTriangle className="w-4 h-4" />,
+        hover: 'hover:bg-blue-200'
       }
     };
 
     const config = statusConfig[status] || statusConfig.pending_verification;
 
     return (
-      <Badge className={`${config.color} border-2 px-4 py-2 text-sm font-semibold flex items-center gap-2`}>
+      <Badge className={`${config.color} border-2 px-4 py-2 text-sm font-semibold flex items-center gap-2 ${config.hover}`}>
         {config.icon}
         {config.label}
       </Badge>
@@ -135,7 +140,7 @@ export function ReportTracking() {
               <label htmlFor="tracking-id" className="block text-sm font-medium text-gray-700 mb-2">
                 Tracking ID
               </label>
-              <div className="flex gap-3">
+              <div className="flex gap-3 items-center">
                 <input
                   id="tracking-id"
                   type="text"
@@ -207,7 +212,7 @@ export function ReportTracking() {
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Location</p>
-                  <p className="font-semibold text-gray-900">{report.location_description}</p>
+                  <p className="font-semibold text-gray-900">{report.location_name}</p>
                 </div>
               </div>
 
@@ -236,6 +241,12 @@ export function ReportTracking() {
               </div>
             </div>
 
+            {/* Description */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Description</h3>
+              <p className="text-sm text-gray-800 whitespace-pre-line">{report.description}</p>
+            </div>
+
             {/* Verified Date (if applicable) */}
             {report.verified_at && (
               <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mb-6">
@@ -261,7 +272,7 @@ export function ReportTracking() {
                 </Button>
               </Link>
               <Link to="/report" className="flex-1">
-                <Button variant="outline" className="w-full" size="lg">
+                <Button variant="default" className="w-full" size="lg">
                   Submit Another Report
                 </Button>
               </Link>
