@@ -1,0 +1,33 @@
+# Simplified StackHawk Backend Configuration
+app:
+  applicationId: 7757fbff-3cb0-4cb1-8a9c-e6cf896ecffc
+  env: Development
+  host: http://localhost:8000
+  
+  openApiConf:
+    path: /openapi.json
+  
+  autoPolicy: true
+  
+  excludePaths:
+    - "/docs.*"
+    - "/redoc.*"
+  
+  waitForAppTarget:
+    path: /health
+    requestMethod: GET
+    waitTimeoutMillis: 60000
+    pollDelay: 2000
+
+hawk:
+  spider:
+    base: true
+    ajax: false
+    maxDurationMinutes: 5
+  
+  scan:
+    maxDurationMinutes: 10
+    concurrentRequests: 10
+  
+  failureThreshold: medium
+  startupTimeoutMinutes: 2

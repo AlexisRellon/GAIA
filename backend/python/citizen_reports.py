@@ -1,0 +1,317 @@
+"""
+Citizen Report Submission Endpoints
+Module: CR-03, CR-04
+Handles public hazard report submission with Cloudflare Turnstile verification
+"""
+
+import os
+import logging
+import sys
+import uuid
+from datetime import datetime
+from typing import Optional
+import httpx
+from fastapi import APIRouter, File, Form, UploadFile, HTTPException, status
+from pydantic import BaseModel, Field, validator
+
+# Add parent directory to path for lib imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from lib.supabase_client import supabase
+
+# Import ActivityLogger for comprehensive activity tracking
+from backend.python.middleware.activity_logger import ActivityLogger
+
+logger = logging.getLogger(__name__)
+
+# Initialize router - main.py adds /api/v1 prefix, so this becomes /api/v1/citizen-reports
+router = APIRouter(prefix="/citizen-reports", tags=["Citizen Reports"])
+
+# Supabase client imported from centralized configuration
+logger.info("✓ Supabase client initialized for citizen reports")
+
+# =============================================================================
+# PYDANTIC MODELS
+# =============================================================================
+
+class ReportSubmissionResponse(BaseModel):
+    """Response after successful report submission"""
+    tracking_id: str = Field(..., description="Unique tracking ID for the report")
+    message: str = Field(..., description="Confirmation message")
+    status: str = Field(default="pending_verification", description="Initial status")
+    submitted_at: datetime = Field(..., description="Timestamp of submission")
+
+
+class ReportTrackingResponse(BaseModel):
+    """Response for report tracking queries"""
+    tracking_id: str
+    status: str
+    hazard_type: str
+    location_description: str
+    submitted_at: datetime
+    verified_at: Optional[datetime] = None
+    confidence_score: float = Field(..., description="AI confidence score (0.0-1.0)")
+    notes: Optional[str] = None
+
+
+# =============================================================================
+# TURNSTILE VERIFICATION
+# =============================================================================
+
+async def verify_turnstile(token: str, remoteip: Optional[str] = None) -> dict:
+    """
+    Verify Cloudflare Turnstile token with Cloudflare's API
+    
+    Args:
+        token: The Turnstile response token from the frontend
+        remoteip: Optional IP address of the user
+        
+    Returns:
+        dict: Verification response from Cloudflare
+        
+    Raises:
+        HTTPException: If verification fails
+    """
+    secret_key = os.getenv("REACT_APP_TURNSTILE_SECRET_KEY")
+    
+    if not secret_key:
+        logger.error("REACT_APP_TURNSTILE_SECRET_KEY not configured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Turnstile verification not configured"
+        )
+    
+    # Make request to Cloudflare's verification API
+    verify_url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    
+    payload = {
+        "secret": secret_key,
+        "response": token
+    }
+    
+    if remoteip:
+        payload["remoteip"] = remoteip
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(verify_url, json=payload, timeout=10.0)
+            result = response.json()
+            
+            logger.info(f"Turnstile verification result: {result}")
+            
+            if not result.get("success"):
+                error_codes = result.get("error-codes", [])
+                logger.warning(f"Turnstile verification failed: {error_codes}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Turnstile verification failed: {error_codes}"
+                )
+            
+            # Turnstile doesn't use scores, just success/failure
+            # Additional checks can be added here if needed
+            
+            return result
+            
+    except httpx.RequestError as e:
+        logger.error(f"Turnstile verification request failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Turnstile verification service unavailable"
+        )
+
+
+# =============================================================================
+# API ENDPOINTS
+# =============================================================================
+
+@router.post("/submit", response_model=ReportSubmissionResponse, status_code=status.HTTP_201_CREATED)
+async def submit_citizen_report(
+    # captcha_token: str = Form(..., description="Cloudflare Turnstile token"),  # TEMPORARILY DISABLED
+    captcha_token: Optional[str] = Form(None, description="Cloudflare Turnstile token (optional)"),
+    hazard_type: str = Form(..., description="Type of hazard"),
+    description: str = Form(..., min_length=10, max_length=2000, description="Hazard description"),
+    location_description: str = Form(..., description="Location description"),
+    latitude: Optional[float] = Form(None, ge=-90, le=90, description="Latitude coordinate (optional)"),
+    longitude: Optional[float] = Form(None, ge=-180, le=180, description="Longitude coordinate (optional)"),
+    contact_method: Optional[str] = Form(None, description="Optional contact method"),
+    image: Optional[UploadFile] = File(None, description="Optional hazard photo")
+):
+    """
+    Submit a citizen hazard report (CR-01, CR-03, CR-04)
+    
+    - **captcha_token**: Cloudflare Turnstile token for bot prevention
+    - **hazard_type**: Type of hazard (flood, typhoon, etc.)
+    - **description**: Detailed description of the hazard (10-2000 characters)
+    - **location_description**: Human-readable location description
+    - **latitude/longitude**: GPS coordinates
+    - **contact_method**: Optional contact information
+    - **image**: Optional photo of the hazard
+    
+    Returns tracking ID for checking report status.
+    """
+    
+    # Validate Supabase connection
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service unavailable"
+        )
+    
+    # 1. Verify Turnstile - TEMPORARILY DISABLED
+    # try:
+    #     if captcha_token:
+    #         turnstile_result = await verify_turnstile(captcha_token)
+    #         logger.info(f"Turnstile verified successfully")
+    #     else:
+    #         logger.warning("No captcha_token provided - Turnstile verification skipped (CAPTCHA disabled)")
+    # except HTTPException:
+    #     raise
+    # except Exception as e:
+    #     logger.error(f"Unexpected error in Turnstile verification: {e}")
+    #     raise HTTPException(
+    #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    #         detail="Error verifying Turnstile token"
+    #     )
+    
+    # 2. Validate Philippine boundaries (4-21°N, 116-127°E) - only if coordinates provided
+    if latitude is not None and longitude is not None:
+        if not (4 <= latitude <= 21 and 116 <= longitude <= 127):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Coordinates outside Philippine boundaries"
+            )
+    
+    # 3. Generate unique tracking ID
+    tracking_id = f"CR{datetime.utcnow().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
+    
+    # 4. Handle image upload (if provided)
+    image_url = None
+    image_metadata = None
+    
+    if image and image.filename:
+        try:
+            # Read image content
+            image_content = await image.read()
+            
+            # Generate unique filename
+            file_extension = image.filename.split('.')[-1] if '.' in image.filename else 'jpg'
+            unique_filename = f"citizen-reports/{tracking_id}.{file_extension}"
+            
+            # Upload to Supabase Storage
+            storage_response = supabase.storage.from_("hazard-images").upload(
+                path=unique_filename,
+                file=image_content,
+                file_options={"content-type": image.content_type or "image/jpeg"}
+            )
+            
+            # Get public URL
+            image_url = supabase.storage.from_("hazard-images").get_public_url(unique_filename)
+            
+            image_metadata = {
+                "filename": image.filename,
+                "content_type": image.content_type,
+                "size": len(image_content)
+            }
+            
+            logger.info(f"Image uploaded successfully: {unique_filename}")
+            
+        except Exception as e:
+            logger.error(f"Image upload failed: {e}")
+            # Don't fail the entire request if image upload fails
+            image_url = None
+            image_metadata = {"error": str(e)}
+    
+    # 5. Insert report into database with UNVERIFIED status and 30% confidence (CR-04)
+    try:
+        report_data = {
+            "tracking_id": tracking_id,
+            "hazard_type": hazard_type,
+            "description": description,
+            "location_description": location_description,
+            "latitude": latitude,
+            "longitude": longitude,
+            "coordinates": f"POINT({longitude} {latitude})" if latitude and longitude else None,  # PostGIS format
+            "contact_method": contact_method,
+            "image_url": image_url,
+            "image_metadata": image_metadata,
+            "source": "citizen_unverified",
+            "confidence_score": 0.30,  # CR-04: Low base confidence for unverified reports
+            "status": "pending_verification",
+            # "recaptcha_score": recaptcha_result.get("score", 0.0),  # TEMPORARILY DISABLED
+            "recaptcha_score": 0.0,  # CAPTCHA temporarily disabled
+            "submitted_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        result = supabase.schema("gaia").from_("citizen_reports").insert(report_data).execute()
+        
+        if not result.data:
+            raise Exception("Database insert failed - no data returned")
+        
+        logger.info(f"Citizen report created: {tracking_id}")
+        
+        return ReportSubmissionResponse(
+            tracking_id=tracking_id,
+            message="Thank you for your report! It will be reviewed by authorities.",
+            status="pending_verification",
+            submitted_at=datetime.utcnow()
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to create citizen report: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to submit report. Please try again later."
+        )
+
+
+@router.get("/track/{tracking_id}", response_model=ReportTrackingResponse)
+async def track_citizen_report(tracking_id: str):
+    """
+    Track the status of a submitted citizen report
+    
+    - **tracking_id**: Unique tracking ID provided after submission
+    
+    Returns current status and details of the report.
+    """
+    
+    if not supabase:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service unavailable"
+        )
+    
+    try:
+        # Query report by tracking ID
+        result = supabase.schema("gaia").from_("citizen_reports") \
+            .select("*") \
+            .eq("tracking_id", tracking_id) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Report not found with tracking ID: {tracking_id}"
+            )
+        
+        report = result.data[0]
+        
+        return ReportTrackingResponse(
+            tracking_id=report["tracking_id"],
+            status=report["status"],
+            hazard_type=report["hazard_type"],
+            location_description=report["location_description"],
+            submitted_at=datetime.fromisoformat(report["submitted_at"]),
+            verified_at=datetime.fromisoformat(report["verified_at"]) if report.get("verified_at") else None,
+            confidence_score=report["confidence_score"],
+            notes=report.get("notes")
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error tracking citizen report: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving report status"
+        )

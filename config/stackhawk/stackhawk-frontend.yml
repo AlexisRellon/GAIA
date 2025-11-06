@@ -1,0 +1,31 @@
+app:
+  applicationId: 2038be8b-5252-4763-9d17-36f9da0cb9ba
+  env: Development
+  host: http://localhost:3000
+  autoPolicy: true
+  excludePaths:
+    - "/static/.*"
+    - "/assets/.*"
+  includePaths:
+    - "/"
+    - "/login"
+    - "/register"
+    - "/dashboard"
+    - "/map"
+  waitForAppTarget:
+    path: /
+    requestMethod: GET
+    waitTimeoutMillis: 60000
+    pollDelay: 2000
+
+hawk:
+  spider:
+    base: true
+    ajax: true
+    ajaxBrowser: CHROME_HEADLESS
+    maxDurationMinutes: 10
+  scan:
+    maxDurationMinutes: 15
+    concurrentRequests: 5
+  failureThreshold: medium
+  startupTimeoutMinutes: 3

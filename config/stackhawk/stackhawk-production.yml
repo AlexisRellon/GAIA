@@ -1,0 +1,62 @@
+# StackHawk Configuration for Production Environment
+# Scans deployed Heroku backend for vulnerabilities
+# https://docs.stackhawk.com/hawkscan/configuration/
+
+app:
+  applicationId: ${HAWK_APP_ID} # Required: Same as backend app ID
+  env: Production
+  host: ${PRODUCTION_HOST:https://gaia-backend.herokuapp.com} # Heroku app URL
+  
+  # OpenAPI specification
+  openApiConf:
+    path: /openapi.json
+    fakerEnabled: true
+  
+  autoPolicy: true
+  autoInputVectors: true
+  
+  # Production exclusions
+  excludePaths:
+    - "/docs.*"
+    - "/redoc.*"
+    - "/openapi\.json"
+    - "/static/.*"
+  
+  # Production wait settings (longer timeout)
+  waitForAppTarget:
+    path: /health
+    requestMethod: GET
+    waitTimeoutMillis: 120000 # 2 minutes for cold starts
+    pollDelay: 5000
+
+# Production scan settings (more thorough)
+hawk:
+  spider:
+    base: true
+    ajax: false
+    maxDurationMinutes: 10 # More time for production
+  
+  scan:
+    maxDurationMinutes: 20 # Thorough production scan
+    concurrentRequests: 5 # Lower for production
+    requestDelayMillis: 100 # Throttle requests
+  
+  # Strict failure threshold for production
+  failureThreshold: high # Only fail on high+ severity
+  
+  startupTimeoutMinutes: 3
+
+# Production tags
+tags:
+  - name: component
+    value: backend
+  - name: environment
+    value: production
+  - name: stack
+    value: fastapi-supabase-heroku
+  - name: deployment
+    value: heroku-docker
+  - name: language
+    value: python
+  - name: scan_type
+    value: production-api

@@ -1,0 +1,141 @@
+services:
+  # Backend Python AI/ML Pipeline
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gaia-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Cloud Supabase connection (from .env file)
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - CLIMATE_NLI_MODEL_PATH=${CLIMATE_NLI_MODEL_PATH:-models/climate-nli}
+      - GEO_NER_MODEL_PATH=${GEO_NER_MODEL_PATH:-models/geo-ner}
+      - MIN_CONFIDENCE_THRESHOLD=${MIN_CONFIDENCE_THRESHOLD:-0.7}
+      - API_PORT=8000
+      - API_HOST=0.0.0.0
+      - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY}
+      # CORS Configuration - allow frontend access
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000
+      # RSS Feed Processing (Celery + Redis)
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - RSS_UPDATE_INTERVAL_MINUTES=5
+    volumes:
+      - ./backend/python:/app/backend/python
+      - ./models:/app/models
+      - ./tests:/app/tests
+    networks:
+      - gaia-network
+    restart: unless-stopped
+
+  # Frontend React PWA
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: builder
+    container_name: gaia-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Cloud Supabase connection (from .env file)
+      - REACT_APP_SUPABASE_URL=${REACT_APP_SUPABASE_URL}
+      - REACT_APP_SUPABASE_ANON_KEY=${REACT_APP_SUPABASE_ANON_KEY}
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_MAPBOX_TOKEN=${REACT_APP_MAPBOX_TOKEN}
+      - REACT_APP_DEFAULT_CENTER_LAT=12.8797
+      - REACT_APP_DEFAULT_CENTER_LNG=121.7740
+      - REACT_APP_DEFAULT_ZOOM=6
+      - REACT_APP_RECAPTCHA_SITE_KEY=${REACT_APP_RECAPTCHA_SITE_KEY}
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - gaia-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    command: npm start
+
+  # Redis for Celery Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: gaia-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - gaia-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Celery Worker for Background RSS Processing
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gaia-celery-worker
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - RSS_UPDATE_INTERVAL_MINUTES=5
+      - CLIMATE_NLI_MODEL_PATH=${CLIMATE_NLI_MODEL_PATH:-models/climate-nli}
+      - GEO_NER_MODEL_PATH=${GEO_NER_MODEL_PATH:-models/geo-ner}
+    volumes:
+      - ./backend/python:/app/backend/python
+      - ./models:/app/models
+    networks:
+      - gaia-network
+    depends_on:
+      - redis
+      - backend
+    restart: unless-stopped
+    command: celery -A backend.python.celery_worker worker --loglevel=info --pool=solo --concurrency=2
+
+  # Celery Beat for Scheduled Tasks
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gaia-celery-beat
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - RSS_UPDATE_INTERVAL_MINUTES=5
+    volumes:
+      - ./backend/python:/app/backend/python
+    networks:
+      - gaia-network
+    depends_on:
+      - redis
+      - celery_worker
+    restart: unless-stopped
+    command: celery -A backend.python.celery_worker beat --loglevel=info
+
+
+volumes:
+  redis-data:
+
+
+networks:
+  gaia-network:
+    driver: bridge

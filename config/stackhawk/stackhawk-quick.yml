@@ -1,0 +1,33 @@
+# StackHawk Quick Scan Configuration for GAIA Backend
+# Minimal scan for rapid testing (30 seconds)
+
+app:
+  applicationId: ${HAWK_APP_ID}
+  env: Development
+  host: http://localhost:8000
+  
+  # Wait for backend to be ready
+  waitForAppTarget:
+    path: /health
+    requestMethod: GET
+    waitTimeoutMillis: 30000
+    pollDelay: 2000
+
+hawk:
+  spider:
+    base: false # Disable spider - only scan root
+    ajax: false
+    maxDurationMinutes: 1
+  
+  scan:
+    maxDurationMinutes: 1
+    concurrentRequests: 5
+  
+  failureThreshold: medium
+  startupTimeoutMinutes: 1
+
+tags:
+  - name: scan_type
+    value: quick
+  - name: component
+    value: backend

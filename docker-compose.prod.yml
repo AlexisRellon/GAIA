@@ -1,0 +1,47 @@
+services:
+  # Backend Python AI/ML Pipeline
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gaia-backend-prod
+    ports:
+      - "8000:8000"
+    environment:
+      # Cloud Supabase connection (from .env file)
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - CLIMATE_NLI_MODEL_PATH=${CLIMATE_NLI_MODEL_PATH:-models/climate-nli}
+      - GEO_NER_MODEL_PATH=${GEO_NER_MODEL_PATH:-models/geo-ner}
+      - MIN_CONFIDENCE_THRESHOLD=${MIN_CONFIDENCE_THRESHOLD:-0.7}
+      - API_PORT=8000
+      - API_HOST=0.0.0.0
+      - ENV=production
+    volumes:
+      - ./models:/app/models
+    networks:
+      - gaia-network
+    restart: unless-stopped
+
+  # Frontend React PWA (Production Build with Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      # No target specified - builds full image with nginx
+    container_name: gaia-frontend-prod
+    ports:
+      - "3000:3000"
+    networks:
+      - gaia-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    # No command override - uses default nginx
+
+
+networks:
+  gaia-network:
+    driver: bridge

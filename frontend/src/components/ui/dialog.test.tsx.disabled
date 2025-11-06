@@ -1,0 +1,417 @@
+import React from 'react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './dialog';
+import { Button } from './button';
+
+describe('Dialog Component', () => {
+  describe('Rendering', () => {
+    it('renders trigger button', () => {
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Test Dialog</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      expect(screen.getByRole('button', { name: /open dialog/i })).toBeInTheDocument();
+    });
+
+    it('does not render dialog content initially', () => {
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Test Dialog</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('renders dialog content when opened', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Test Dialog</DialogTitle>
+              <DialogDescription>This is a test dialog</DialogDescription>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      const trigger = screen.getByRole('button', { name: /open dialog/i });
+      await user.click(trigger);
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByText('Test Dialog')).toBeInTheDocument();
+      expect(screen.getByText('This is a test dialog')).toBeInTheDocument();
+    });
+
+    it('renders dialog with footer buttons', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirm Action</DialogTitle>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline">Cancel</Button>
+              <Button>Confirm</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: /confirm/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('Interactions', () => {
+    it('opens dialog when trigger is clicked', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Test Dialog</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('closes dialog when close button is clicked', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Test Dialog</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      const closeButton = screen.getByRole('button', { name: /close/i });
+      await user.click(closeButton);
+
+      // Wait for dialog to be removed from DOM
+      await screen.findByRole('button', { name: /open dialog/i });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('closes dialog when Escape key is pressed', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Test Dialog</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      await user.keyboard('{Escape}');
+
+      // Wait for dialog to be removed
+      await screen.findByRole('button', { name: /open dialog/i });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Accessibility', () => {
+    it('has correct dialog role', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Test Dialog</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('has accessible title', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Accessible Title</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByText('Accessible Title')).toBeInTheDocument();
+    });
+
+    it('has accessible description', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Title</DialogTitle>
+              <DialogDescription>This is an accessible description</DialogDescription>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+
+      expect(screen.getByText('This is an accessible description')).toBeInTheDocument();
+    });
+
+    it('traps focus within dialog', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Focus Test</DialogTitle>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline">First</Button>
+              <Button>Second</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+
+      const dialog = screen.getByRole('dialog');
+      const firstButton = within(dialog).getByRole('button', { name: /first/i });
+      const secondButton = within(dialog).getByRole('button', { name: /second/i });
+      const closeButton = within(dialog).getByRole('button', { name: /close/i });
+
+      // Tab through elements
+      await user.tab();
+      expect(firstButton).toHaveFocus();
+
+      await user.tab();
+      expect(secondButton).toHaveFocus();
+
+      await user.tab();
+      expect(closeButton).toHaveFocus();
+
+      // Should cycle back
+      await user.tab();
+      expect(firstButton).toHaveFocus();
+    });
+
+    it('has close button with accessible label', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Open Dialog</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Test</DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /open dialog/i }));
+
+      const closeButton = screen.getByRole('button', { name: /close/i });
+      expect(closeButton).toBeInTheDocument();
+    });
+  });
+
+  describe('GAIA Use Cases', () => {
+    it('renders hazard report confirmation dialog', async () => {
+      const user = userEvent.setup();
+      const handleSubmit = jest.fn();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Submit Report</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirm Hazard Report</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to submit this hazard report? It will be marked as unverified pending manual review.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline">Cancel</Button>
+              <Button onClick={handleSubmit}>Confirm</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /submit report/i }));
+
+      expect(screen.getByText('Confirm Hazard Report')).toBeInTheDocument();
+      expect(screen.getByText(/marked as unverified/i)).toBeInTheDocument();
+
+      const confirmButton = screen.getByRole('button', { name: /confirm/i });
+      await user.click(confirmButton);
+
+      expect(handleSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders report verification dialog', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Verify Report</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Verify Citizen Report</DialogTitle>
+              <DialogDescription>
+                Review the report details and mark as verified if the information is accurate.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline">Reject</Button>
+              <Button>Verify</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /verify report/i }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByText('Verify Citizen Report')).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: /reject/i })).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: /verify/i })).toBeInTheDocument();
+    });
+
+    it('renders delete confirmation dialog', async () => {
+      const user = userEvent.setup();
+      const handleDelete = jest.fn();
+
+      render(
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="destructive">Delete Report</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Hazard Report</DialogTitle>
+              <DialogDescription>
+                This action cannot be undone. The report will be permanently deleted from the database.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline">Cancel</Button>
+              <Button variant="destructive" onClick={handleDelete}>
+                Delete Permanently
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      );
+
+      await user.click(screen.getByRole('button', { name: /delete report/i }));
+
+      expect(screen.getByText('Delete Hazard Report')).toBeInTheDocument();
+      expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument();
+
+      const deleteButton = screen.getByRole('button', { name: /delete permanently/i });
+      await user.click(deleteButton);
+
+      expect(handleDelete).toHaveBeenCalledTimes(1);
+    });
+  });
+});

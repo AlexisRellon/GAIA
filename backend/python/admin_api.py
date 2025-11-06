@@ -1,0 +1,754 @@
+"""
+Admin Dashboard API for GAIA
+Provides endpoints for user management, audit logs, system configuration, and report triage.
+
+Supports: AC-01 (Audit Logs), AC-02 (Config Management), AC-04 (Report Triage), 
+          AC-06 (User Deactivation), UM-01 (Account Creation), UM-02 (Role Assignment), 
+          UM-03 (Profile Management)
+"""
+
+import os
+import logging
+import sys
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, status
+from pydantic import BaseModel, Field, EmailStr, validator
+
+# Add parent directory to path for lib imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from lib.supabase_client import supabase
+
+# Import RBAC middleware
+from backend.python.middleware.rbac import (
+    UserContext,
+    UserRole,
+    UserStatus,
+    require_master_admin,
+    require_validator,
+    require_admin,
+    log_admin_action
+)
+
+# Import ActivityLogger for comprehensive activity tracking
+from backend.python.middleware.activity_logger import ActivityLogger
+
+logger = logging.getLogger(__name__)
+
+# Supabase client imported from centralized configuration
+
+# Create router
+router = APIRouter(
+    prefix="/admin",
+    tags=["Admin Dashboard"],
+    responses={403: {"description": "Forbidden - insufficient permissions"}},
+)
+
+
+# ============================================================================
+# Pydantic Models
+# ============================================================================
+
+class UserProfileResponse(BaseModel):
+    """User profile data for admin dashboard"""
+    id: str
+    email: str
+    full_name: Optional[str]
+    role: str
+    status: str
+    organization: Optional[str]
+    department: Optional[str]
+    position: Optional[str]
+    # Note: phone_number, login_count, deactivated_at, deactivated_by not in database schema
+    last_login: Optional[str]
+    onboarding_completed: bool
+    created_at: str
+    updated_at: Optional[str]  # Added: exists in database
+
+
+class CreateUserRequest(BaseModel):
+    """Request body for creating a new user"""
+    email: EmailStr
+    password: str = Field(..., min_length=8, description="User password (min 8 characters)")
+    full_name: str = Field(..., min_length=1, max_length=255)
+    role: UserRole
+    organization: Optional[str] = Field(None, max_length=255)
+    department: Optional[str] = Field(None, max_length=255)
+    position: Optional[str] = Field(None, max_length=255)
+    phone_number: Optional[str] = Field(None, max_length=20)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "email": "validator@example.com",
+                "password": "SecurePass123!",
+                "full_name": "Juan Dela Cruz",
+                "role": "validator",
+                "organization": "NDRRMC",
+                "department": "Disaster Response",
+                "position": "Hazard Validator"
+            }
+        }
+
+
+class UpdateUserRoleRequest(BaseModel):
+    """Request body for updating user role"""
+    role: UserRole
+    reason: Optional[str] = Field(None, max_length=500, description="Reason for role change")
+
+
+class DeactivateUserRequest(BaseModel):
+    """Request body for deactivating a user"""
+    reason: Optional[str] = Field(None, max_length=500, description="Reason for deactivation")
+
+
+class AuditLogResponse(BaseModel):
+    """Audit log entry for admin dashboard"""
+    id: str
+    user_id: Optional[str]
+    user_email: Optional[str]
+    user_role: Optional[str]
+    action: str
+    action_description: str
+    resource_type: Optional[str]
+    resource_id: Optional[str]
+    old_values: Optional[Dict[str, Any]]
+    new_values: Optional[Dict[str, Any]]
+    ip_address: Optional[str]
+    user_agent: Optional[str]
+    success: bool
+    error_message: Optional[str]
+    created_at: str
+
+
+class SystemConfigResponse(BaseModel):
+    """System configuration parameter"""
+    id: str
+    config_key: str
+    config_value: str
+    description: Optional[str]
+    value_type: str
+    min_value: Optional[float]
+    max_value: Optional[float]
+    modified_by: Optional[str]
+    modified_at: Optional[str]
+    created_at: str
+
+
+class UpdateSystemConfigRequest(BaseModel):
+    """Request body for updating system configuration"""
+    config_value: str = Field(..., description="New configuration value")
+    
+    @validator('config_value')
+    def validate_config_value(cls, v):
+        if not v or v.strip() == "":
+            raise ValueError('config_value cannot be empty')
+        return v
+
+
+class TriageReportResponse(BaseModel):
+    """Citizen report pending triage"""
+    id: str
+    tracking_id: str
+    hazard_type: Optional[str]
+    location_name: Optional[str]
+    latitude: Optional[float]
+    longitude: Optional[float]
+    description: str
+    confidence_score: Optional[float]
+    status: str
+    validated: bool
+    submitted_at: str
+    image_urls: Optional[List[str]]
+
+
+# ============================================================================
+# User Management Endpoints (UM-01, UM-02, UM-03, AC-06)
+# ============================================================================
+
+@router.get("/users", response_model=List[UserProfileResponse])
+async def get_all_users(
+    role: Optional[str] = Query(None, description="Filter by role"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    organization: Optional[str] = Query(None, description="Filter by organization"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: UserContext = Depends(require_validator)
+):
+    """
+    Get all user accounts with optional filtering.
+    
+    **Permissions**: Master Admin, Validator (read-only)
+    **Module**: UM-03 (User Profile Management)
+    """
+    try:
+        # Build query
+        query = supabase.schema("gaia").from_("user_profiles").select("*")
+        
+        if role:
+            query = query.eq("role", role)
+        if status:
+            query = query.eq("status", status)
+        if organization:
+            query = query.ilike("organization", f"%{organization}%")
+        
+        # Execute query with pagination
+        response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        
+        logger.info(f"User {current_user.email} retrieved {len(response.data)} user profiles")
+        return response.data
+        
+    except Exception as e:
+        logger.error(f"Error fetching users: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch users")
+
+
+@router.post("/users", response_model=UserProfileResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    user_data: CreateUserRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_master_admin)
+):
+    """
+    Create a new user account with specified role.
+    
+    **Permissions**: Master Admin only
+    **Module**: UM-01 (User Account Creation)
+    """
+    try:
+        # Check if email already exists
+        existing_user = supabase.schema("gaia").from_("user_profiles").select("email").eq("email", user_data.email).execute()
+        
+        if existing_user.data:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"User with email {user_data.email} already exists"
+            )
+        
+        # Create auth user via Supabase Auth Admin API
+        auth_response = supabase.auth.admin.create_user({
+            "email": user_data.email,
+            "password": user_data.password,
+            "email_confirm": True,  # Auto-confirm email
+            "user_metadata": {
+                "full_name": user_data.full_name,
+                "role": user_data.role.value
+            }
+        })
+        
+        new_user_id = auth_response.user.id
+        
+        # Create user profile in database
+        profile_data = {
+            "id": new_user_id,
+            "email": user_data.email,
+            "full_name": user_data.full_name,
+            "role": user_data.role.value,
+            "status": UserStatus.ACTIVE.value,
+            "organization": user_data.organization,
+            "department": user_data.department,
+            "position": user_data.position,
+            # phone_number removed - column doesn't exist in database schema
+            "onboarding_completed": False,
+            "created_by": current_user.user_id
+        }
+        
+        profile_response = supabase.schema("gaia").from_("user_profiles").insert(profile_data).execute()
+        
+        # Log admin action
+        await log_admin_action(
+            user=current_user,
+            action="user_created",
+            action_description=f"Created user account for {user_data.email} with role {user_data.role.value}",
+            resource_type="user_profiles",
+            resource_id=new_user_id,
+            new_values={"email": user_data.email, "role": user_data.role.value},
+            request=request
+        )
+        
+        logger.info(f"Master Admin {current_user.email} created user: {user_data.email} ({user_data.role.value})")
+        
+        return profile_response.data[0]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
+
+
+@router.patch("/users/{user_id}/role", response_model=UserProfileResponse)
+async def update_user_role(
+    user_id: str,
+    role_update: UpdateUserRoleRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_master_admin)
+):
+    """
+    Update a user's role.
+    
+    **Permissions**: Master Admin only
+    **Module**: UM-02 (Role Assignment)
+    """
+    try:
+        # Fetch current user profile
+        user_response = supabase.schema("gaia").from_("user_profiles").select("*").eq("id", user_id).execute()
+        
+        if not user_response.data:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        current_profile = user_response.data[0]
+        old_role = current_profile["role"]
+        
+        # Prevent changing own role
+        if user_id == current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot change your own role. Contact another Master Admin."
+            )
+        
+        # Update role
+        update_data = {
+            "role": role_update.role.value,
+            "role_modified_at": datetime.utcnow().isoformat(),
+            "role_modified_by": current_user.user_id
+        }
+        
+        updated_response = supabase.schema("gaia").from_("user_profiles").update(update_data).eq("id", user_id).execute()
+        
+        # Log admin action (note: trigger will also log this)
+        await log_admin_action(
+            user=current_user,
+            action="role_changed",
+            action_description=f"Changed role for {current_profile['email']} from {old_role} to {role_update.role.value}. Reason: {role_update.reason or 'Not provided'}",
+            resource_type="user_profiles",
+            resource_id=user_id,
+            old_values={"role": old_role},
+            new_values={"role": role_update.role.value},
+            request=request
+        )
+        
+        logger.info(f"Master Admin {current_user.email} changed role: {current_profile['email']} {old_role} -> {role_update.role.value}")
+        
+        return updated_response.data[0]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user role: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update user role")
+
+
+@router.patch("/users/{user_id}/deactivate", response_model=UserProfileResponse)
+async def deactivate_user(
+    user_id: str,
+    deactivate_request: DeactivateUserRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_master_admin)
+):
+    """
+    Deactivate a user account.
+    
+    **Permissions**: Master Admin only
+    **Module**: AC-06 (User Deactivation)
+    """
+    try:
+        # Fetch current user profile
+        user_response = supabase.schema("gaia").from_("user_profiles").select("*").eq("id", user_id).execute()
+        
+        if not user_response.data:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        current_profile = user_response.data[0]
+        
+        # Prevent self-deactivation
+        if user_id == current_user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot deactivate your own account. Contact another Master Admin."
+            )
+        
+        # Prevent deactivating last Master Admin
+        if current_profile["role"] == UserRole.MASTER_ADMIN.value:
+            active_admins = supabase.schema("gaia").from_("user_profiles").select("id").eq("role", "master_admin").eq("status", "active").execute()
+            
+            if len(active_admins.data) <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot deactivate the last Master Admin account"
+                )
+        
+        # Update status to inactive
+        update_data = {
+            "status": UserStatus.INACTIVE.value,
+            "deactivated_at": datetime.utcnow().isoformat(),
+            "deactivated_by": current_user.user_id
+        }
+        
+        updated_response = supabase.schema("gaia").from_("user_profiles").update(update_data).eq("id", user_id).execute()
+        
+        # Log admin action (note: trigger will also log this)
+        await log_admin_action(
+            user=current_user,
+            action="user_deactivated",
+            action_description=f"Deactivated user account for {current_profile['email']}. Reason: {deactivate_request.reason or 'Not provided'}",
+            resource_type="user_profiles",
+            resource_id=user_id,
+            old_values={"status": current_profile["status"]},
+            new_values={"status": UserStatus.INACTIVE.value},
+            request=request
+        )
+        
+        logger.info(f"Master Admin {current_user.email} deactivated user: {current_profile['email']}")
+        
+        return updated_response.data[0]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deactivating user: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to deactivate user")
+
+
+# ============================================================================
+# Audit Logs Endpoint (AC-01)
+# ============================================================================
+
+@router.get("/audit-logs", response_model=List[AuditLogResponse])
+async def get_audit_logs(
+    user_email: Optional[str] = Query(None, description="Filter by user email"),
+    action: Optional[str] = Query(None, description="Filter by action type"),
+    resource_type: Optional[str] = Query(None, description="Filter by resource type"),
+    start_date: Optional[str] = Query(None, description="Filter by start date (ISO format)"),
+    end_date: Optional[str] = Query(None, description="Filter by end date (ISO format)"),
+    success: Optional[bool] = Query(None, description="Filter by success status"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    current_user: UserContext = Depends(require_validator)
+):
+    """
+    Get audit logs with optional filtering.
+    
+    **Permissions**: Master Admin, Validator (read-only)
+    **Module**: AC-01 (Audit Log Query)
+    """
+    try:
+        # Build query
+        query = supabase.schema("gaia").from_("audit_logs").select("*")
+        
+        if user_email:
+            query = query.ilike("user_email", f"%{user_email}%")
+        if action:
+            query = query.eq("action", action)
+        if resource_type:
+            query = query.eq("resource_type", resource_type)
+        if success is not None:
+            query = query.eq("success", success)
+        if start_date:
+            query = query.gte("created_at", start_date)
+        if end_date:
+            query = query.lte("created_at", end_date)
+        
+        # Execute query with pagination
+        response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        
+        logger.info(f"User {current_user.email} queried {len(response.data)} audit logs")
+        return response.data
+        
+    except Exception as e:
+        logger.error(f"Error fetching audit logs: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch audit logs")
+
+
+# ============================================================================
+# System Configuration Endpoints (AC-02)
+# ============================================================================
+
+@router.get("/system-config", response_model=List[SystemConfigResponse])
+async def get_system_config(
+    current_user: UserContext = Depends(require_validator)
+):
+    """
+    Get all system configuration parameters.
+    
+    **Permissions**: Master Admin, Validator (read-only)
+    **Module**: AC-02 (Configuration Management)
+    """
+    try:
+        response = supabase.schema("gaia").from_("system_config").select("*").order("config_key").execute()
+        
+        logger.info(f"User {current_user.email} retrieved system configuration")
+        return response.data
+        
+    except Exception as e:
+        logger.error(f"Error fetching system config: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch system configuration")
+
+
+@router.patch("/system-config/{config_key}", response_model=SystemConfigResponse)
+async def update_system_config(
+    config_key: str,
+    config_update: UpdateSystemConfigRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_master_admin)
+):
+    """
+    Update a system configuration parameter.
+    
+    **Permissions**: Master Admin only
+    **Module**: AC-02 (Configuration Management)
+    """
+    try:
+        # Fetch current config
+        config_response = supabase.schema("gaia").from_("system_config").select("*").eq("config_key", config_key).execute()
+        
+        if not config_response.data:
+            raise HTTPException(status_code=404, detail=f"Configuration key '{config_key}' not found")
+        
+        current_config = config_response.data[0]
+        old_value = current_config["config_value"]
+        
+        # Validate value based on type
+        value_type = current_config["value_type"]
+        new_value = config_update.config_value
+        
+        if value_type == "number":
+            try:
+                numeric_value = float(new_value)
+                
+                # Check min/max constraints
+                if current_config["min_value"] is not None and numeric_value < current_config["min_value"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Value must be >= {current_config['min_value']}"
+                    )
+                if current_config["max_value"] is not None and numeric_value > current_config["max_value"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Value must be <= {current_config['max_value']}"
+                    )
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Value must be a valid number for {config_key}"
+                )
+        
+        # Update configuration (trigger will log to audit_logs)
+        update_data = {
+            "config_value": new_value,
+            "modified_by": current_user.user_id,
+            "modified_at": datetime.utcnow().isoformat()
+        }
+        
+        updated_response = supabase.schema("gaia").from_("system_config").update(update_data).eq("config_key", config_key).execute()
+        
+        # Log configuration change activity
+        await ActivityLogger.log_config_change(
+            admin=current_user,
+            config_key=config_key,
+            old_value=old_value,
+            new_value=new_value,
+            request=request
+        )
+        
+        logger.info(f"Master Admin {current_user.email} updated config: {config_key} = {new_value} (was {old_value})")
+        
+        return updated_response.data[0]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating system config: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update system configuration")
+
+
+# ============================================================================
+# Report Triage Endpoint (AC-04)
+# ============================================================================
+
+@router.get("/reports/triage", response_model=List[TriageReportResponse])
+async def get_triage_queue(
+    status_filter: Optional[str] = Query("unverified", description="Filter by status (unverified/verified/rejected/duplicate)"),
+    hazard_type: Optional[str] = Query(None, description="Filter by hazard type"),
+    min_confidence: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence score"),
+    max_confidence: Optional[float] = Query(None, ge=0.0, le=1.0, description="Maximum confidence score"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: UserContext = Depends(require_admin)
+):
+    """
+    Get citizen reports pending triage/validation.
+    
+    **Permissions**: Master Admin, Validator, LGU Responder
+    **Module**: AC-04 (Unverified Report Triage)
+    **Note**: Valid status values are: unverified, verified, rejected, duplicate
+    """
+    try:
+        # Build query for unvalidated reports (validated_by is NULL means not yet validated)
+        query = supabase.schema("gaia").from_("citizen_reports").select("*").is_("validated_by", None)
+        
+        # Only filter by status if provided (default is "unverified")
+        if status_filter:
+            query = query.eq("status", status_filter)
+        if hazard_type:
+            query = query.eq("hazard_type", hazard_type)
+        if min_confidence is not None:
+            query = query.gte("confidence_score", min_confidence)
+        if max_confidence is not None:
+            query = query.lte("confidence_score", max_confidence)
+        
+        # Execute query with pagination, ordered by submission time (oldest first for FIFO triage)
+        response = query.order("submitted_at", desc=False).range(offset, offset + limit - 1).execute()
+        
+        logger.info(f"User {current_user.email} retrieved {len(response.data)} reports for triage")
+        return response.data
+        
+    except Exception as e:
+        logger.error(f"Error fetching triage queue: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch triage queue")
+
+
+# ============================================================================
+# Activity Monitor Endpoints (Future Feature - FP-04)
+# ============================================================================
+
+class ActivityLogResponse(BaseModel):
+    """Recent user activity log entry"""
+    id: str
+    user_email: str
+    user_role: str
+    action: str
+    resource_type: str
+    resource_id: Optional[str]
+    details: Optional[Dict[str, Any]]
+    ip_address: Optional[str]
+    timestamp: str
+
+
+class AuditLogResponse(BaseModel):
+    """System audit log entry"""
+    id: str
+    event_type: str
+    severity: str
+    user_email: Optional[str]
+    action: str
+    resource: Optional[str]
+    status: str
+    message: Optional[str]
+    metadata: Optional[Dict[str, Any]]
+    created_at: str
+
+
+@router.get("/activity", response_model=List[ActivityLogResponse])
+async def get_recent_activity(
+    limit: int = Query(50, ge=1, le=200, description="Number of recent activities to retrieve"),
+    user_email: Optional[str] = Query(None, description="Filter by specific user email"),
+    action_type: Optional[str] = Query(None, description="Filter by action type (e.g., 'login', 'hazard_validated')"),
+    current_user: UserContext = Depends(require_master_admin)
+):
+    """
+    Get recent user activity logs for monitoring dashboard.
+    
+    **Permissions**: Master Admin only
+    **Module**: FP-04 (Activity Monitor)
+    **Rate Limit**: 30 requests/minute
+    
+    Returns recent user actions such as:
+    - User logins/logouts
+    - Hazard validation actions
+    - Report submissions
+    - System configuration changes
+    - RSS feed modifications
+    """
+    try:
+        # Query activity logs from database
+        # Note: This requires an activity_logs table to be created
+        query = supabase.schema("gaia").from_("activity_logs").select("*")
+        
+        if user_email:
+            query = query.eq("user_email", user_email)
+        if action_type:
+            query = query.eq("action", action_type)
+        
+        # Get most recent activities
+        response = query.order("timestamp", desc=True).limit(limit).execute()
+        
+        logger.info(f"Admin {current_user.email} retrieved {len(response.data)} activity logs")
+        return response.data
+        
+    except Exception as e:
+        logger.error(f"Error fetching activity logs: {str(e)}")
+        # Return empty list if table doesn't exist yet (graceful degradation)
+        if "does not exist" in str(e) or "Could not find" in str(e):
+            logger.warning("Activity logs table not found - returning empty list")
+            return []
+        raise HTTPException(status_code=500, detail="Failed to fetch activity logs")
+
+
+@router.get("/audit-logs", response_model=List[AuditLogResponse])
+async def get_audit_logs(
+    limit: int = Query(100, ge=1, le=500, description="Number of audit logs to retrieve"),
+    severity: Optional[str] = Query(None, description="Filter by severity (info, warning, error, critical)"),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    start_date: Optional[str] = Query(None, description="Filter logs after this date (ISO 8601)"),
+    current_user: UserContext = Depends(require_master_admin)
+):
+    """
+    Get system audit logs for compliance and security monitoring.
+    
+    **Permissions**: Master Admin only
+    **Module**: FP-04 (Activity Monitor)
+    **Rate Limit**: 30 requests/minute
+    
+    Returns system-level audit logs including:
+    - Authentication events (login attempts, failures)
+    - Authorization events (permission checks)
+    - Data modification events
+    - Security events (rate limit violations, suspicious activity)
+    - System configuration changes
+    """
+    try:
+        # Query audit logs from database
+        # Note: This requires an audit_logs table to be created
+        query = supabase.schema("gaia").from_("audit_logs").select("*")
+        
+        if severity:
+            query = query.eq("severity", severity)
+        if event_type:
+            query = query.eq("event_type", event_type)
+        if start_date:
+            query = query.gte("created_at", start_date)
+        
+        # Get most recent logs
+        response = query.order("created_at", desc=True).limit(limit).execute()
+        
+        logger.info(f"Admin {current_user.email} retrieved {len(response.data)} audit logs")
+        return response.data
+        
+    except Exception as e:
+        logger.error(f"Error fetching audit logs: {str(e)}")
+        # Return empty list if table doesn't exist yet (graceful degradation)
+        if "does not exist" in str(e) or "Could not find" in str(e):
+            logger.warning("Audit logs table not found - returning empty list")
+            return []
+        raise HTTPException(status_code=500, detail="Failed to fetch audit logs")
+
+
+# ============================================================================
+# Health Check
+# ============================================================================
+
+@router.get("/health")
+async def admin_health_check(
+    current_user: UserContext = Depends(require_admin)
+):
+    """Health check for admin API (requires authentication)"""
+    return {
+        "status": "healthy",
+        "user": current_user.email,
+        "role": current_user.role.value,
+        "timestamp": datetime.utcnow().isoformat()
+    }

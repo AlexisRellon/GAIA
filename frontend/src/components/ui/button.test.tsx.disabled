@@ -1,0 +1,206 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Button } from './button';
+
+describe('Button Component', () => {
+  describe('Rendering', () => {
+    it('renders with default variant', () => {
+      render(<Button>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      expect(button).toBeInTheDocument();
+    });
+
+    it('renders with different variants', () => {
+      const { rerender } = render(<Button variant="default">Default</Button>);
+      expect(screen.getByRole('button')).toHaveClass('bg-primary');
+
+      rerender(<Button variant="destructive">Destructive</Button>);
+      expect(screen.getByRole('button')).toHaveClass('bg-destructive');
+
+      rerender(<Button variant="outline">Outline</Button>);
+      expect(screen.getByRole('button')).toHaveClass('border');
+
+      rerender(<Button variant="secondary">Secondary</Button>);
+      expect(screen.getByRole('button')).toHaveClass('bg-secondary');
+
+      rerender(<Button variant="ghost">Ghost</Button>);
+      expect(screen.getByRole('button')).toHaveClass('hover:bg-accent');
+
+      rerender(<Button variant="link">Link</Button>);
+      expect(screen.getByRole('button')).toHaveClass('underline-offset-4');
+    });
+
+    it('renders with different sizes', () => {
+      const { rerender } = render(<Button size="default">Default</Button>);
+      expect(screen.getByRole('button')).toHaveClass('h-10');
+
+      rerender(<Button size="sm">Small</Button>);
+      expect(screen.getByRole('button')).toHaveClass('h-9');
+
+      rerender(<Button size="lg">Large</Button>);
+      expect(screen.getByRole('button')).toHaveClass('h-11');
+
+      rerender(<Button size="icon">Icon</Button>);
+      expect(screen.getByRole('button')).toHaveClass('h-10', 'w-10');
+    });
+
+    it('renders as child component when asChild is true', () => {
+      render(
+        <Button asChild>
+          <a href="/test">Link Button</a>
+        </Button>
+      );
+      const link = screen.getByRole('link', { name: /link button/i });
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute('href', '/test');
+    });
+  });
+
+  describe('Interactions', () => {
+    it('calls onClick handler when clicked', async () => {
+      const handleClick = jest.fn();
+      const user = userEvent.setup();
+      
+      render(<Button onClick={handleClick}>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      await user.click(button);
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call onClick when disabled', async () => {
+      const handleClick = jest.fn();
+      const user = userEvent.setup();
+      
+      render(<Button onClick={handleClick} disabled>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      await user.click(button);
+      expect(handleClick).not.toHaveBeenCalled();
+      expect(button).toBeDisabled();
+    });
+
+    it('can be activated with Enter key', async () => {
+      const handleClick = jest.fn();
+      const user = userEvent.setup();
+      
+      render(<Button onClick={handleClick}>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      button.focus();
+      await user.keyboard('{Enter}');
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('can be activated with Space key', async () => {
+      const handleClick = jest.fn();
+      const user = userEvent.setup();
+      
+      render(<Button onClick={handleClick}>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      button.focus();
+      await user.keyboard(' ');
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Accessibility', () => {
+    it('is focusable via keyboard navigation', () => {
+      render(<Button>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      button.focus();
+      expect(button).toHaveFocus();
+    });
+
+    it('shows focus ring on focus', () => {
+      render(<Button>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      expect(button).toHaveClass('focus-visible:ring-2');
+    });
+
+    it('has correct disabled attributes', () => {
+      render(<Button disabled>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      expect(button).toBeDisabled();
+      expect(button).toHaveClass('disabled:pointer-events-none', 'disabled:opacity-50');
+    });
+
+    it('has proper button role', () => {
+      render(<Button>Click me</Button>);
+      expect(screen.getByRole('button')).toBeInTheDocument();
+    });
+
+    it('supports custom className', () => {
+      render(<Button className="custom-class">Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      expect(button).toHaveClass('custom-class');
+    });
+  });
+
+  describe('Type attribute', () => {
+    it('defaults to button type', () => {
+      render(<Button>Click me</Button>);
+      const button = screen.getByRole('button', { name: /click me/i });
+      
+      expect(button).toHaveAttribute('type', 'button');
+    });
+
+    it('accepts submit type', () => {
+      render(<Button type="submit">Submit</Button>);
+      const button = screen.getByRole('button', { name: /submit/i });
+      
+      expect(button).toHaveAttribute('type', 'submit');
+    });
+
+    it('accepts reset type', () => {
+      render(<Button type="reset">Reset</Button>);
+      const button = screen.getByRole('button', { name: /reset/i });
+      
+      expect(button).toHaveAttribute('type', 'reset');
+    });
+  });
+
+  describe('GAIA Use Cases', () => {
+    it('renders hazard report submit button', () => {
+      render(
+        <Button variant="default" size="lg">
+          Submit Hazard Report
+        </Button>
+      );
+      
+      const button = screen.getByRole('button', { name: /submit hazard report/i });
+      expect(button).toBeInTheDocument();
+      expect(button).toHaveClass('bg-primary');
+    });
+
+    it('renders destructive delete button', () => {
+      render(
+        <Button variant="destructive">
+          Delete Report
+        </Button>
+      );
+      
+      const button = screen.getByRole('button', { name: /delete report/i });
+      expect(button).toBeInTheDocument();
+      expect(button).toHaveClass('bg-destructive');
+    });
+
+    it('renders outline cancel button', () => {
+      render(
+        <Button variant="outline">
+          Cancel Verification
+        </Button>
+      );
+      
+      const button = screen.getByRole('button', { name: /cancel verification/i });
+      expect(button).toBeInTheDocument();
+      expect(button).toHaveClass('border');
+    });
+  });
+});

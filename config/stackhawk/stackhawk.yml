@@ -1,0 +1,75 @@
+# StackHawk Configuration for GAIA Backend (FastAPI)
+# Scans REST API endpoints for OWASP Top 10 vulnerabilities
+# https://docs.stackhawk.com/hawkscan/configuration/
+
+app:
+  applicationId: ${HAWK_APP_ID} # Required: Get from StackHawk dashboard
+  env: ${HAWK_ENV:Development}
+  host: ${APP_HOST:http://localhost:8000} # FastAPI server
+  
+  # OpenAPI specification for comprehensive API scanning
+  openApiConf:
+    path: /openapi.json # FastAPI auto-generates spec
+    # Enable realistic data generation for better coverage
+    fakerEnabled: true
+  
+  # Policy and input vectors for optimal scanning
+  autoPolicy: true # Optimize for OpenAPI
+  autoInputVectors: true # Enable all relevant input types
+  
+  # Exclude documentation and static paths
+  excludePaths:
+    - "/docs.*"     # Swagger UI
+    - "/redoc.*"    # ReDoc UI
+    - "/openapi\.json" # OpenAPI spec itself
+    - "/static/.*"  # Static assets
+  
+  # Session tokens used by application
+  sessionTokens:
+    - "supabase-auth-token"
+    - "access_token"
+  
+  # Wait for backend to be ready before scanning
+  waitForAppTarget:
+    path: /health
+    requestMethod: GET
+    waitTimeoutMillis: 60000 # 1 minute
+    pollDelay: 2000 # Check every 2 seconds
+
+# HawkScan runtime configuration
+hawk:
+  # Spider/discovery configuration
+  spider:
+    base: true # Enable traditional crawler
+    ajax: false # Disable for API-only scans
+    maxDurationMinutes: 5 # Fast scans for CI/CD
+  
+  # Scan runtime settings
+  scan:
+    maxDurationMinutes: 10 # Max total scan time
+    concurrentRequests: 10 # Reduce for local dev
+  
+  # CI/CD failure threshold
+  failureThreshold: ${FAILURE_THRESHOLD:medium} # Fail on medium+ vulnerabilities
+  
+  # Timeout for scanner startup
+  startupTimeoutMinutes: 2
+
+# Scan metadata tags
+tags:
+  - name: component
+    value: backend
+  - name: environment
+    value: ${HAWK_ENV:development}
+  - name: stack
+    value: fastapi-supabase-docker
+  - name: modules
+    value: AC-04,RG-01,FP-02,AAM-01
+  - name: language
+    value: python
+  - name: scan_type
+    value: api
+  - name: git_branch
+    value: ${GIT_BRANCH:main}
+  - name: commit_sha
+    value: ${GIT_COMMIT_SHA:HEAD}

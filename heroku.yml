@@ -1,0 +1,29 @@
+# Heroku deployment configuration for GAIA
+# Uses Heroku Container Registry to deploy Docker images
+
+build:
+  docker:
+    backend: Dockerfile.backend
+    frontend: Dockerfile.frontend
+  config:
+    CLIMATE_NLI_MODEL_PATH: models/climate-nli
+    GEO_NER_MODEL_PATH: models/geo-ner
+
+run:
+  backend:
+    image: backend
+    command:
+      - python
+      - backend/python/main.py
+  frontend:
+    image: frontend
+    command:
+      - nginx
+      - -g
+      - daemon off;
+
+release:
+  image: backend
+  command:
+    - echo "Running database migrations..."
+    # Add migration commands here if needed
