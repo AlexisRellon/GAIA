@@ -53,6 +53,8 @@ export function useRealtimeHazards() {
   const queryClient = useQueryClient();
   const { addNotification } = useNotificationStore();
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
+  const lastSeenRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Prevent duplicate subscriptions
@@ -61,6 +63,59 @@ export function useRealtimeHazards() {
       console.log('[Realtime] Already subscribed to hazards:validated');
       return;
     }
+
+    const startPollingFallback = () => {
+      // Avoid duplicate pollers
+      if (pollIntervalRef.current) return;
+
+      console.warn('[Realtime] Starting poll fallback for hazards (every 30s)');
+
+      // Initialize lastSeenRef to current time to avoid spamming on start
+      lastSeenRef.current = new Date().toISOString();
+
+      pollIntervalRef.current = window.setInterval(async () => {
+        try {
+          const { data, error } = await supabase
+            .from('hazards')
+            .select('*')
+            .eq('validated', true)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+          if (error) {
+            console.error('[Realtime Poll] Supabase query error:', error);
+            return;
+          }
+
+          if (!data || data.length === 0) return;
+
+          const newest = data[0];
+          if (!newest || !newest.created_at) return;
+
+          if (!lastSeenRef.current || newest.created_at > lastSeenRef.current) {
+            for (let i = data.length - 1; i >= 0; i--) {
+              const h = data[i];
+              if (!h.created_at) continue;
+              if (h.created_at > (lastSeenRef.current || '')) {
+                addNotification({
+                  type: 'hazard',
+                  severity: h.severity === 'critical' || h.severity === 'high' ? 'error' : 'warning',
+                  title: `New ${h.hazard_type} detected`,
+                  message: `${h.location_name} - Severity: ${h.severity?.toUpperCase()}`,
+                  link: `/map?hazard=${h.id}`,
+                  metadata: { hazardId: h.id, hazardType: h.hazard_type }
+                });
+              }
+            }
+
+            lastSeenRef.current = newest.created_at;
+            queryClient.invalidateQueries({ queryKey: ['hazards'] });
+          }
+        } catch (err) {
+          console.error('[Realtime Poll] Error while polling hazards:', err);
+        }
+      }, 30000);
+    };
 
     const setupChannel = async () => {
       try {
@@ -74,12 +129,17 @@ export function useRealtimeHazards() {
           .channel('hazards:validated')
           .on<HazardRecord>(
             'postgres_changes',
-            { event: 'INSERT', schema: 'gaia', table: 'hazards', filter: 'validated=eq.true' },
+            { event: 'INSERT', schema: 'gaia', table: 'hazards' },
             (payload) => {
               const hazard = payload.new;
 
               if (!hazard) {
                 console.warn('[Realtime] Received INSERT with no record data');
+                return;
+              }
+
+              // Filter for validated hazards on client side
+              if (!hazard.validated) {
                 return;
               }
 
@@ -117,7 +177,7 @@ export function useRealtimeHazards() {
           })
           .on<HazardRecord>(
             'postgres_changes',
-            { event: 'UPDATE', schema: 'gaia', table: 'hazards', filter: 'validated=eq.true' },
+            { event: 'UPDATE', schema: 'gaia', table: 'hazards' },
             (payload) => {
               // Custom event for when a hazard becomes validated
               const hazard = payload.new;
@@ -126,7 +186,7 @@ export function useRealtimeHazards() {
             if (!hazard) return;
 
             // eslint-disable-next-line no-console
-            console.log('[Realtime] Hazard validated:', hazard);
+            console.log('[Realtime] Hazard updated:', hazard);
 
             // Only notify if it actually became validated
             if (oldHazard && !oldHazard.validated && hazard.validated) {
@@ -154,6 +214,11 @@ export function useRealtimeHazards() {
               case 'SUBSCRIBED':
                 // eslint-disable-next-line no-console
                 console.log('[Realtime] ✅ Connected to hazards:validated channel');
+                // Stop any polling fallback when channel is connected
+                if (pollIntervalRef.current) {
+                  clearInterval(pollIntervalRef.current as unknown as number);
+                  pollIntervalRef.current = null;
+                }
                 break;
               case 'CHANNEL_ERROR':
                 // eslint-disable-next-line no-console
@@ -161,6 +226,8 @@ export function useRealtimeHazards() {
                 toast.error('Real-time notifications unavailable', {
                   description: 'You may need to refresh to see new hazards'
                 });
+                // Start polling fallback when channel has errors
+                startPollingFallback();
                 break;
               case 'TIMED_OUT':
                 // eslint-disable-next-line no-console
@@ -169,6 +236,8 @@ export function useRealtimeHazards() {
               case 'CLOSED':
                 // eslint-disable-next-line no-console
                 console.log('[Realtime] 🔌 Channel closed');
+                // Start polling fallback when closed
+                startPollingFallback();
                 break;
             }
           });
@@ -192,7 +261,7 @@ export function useRealtimeHazards() {
         channelRef.current = null;
       }
     };
-  }, [queryClient]);
+  }, [queryClient, addNotification]);
 }
 
 /**
