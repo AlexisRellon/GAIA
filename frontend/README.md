@@ -301,23 +301,28 @@ npm run build
 docker build -f Dockerfile.frontend --target production -t gaia-frontend:prod .
 ```
 
-### Heroku Deployment
+### Railway Deployment
 
-The project is configured for Heroku deployment using Docker containers (see `heroku.yml` in project root).
+The project is deployed on Railway using Docker containers. For complete deployment instructions, see [`docs/guides/RAILWAY_DEPLOYMENT.md`](../docs/guides/RAILWAY_DEPLOYMENT.md).
 
 ```bash
-# Deploy from main branch
-git push heroku main
+# Install Railway CLI
+npm i -g @railway/cli
 
-# Or trigger manual deploy from Heroku Dashboard
+# Login and deploy
+railway login
+railway up --service frontend
+
+# View logs
+railway logs --service frontend
 ```
 
-**Environment Variables** (set in Heroku):
+**Environment Variables** (set in Railway Dashboard or `railway.toml`):
 - `REACT_APP_SUPABASE_URL` - Supabase project URL
 - `REACT_APP_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `REACT_APP_API_URL` - Backend API URL
+- `REACT_APP_API_URL` - Backend API URL (e.g., `https://backend.up.railway.app`)
 - `REACT_APP_MAPBOX_TOKEN` - Mapbox access token (for maps, future)
-- `REACT_APP_RECAPTCHA_SITE_KEY` - reCAPTCHA site key (for citizen reports, future)
+- `REACT_APP_RECAPTCHA_SITE_KEY` - reCAPTCHA site key
 
 ### Static Hosting
 
