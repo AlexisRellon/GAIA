@@ -10,7 +10,7 @@
 export const landingAssets = {
   // Hero Section
   hero: {
-    background: '/assets/img/background.png',
+    background: '/assets/img/background.webp',
     gridBackground: '/assets/img/Grid-Plane.png',
     heatmapOverlay: '/assets/img/bg-heatmap-overlay.png',
     pinVolcano: '/assets/img/Pin-volcanic_eruption.svg',
