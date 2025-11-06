@@ -117,3 +117,4 @@ QUICK_TEST_GUIDE*.md
 # Root level package files (should be in frontend/)
 /package-lock.json
 /node_modules/
+.env-production-localdev(safe).ini
