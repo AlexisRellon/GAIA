@@ -176,7 +176,7 @@ const CitizenReportForm: React.FC = () => {
       // Submit form to backend using FormData (backend expects multipart/form-data)
       const formDataPayload = new FormData();
       formDataPayload.append('hazard_type', formData.hazardType);
-      formDataPayload.append('location_description', formData.locationName);
+      formDataPayload.append('location_name', formData.locationName);
       formDataPayload.append('description', formData.description);
       
       // Add optional fields only if provided
