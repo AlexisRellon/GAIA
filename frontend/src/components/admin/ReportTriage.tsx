@@ -219,25 +219,38 @@ const ReportTriage: React.FC = () => {
   };
 
   const confirmAction = async () => {
-    if (!selectedReport || !actionType) return;
+    if (!selectedReport || !actionType) {
+      console.log('[ReportTriage] No selected report or action type');
+      return;
+    }
 
+    console.log(`[ReportTriage] Starting ${actionType} for report:`, selectedReport.tracking_id);
     setIsProcessing(true);
 
     try {
-      // TODO: Implement actual API call when backend endpoint is ready
-      // Will call backend validate/reject endpoint here
+      // Call backend validate/reject endpoint
+      console.log(`[ReportTriage] Calling adminApi.reports.${actionType}...`);
       
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (actionType === 'validate') {
+        const result = await adminApi.reports.validate(selectedReport.tracking_id);
+        console.log('[ReportTriage] Validate result:', result);
+      } else {
+        const result = await adminApi.reports.reject(selectedReport.tracking_id);
+        console.log('[ReportTriage] Reject result:', result);
+      }
 
+      console.log('[ReportTriage] Refetching reports...');
       // Refresh reports using React Query refetch
       await refetch();
 
+      console.log('[ReportTriage] Closing dialog');
       setIsActionDialogOpen(false);
       setSelectedReport(null);
       setActionType(null);
     } catch (err) {
-      console.error(`Error ${actionType} report:`, err);
+      console.error(`[ReportTriage] Error ${actionType} report:`, err);
+      // Show error toast (could add toast notification here)
+      alert(`Failed to ${actionType} report: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
     }
