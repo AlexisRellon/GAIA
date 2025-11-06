@@ -1,0 +1,168 @@
+# Railway Deployment Configuration for GAIA
+# Geospatial AI-driven Assessment - Environmental Hazard Detection System
+# Documentation: https://docs.railway.com/reference/config-as-code
+
+# ================================
+# Backend Service (FastAPI + AI Models)
+# ================================
+[environments.production.backend]
+[environments.production.backend.build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.backend"
+
+[environments.production.backend.deploy]
+startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 2"
+healthcheckPath = "/health"
+healthcheckTimeout = 300  # 5 minutes for AI model loading
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Deployment teardown for zero-downtime updates
+overlapSeconds = 30  # New deployment starts 30s before old one stops
+drainingSeconds = 10  # 10s between SIGTERM and SIGKILL
+
+# ================================
+# Frontend Service (React PWA + Nginx)
+# ================================
+[environments.production.frontend]
+[environments.production.frontend.build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.frontend"
+
+[environments.production.frontend.deploy]
+startCommand = "nginx -g 'daemon off;'"
+healthcheckPath = "/"
+healthcheckTimeout = 60
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 5
+
+# ================================
+# Redis Service (Celery Broker)
+# ================================
+[environments.production.redis]
+[environments.production.redis.deploy]
+# Railway provides managed Redis as a database service
+# No custom configuration needed - use Railway's Redis template
+
+# ================================
+# Celery Worker Service (Background Tasks)
+# ================================
+[environments.production.celery-worker]
+[environments.production.celery-worker.build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.backend"
+
+[environments.production.celery-worker.deploy]
+startCommand = "celery -A backend.python.celery_worker.celery_app worker --loglevel=info --concurrency=2"
+healthcheckPath = null  # Workers don't have HTTP endpoints
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 3
+
+# ================================
+# Celery Beat Service (Scheduled Tasks)
+# ================================
+[environments.production.celery-beat]
+[environments.production.celery-beat.build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.backend"
+
+[environments.production.celery-beat.deploy]
+startCommand = "celery -A backend.python.celery_worker.celery_app beat --loglevel=info"
+healthcheckPath = null  # Beat scheduler doesn't have HTTP endpoints
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 3
+
+# ================================
+# Staging Environment Overrides
+# ================================
+[environments.staging.backend]
+[environments.staging.backend.deploy]
+startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 1 --reload"
+
+[environments.staging.frontend]
+[environments.staging.frontend.deploy]
+# Frontend uses same config as production in staging
+
+# ================================
+# Development/PR Environment Overrides
+# ================================
+[environments.pr.backend]
+[environments.pr.backend.deploy]
+startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 1 --reload"
+healthcheckTimeout = 180  # Faster startup for PRs
+
+# ================================
+# Watch Patterns (Trigger Deployments)
+# ================================
+[environments.production.backend.build]
+watchPatterns = [
+    "backend/**/*.py",
+    "backend/requirements.txt",
+    "Dockerfile.backend"
+]
+
+[environments.production.frontend.build]
+watchPatterns = [
+    "frontend/src/**/*",
+    "frontend/public/**/*",
+    "frontend/package.json",
+    "frontend/package-lock.json",
+    "Dockerfile.frontend",
+    "docker/frontend/nginx.conf"
+]
+
+[environments.production.celery-worker.build]
+watchPatterns = [
+    "backend/**/*.py",
+    "backend/requirements.txt",
+    "Dockerfile.backend"
+]
+
+[environments.production.celery-beat.build]
+watchPatterns = [
+    "backend/**/*.py",
+    "backend/requirements.txt",
+    "Dockerfile.backend"
+]
+
+# ================================
+# Notes & Best Practices
+# ================================
+# 1. Environment Variables:
+#    Set in Railway dashboard under each service's Variables tab:
+#    - SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+#    - DATABASE_URL (if using managed PostgreSQL)
+#    - REDIS_URL (from Railway Redis service)
+#    - ENV=production
+#    - CORS_ORIGINS=https://*.up.railway.app
+#    - RECAPTCHA_SECRET_KEY
+#    - API_URL (frontend needs backend URL)
+#
+# 2. Service Dependencies:
+#    - Backend depends on: Redis (Celery broker)
+#    - Celery Worker depends on: Backend (shared code), Redis
+#    - Celery Beat depends on: Backend (shared code), Redis
+#    - Frontend depends on: Backend (API_URL)
+#
+# 3. Networking:
+#    - Backend exposes public URL for frontend API calls
+#    - Redis uses private networking (internal only)
+#    - Frontend exposes public URL for PWA access
+#
+# 4. Health Checks:
+#    - Backend: /health endpoint checks AI model loading
+#    - Frontend: / (root path) checks Nginx serving
+#    - Workers/Beat: No HTTP health checks (Celery internal monitoring)
+#
+# 5. Scaling:
+#    - Backend: 1-2 replicas (CPU-intensive AI models)
+#    - Frontend: 2+ replicas (lightweight static serving)
+#    - Celery Worker: 1-2 replicas (background task processing)
+#    - Celery Beat: 1 replica only (single scheduler required)
+#
+# 6. Resource Requirements:
+#    - Backend: 2GB RAM, 1 vCPU (AI models + FastAPI)
+#    - Frontend: 512MB RAM, 0.5 vCPU (Nginx static files)
+#    - Celery Worker: 1GB RAM, 0.5 vCPU (RSS processing)
+#    - Celery Beat: 256MB RAM, 0.25 vCPU (scheduler only)
+#    - Redis: 256MB RAM (managed service)
