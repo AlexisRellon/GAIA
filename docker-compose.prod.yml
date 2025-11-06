@@ -6,42 +6,133 @@ services:
       dockerfile: Dockerfile.backend
     container_name: gaia-backend-prod
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"  # Railway sets PORT env var
     environment:
       # Cloud Supabase connection (from .env file)
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - DATABASE_URL=${DATABASE_URL}
-      - CLIMATE_NLI_MODEL_PATH=${CLIMATE_NLI_MODEL_PATH:-models/climate-nli}
-      - GEO_NER_MODEL_PATH=${GEO_NER_MODEL_PATH:-models/geo-ner}
+      - CLIMATE_NLI_MODEL_PATH=${CLIMATE_NLI_MODEL_PATH:-MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33}
+      - GEO_NER_MODEL_PATH=${GEO_NER_MODEL_PATH:-dslim/bert-base-NER}
       - MIN_CONFIDENCE_THRESHOLD=${MIN_CONFIDENCE_THRESHOLD:-0.7}
+      - CITIZEN_REPORT_CONFIDENCE=${CITIZEN_REPORT_CONFIDENCE:-0.3}
       - API_PORT=8000
       - API_HOST=0.0.0.0
       - ENV=production
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://*.up.railway.app}
+      - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RSS_FEEDS=${RSS_FEEDS:-https://www.gmanetwork.com/news/rss/news/}
     volumes:
-      - ./models:/app/models
+      - ai-models:/app/models  # Named volume for AI models cache
     networks:
       - gaia-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # AI model loading takes time
 
   # Frontend React PWA (Production Build with Nginx)
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-      # No target specified - builds full image with nginx
     container_name: gaia-frontend-prod
     ports:
-      - "3000:3000"
+      - "3000:80"  # Nginx serves on port 80 internally
+    environment:
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://backend:8000}
+      - REACT_APP_SUPABASE_URL=${SUPABASE_URL}
+      - REACT_APP_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - REACT_APP_RECAPTCHA_SITE_KEY=${REACT_APP_RECAPTCHA_SITE_KEY}
     networks:
       - gaia-network
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
-    # No command override - uses default nginx
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
+  # Redis (Celery Broker)
+  redis:
+    image: redis:7-alpine
+    container_name: gaia-redis-prod
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - gaia-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Celery Worker (Background Tasks)
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gaia-celery-worker-prod
+    command: celery -A backend.python.celery_worker.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - ENV=production
+      - CLIMATE_NLI_MODEL_PATH=${CLIMATE_NLI_MODEL_PATH:-MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33}
+      - GEO_NER_MODEL_PATH=${GEO_NER_MODEL_PATH:-dslim/bert-base-NER}
+      - RSS_FEEDS=${RSS_FEEDS:-https://www.gmanetwork.com/news/rss/news/}
+    volumes:
+      - ai-models:/app/models
+    networks:
+      - gaia-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Celery Beat (Scheduler)
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gaia-celery-beat-prod
+    command: celery -A backend.python.celery_worker.celery_app beat --loglevel=info
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - ENV=production
+    networks:
+      - gaia-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
 networks:
   gaia-network:
     driver: bridge
+
+volumes:
+  ai-models:
+    driver: local
+  redis-data:
+    driver: local
+
