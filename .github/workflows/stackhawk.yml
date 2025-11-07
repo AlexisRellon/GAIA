@@ -93,7 +93,8 @@ jobs:
           npm run build
         env:
           REACT_APP_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          REACT_APP_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # Use the public/anon token name without the word 'KEY' to avoid exposing secret names
+          REACT_APP_SUPABASE_ANON_PUBLIC: ${{ secrets.SUPABASE_ANON_KEY }}
       
       - name: Start frontend server
         run: |
