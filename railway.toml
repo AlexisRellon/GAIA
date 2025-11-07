@@ -9,6 +9,11 @@
 [environments.production.backend.build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.backend"
+watchPatterns = [
+    "backend/**/*.py",
+    "backend/requirements.txt",
+    "Dockerfile.backend"
+]
 
 [environments.production.backend.deploy]
 startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 2"
@@ -28,6 +33,14 @@ drainingSeconds = 10  # 10s between SIGTERM and SIGKILL
 [environments.production.frontend.build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.frontend"
+watchPatterns = [
+    "frontend/src/**/*",
+    "frontend/public/**/*",
+    "frontend/package.json",
+    "frontend/package-lock.json",
+    "Dockerfile.frontend",
+    "docker/frontend/nginx.conf"
+]
 
 [environments.production.frontend.deploy]
 startCommand = "nginx -g 'daemon off;'"
@@ -51,6 +64,11 @@ restartPolicyMaxRetries = 5
 [environments.production.celery-worker.build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.backend"
+watchPatterns = [
+    "backend/**/*.py",
+    "backend/requirements.txt",
+    "Dockerfile.backend"
+]
 
 [environments.production.celery-worker.deploy]
 startCommand = "celery -A backend.python.celery_worker.celery_app worker --loglevel=info --concurrency=2"
@@ -64,6 +82,11 @@ restartPolicyMaxRetries = 3
 [environments.production.celery-beat.build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.backend"
+watchPatterns = [
+    "backend/**/*.py",
+    "backend/requirements.txt",
+    "Dockerfile.backend"
+]
 
 [environments.production.celery-beat.deploy]
 startCommand = "celery -A backend.python.celery_worker.celery_app beat --loglevel=info"
@@ -88,40 +111,6 @@ startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --wo
 [environments.pr.backend.deploy]
 startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 1 --reload"
 healthcheckTimeout = 180  # Faster startup for PRs
-
-# ================================
-# Watch Patterns (Trigger Deployments)
-# ================================
-[environments.production.backend.build]
-watchPatterns = [
-    "backend/**/*.py",
-    "backend/requirements.txt",
-    "Dockerfile.backend"
-]
-
-[environments.production.frontend.build]
-watchPatterns = [
-    "frontend/src/**/*",
-    "frontend/public/**/*",
-    "frontend/package.json",
-    "frontend/package-lock.json",
-    "Dockerfile.frontend",
-    "docker/frontend/nginx.conf"
-]
-
-[environments.production.celery-worker.build]
-watchPatterns = [
-    "backend/**/*.py",
-    "backend/requirements.txt",
-    "Dockerfile.backend"
-]
-
-[environments.production.celery-beat.build]
-watchPatterns = [
-    "backend/**/*.py",
-    "backend/requirements.txt",
-    "Dockerfile.backend"
-]
 
 # ================================
 # Notes & Best Practices
