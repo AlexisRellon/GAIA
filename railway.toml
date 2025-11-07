@@ -8,6 +8,7 @@
 [environments.production.backend]
 [environments.production.backend.build]
 builder = "NIXPACKS"
+buildCommand = "pip install -r backend/python/requirements.txt"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
@@ -62,6 +63,7 @@ restartPolicyMaxRetries = 5
 [environments.production.celery-worker]
 [environments.production.celery-worker.build]
 builder = "NIXPACKS"
+buildCommand = "pip install -r backend/python/requirements.txt"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
@@ -79,6 +81,7 @@ restartPolicyMaxRetries = 3
 [environments.production.celery-beat]
 [environments.production.celery-beat.build]
 builder = "NIXPACKS"
+buildCommand = "pip install -r backend/python/requirements.txt"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
