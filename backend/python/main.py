@@ -102,10 +102,10 @@ app = FastAPI(
 ENV = os.getenv("ENV", "development")
 
 # Configure CORS with environment-based whitelist
-# Support for Railway deployment, localhost development, and future custom domains
+# Support for Vercel + Railway deployment, localhost development, and future custom domains
 if ENV == "production":
-    # Production: Railway domains + custom domains (wildcard support)
-    default_origins = "https://*.up.railway.app,https://*.railway.app,https://gaia.railway.app"
+    # Production: Vercel frontend + Railway backend domains
+    default_origins = "https://*.vercel.app,https://*.railway.app,https://gaia.vercel.app,https://gaia.railway.app"
 else:
     # Development: localhost only
     default_origins = "http://localhost:3000,http://localhost:8000"

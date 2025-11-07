@@ -11,6 +11,10 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat-square&logo=typescript&logoColor=white)]()
 [![License](https://img.shields.io/badge/License-TBD-yellow?style=flat-square)]()
+[![GitHub deployments](https://img.shields.io/github/deployments/badges/shields/shields-staging?style=flat-square&logo=vercel&label=Vercel&color=000000)]()
+[![GitHub deployments](https://img.shields.io/github/deployments/badges/shields/shields-staging?style=flat-square&logo=Railway&label=Railway&color=0B0D0E)]()
+
+
 
 [Overview](#overview) • [Features](#features) • [Getting Started](#getting-started) • [Architecture](#architecture) • [Documentation](#documentation)
 
@@ -100,7 +104,30 @@ docker-compose up --build
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
-### Deploy to Railway
+### Production Deployment
+
+GAIA supports multiple deployment options for different needs:
+
+#### Option 1: Vercel + Railway (Recommended)
+
+**Frontend**: Vercel (Global CDN, free tier generous)
+**Backend**: Railway (Docker support, AI/ML workloads)
+**Database**: Supabase (managed PostgreSQL + PostGIS)
+
+```bash
+# Deploy frontend to Vercel
+cd frontend
+vercel --prod
+
+# Deploy backend to Railway
+railway login
+railway init
+railway up
+```
+
+**Monthly Cost Estimate**: ~$25-65 (Vercel: Free + Railway: $25-65 + Supabase Pro: $25)
+
+#### Option 2: Railway Only
 
 GAIA supports production deployment on Railway with a single command:
 
@@ -117,9 +144,9 @@ railway up
 railway logs --service backend
 ```
 
-For complete deployment instructions including environment variables, database setup, and custom domains, see the [Railway Deployment Guide](docs/guides/RAILWAY_DEPLOYMENT.md).
-
 **Monthly Cost Estimate**: ~$65-105 (Railway: $40-80 + Supabase Pro: $25)
+
+For complete deployment instructions including environment variables, database setup, and custom domains, see the [Railway Deployment Guide](docs/guides/RAILWAY_DEPLOYMENT.md).
 
 ## Architecture
 
@@ -151,24 +178,49 @@ Text Input → Preprocessing (spaCy/NLTK) → Climate-NLI (Hazard Type)
 
 ### Service Architecture
 
-**Production Deployment** (5 Services):
+**Production Deployment Options**:
+
+**Option 1: Vercel + Railway (Recommended)**
 ```
 ┌─────────────┐   ┌─────────────┐   ┌──────────┐
 │   Frontend  │──▶│   Backend   │──▶│ Supabase │
-│  (Nginx)    │   │  (FastAPI)  │   │(PostGIS) │
-└─────────────┘   └─────────────┘   └──────────┘
-                         │
-                         ▼
-                  ┌─────────────┐
-                  │    Redis    │
-                  └─────────────┘
+│   Vercel    │   │  Railway    │   │(PostGIS) │
+│  (CDN)      │   │  (FastAPI)  │   └──────────┘
+└─────────────┘   └─────────────┘          │
+                         │                 ▼
+                         ▼          ┌─────────────┐
+                  ┌─────────────┐   │    Redis    │
+                  │    Redis    │   │  Railway    │
+                  └─────────────┘   └─────────────┘
                          │
           ┌──────────────┴──────────────┐
           ▼                             ▼
    ┌─────────────┐              ┌─────────────┐
    │   Celery    │              │   Celery    │
    │   Worker    │              │    Beat     │
-   │ (AI Tasks)  │              │ (Scheduler) │
+   │ Railway     │              │  Railway    │
+   └─────────────┘              └─────────────┘
+```
+
+**Option 2: Railway Only (5 Services)**
+```
+┌─────────────┐   ┌─────────────┐   ┌──────────┐
+│   Frontend  │──▶│   Backend   │──▶│ Supabase │
+│  Railway    │   │  Railway    │   │(PostGIS) │
+│  (Nginx)    │   │  (FastAPI)  │   └──────────┘
+└─────────────┘   └─────────────┘          │
+                         │                 ▼
+                         ▼          ┌─────────────┐
+                  ┌─────────────┐   │    Redis    │
+                  │    Redis    │   │  Railway    │
+                  └─────────────┘   └─────────────┘
+                         │
+          ┌──────────────┴──────────────┐
+          ▼                             ▼
+   ┌─────────────┐              ┌─────────────┐
+   │   Celery    │              │   Celery    │
+   │   Worker    │              │    Beat     │
+   │ Railway     │              │  Railway    │
    └─────────────┘              └─────────────┘
 ```
 

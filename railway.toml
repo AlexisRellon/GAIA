@@ -7,8 +7,8 @@
 # ================================
 [environments.production.backend]
 [environments.production.backend.build]
-builder = "NIXPACKS"
-buildCommand = "cd backend/python && pip install -r requirements.txt"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.backend"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
@@ -16,7 +16,7 @@ watchPatterns = [
 ]
 
 [environments.production.backend.deploy]
-startCommand = "cd backend/python && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2"
+startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 2"
 healthcheckPath = "/health"
 healthcheckTimeout = 300  # 5 minutes for AI model loading
 restartPolicyType = "ON_FAILURE"
@@ -62,8 +62,8 @@ restartPolicyMaxRetries = 5
 # ================================
 [environments.production.celery-worker]
 [environments.production.celery-worker.build]
-builder = "NIXPACKS"
-buildCommand = "cd backend/python && pip install -r requirements.txt"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.backend"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
@@ -71,7 +71,7 @@ watchPatterns = [
 ]
 
 [environments.production.celery-worker.deploy]
-startCommand = "cd backend/python && celery -A celery_worker.celery_app worker --loglevel=info --concurrency=2"
+startCommand = "celery -A backend.python.celery_worker.celery_app worker --loglevel=info --concurrency=2"
 restartPolicyType = "ALWAYS"
 restartPolicyMaxRetries = 3
 
@@ -80,8 +80,8 @@ restartPolicyMaxRetries = 3
 # ================================
 [environments.production.celery-beat]
 [environments.production.celery-beat.build]
-builder = "NIXPACKS"
-buildCommand = "cd backend/python && pip install -r requirements.txt"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.backend"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
@@ -89,7 +89,7 @@ watchPatterns = [
 ]
 
 [environments.production.celery-beat.deploy]
-startCommand = "cd backend/python && celery -A celery_worker.celery_app beat --loglevel=info"
+startCommand = "celery -A backend.python.celery_worker.celery_app beat --loglevel=info"
 restartPolicyType = "ALWAYS"
 restartPolicyMaxRetries = 3
 
