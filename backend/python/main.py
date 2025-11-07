@@ -51,24 +51,27 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting GAIA Backend...")
     logger.info("Loading AI models...")
-    
+
     try:
         # Load classifier
         classifier.load_model()
         logger.info("✓ Zero-Shot Classifier loaded")
-        
+
         # Load Geo-NER
         geo_ner.load_model()
         logger.info("✓ Geo-NER model loaded")
-        
+
         logger.info("GAIA Backend ready!")
-        
+        logger.info(f"Environment: {ENV}")
+        logger.info(f"Port: {os.getenv('PORT', '8000')}")
+
     except Exception as e:
         logger.error(f"Error loading models: {str(e)}")
+        logger.error("Backend startup failed - check model loading and environment variables")
         raise
-    
+
     yield  # Application runs here
-    
+
     # Shutdown (cleanup if needed)
     logger.info("Shutting down GAIA Backend...")
 
@@ -118,6 +121,10 @@ if "*" in allowed_origins_str:
     allowed_origins = "*"  # Allow all origins (Railway handles subdomain validation)
 else:
     allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+
+# Log CORS configuration for debugging
+logger.info(f"CORS configured for environment: {ENV}")
+logger.info(f"Allowed origins: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,

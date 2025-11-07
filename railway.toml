@@ -16,7 +16,7 @@ watchPatterns = [
 ]
 
 [environments.production.backend.deploy]
-startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 2"
+startCommand = "cd /app && uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 2"
 healthcheckPath = "/health"
 healthcheckTimeout = 300  # 5 minutes for AI model loading
 restartPolicyType = "ON_FAILURE"
@@ -98,7 +98,7 @@ restartPolicyMaxRetries = 3
 # ================================
 [environments.staging.backend]
 [environments.staging.backend.deploy]
-startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 1 --reload"
+startCommand = "cd /app && uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 1 --reload"
 
 [environments.staging.frontend]
 [environments.staging.frontend.deploy]
@@ -109,7 +109,7 @@ startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --wo
 # ================================
 [environments.pr.backend]
 [environments.pr.backend.deploy]
-startCommand = "uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 1 --reload"
+startCommand = "cd /app && uvicorn backend.python.main:app --host 0.0.0.0 --port $PORT --workers 1 --reload"
 healthcheckTimeout = 180  # Faster startup for PRs
 
 # ================================
