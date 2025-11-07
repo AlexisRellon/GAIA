@@ -1,5 +1,6 @@
 <div align="center">
 
+<img src="./frontend/public/assets/img/GAIA.png" /><br />
 # GAIA: Geospatial AI-driven Assessment
 
 *AI-powered environmental hazard detection for the Philippines*
