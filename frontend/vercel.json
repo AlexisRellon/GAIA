@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://your-railway-backend-url.up.railway.app/api/:path*"
+      "destination": "https://gaia-production-2294.up.railway.app/api/:path*"
     },
     {
       "source": "/(.*)",
