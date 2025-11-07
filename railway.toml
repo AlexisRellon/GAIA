@@ -7,8 +7,7 @@
 # ================================
 [environments.production.backend]
 [environments.production.backend.build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.backend"
+builder = "NIXPACKS"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
@@ -62,8 +61,7 @@ restartPolicyMaxRetries = 5
 # ================================
 [environments.production.celery-worker]
 [environments.production.celery-worker.build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.backend"
+builder = "NIXPACKS"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
@@ -80,8 +78,7 @@ restartPolicyMaxRetries = 3
 # ================================
 [environments.production.celery-beat]
 [environments.production.celery-beat.build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.backend"
+builder = "NIXPACKS"
 watchPatterns = [
     "backend/**/*.py",
     "backend/requirements.txt",
