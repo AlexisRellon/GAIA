@@ -108,8 +108,8 @@ ENV = os.getenv("ENV", "development")
 # Configure CORS with environment-based whitelist
 # For security we only allow absolute origin URLs (no wildcard patterns).
 if ENV == "production":
-    # Production: explicit production frontend domain (no wildcards)
-    default_origins = "https://gaia-ph.vercel.app"
+    # Production: explicit production frontend domains
+    default_origins = "https://gaia-ph.vercel.app,https://gaia-production-2294.up.railway.app"
 else:
     # Development: localhost only
     default_origins = "http://localhost:3000,http://localhost:8000"
@@ -137,6 +137,7 @@ if not filtered:
 
 logger.info(f"CORS configured for environment: {ENV}")
 logger.info(f"Allowed origins (explicit only): {filtered}")
+logger.info(f"Raw CORS_ORIGINS env var: {allowed_origins_str}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -151,11 +152,18 @@ app.add_middleware(
         "X-Requested-With",
         "X-API-Key",
         "X-CSRF-Token",
-        "Railway-Deployment-Id"  # Railway-specific header
+        "Railway-Deployment-Id",  # Railway-specific header
+        "x-vercel-id",  # Vercel deployment ID
+        "x-vercel-deployment-url"  # Vercel deployment URL
     ],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+# Log CORS middleware configuration for debugging
+logger.info(f"✓ CORS middleware configured with {len(filtered)} allowed origins")
+for origin in filtered:
+    logger.info(f"  - {origin}")
 
 # Add security headers middleware (SECURITY_AUDIT.md #5)
 # Use ENV variable defined above - enable HSTS only in production
