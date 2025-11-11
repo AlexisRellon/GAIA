@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { 
   Users, 
   FileText, 
@@ -33,6 +34,7 @@ import AuditLogViewer from '../components/admin/AuditLogViewer';
 import SystemConfig from '../components/admin/SystemConfig';
 import ReportTriage from '../components/admin/ReportTriage';
 import ActivityMonitor from '../components/admin/ActivityMonitor';
+import AdminOnboarding from '../components/admin/AdminOnboarding';
 
 const AdminDashboard: React.FC = () => {
   const { user, userProfile, loading, signOut, isAdmin, hasRole } = useAuth();
@@ -129,7 +131,7 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm" data-tour="admin-header">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -145,14 +147,23 @@ const AdminDashboard: React.FC = () => {
                 </p>
               </div>
             </div>
-            <Button 
-              variant="outline" 
-              onClick={signOut}
-              className="flex items-center gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="secondary"
+                onClick={() => (window as any).gaiaStartAdminTour?.()}
+                className="hidden sm:inline-flex"
+              >
+                Start Tour
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={signOut}
+                className="flex items-center gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -171,45 +182,82 @@ const AdminDashboard: React.FC = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
-            {/* User Management - Master Admin only */}
-            {isMasterAdmin && (
-              <TabsTrigger value="users" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Users</span>
-              </TabsTrigger>
-            )}
+          <TooltipProvider>
+            <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid" data-tour="tabs-list">
+              {/* User Management - Master Admin only */}
+              {isMasterAdmin && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="users" className="flex items-center gap-2" data-tour="tab-users">
+                      <Users className="h-4 w-4" />
+                      <span className="hidden sm:inline">Users</span>
+                    </TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Manage users, roles, and access.
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
-            {/* Audit Logs - Validator and Master Admin */}
-            {isValidator && (
-              <TabsTrigger value="audit" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">Audit Logs</span>
-              </TabsTrigger>
-            )}
+              {/* Audit Logs - Validator and Master Admin */}
+              {isValidator && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="audit" className="flex items-center gap-2" data-tour="tab-audit">
+                      <FileText className="h-4 w-4" />
+                      <span className="hidden sm:inline">Audit Logs</span>
+                    </TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    View system audit trail and user actions.
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
-            {/* System Config - Master Admin only */}
-            {isMasterAdmin && (
-              <TabsTrigger value="config" className="flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                <span className="hidden sm:inline">Config</span>
-              </TabsTrigger>
-            )}
+              {/* System Config - Master Admin only */}
+              {isMasterAdmin && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="config" className="flex items-center gap-2" data-tour="tab-config">
+                      <Settings className="h-4 w-4" />
+                      <span className="hidden sm:inline">Config</span>
+                    </TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Configure data sources, API keys, and permissions.
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
-            {/* Report Triage - All admin roles */}
-            <TabsTrigger value="triage" className="flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              <span className="hidden sm:inline">Triage</span>
-            </TabsTrigger>
+              {/* Report Triage - All admin roles */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <TabsTrigger value="triage" className="flex items-center gap-2" data-tour="tab-triage">
+                    <Shield className="h-4 w-4" />
+                    <span className="hidden sm:inline">Triage</span>
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Validate and manage incident reports.
+                </TooltipContent>
+              </Tooltip>
 
-            {/* Activity Monitor - Validator and Master Admin */}
-            {isValidator && (
-              <TabsTrigger value="activity" className="flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                <span className="hidden sm:inline">Activity</span>
-              </TabsTrigger>
-            )}
-          </TabsList>
+              {/* Activity Monitor - Validator and Master Admin */}
+              {isValidator && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger value="activity" className="flex items-center gap-2" data-tour="tab-activity">
+                      <Activity className="h-4 w-4" />
+                      <span className="hidden sm:inline">Activity</span>
+                    </TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Monitor activity and interpret trends.
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </TabsList>
+          </TooltipProvider>
 
           {/* Tab Contents */}
           {isMasterAdmin && (
@@ -241,6 +289,9 @@ const AdminDashboard: React.FC = () => {
           )}
         </Tabs>
       </main>
+
+      {/* Admin Onboarding (guided tour) */}
+      <AdminOnboarding />
 
       {/* Footer */}
       <footer className="bg-white border-t border-gray-200 mt-12">

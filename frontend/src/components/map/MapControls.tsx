@@ -66,12 +66,13 @@ export function MapControls({
       <Card className="p-3 bg-white shadow-lg">
         <div className="flex flex-col gap-3">
           {/* Clustering Toggle */}
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3" data-tour="cluster-section">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-slate-600" />
               <span className="text-sm font-medium">Clustering</span>
             </div>
             <button
+              data-tour="cluster-toggle"
               onClick={() => onToggleClustering(!clusteringEnabled)}
               className={`
                 relative inline-flex h-6 w-11 items-center rounded-full
@@ -91,7 +92,7 @@ export function MapControls({
           </div>
 
           {/* Heatmap Toggle */}
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3" data-tour="heatmap-section">
             <div className="flex items-center gap-2">
               <MapIcon className="w-4 h-4 text-slate-600" />
               <span className="text-sm font-medium">Heatmap</span>
@@ -102,6 +103,7 @@ export function MapControls({
               )}
             </div>
             <button
+              data-tour="heatmap-toggle"
               onClick={() => onToggleHeatmap(!heatmapEnabled)}
               disabled={isHeatmapAutoDisabled}
               className={`
@@ -133,6 +135,7 @@ export function MapControls({
           <button
             onClick={() => setShowSettings(!showSettings)}
             className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 transition-colors mt-1"
+            data-tour="heatmap-settings"
           >
             <Settings className="w-4 h-4" />
             <span>Settings</span>

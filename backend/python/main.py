@@ -5,11 +5,18 @@ Geospatial AI-driven Assessment - Environmental Hazard Detection
 
 import os
 import logging
+import sys
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
+
+
+project_root = Path(__file__).parent.parent.parent.resolve()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 # Import AI models and processors
 from backend.python.models.classifier import classifier

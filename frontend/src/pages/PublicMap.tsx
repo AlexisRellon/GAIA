@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/badge';
 import { createCustomClusterIcon } from '../components/map/clusterIcon';
 import { HeatmapLayer, useHeatmapSettings } from '../components/map/HeatmapLayer';
 import { MapControls } from '../components/map/MapControls';
+import { MapOnboarding } from '../components/map/MapOnboarding';
 import { FilterPanel } from '../components/filters/FilterPanel';
 import { ReportGenerator } from '../components/reports/ReportGenerator';
 import { useHazardFilters } from '../hooks/useHazardFilters';
@@ -417,7 +418,7 @@ const PublicMap: React.FC = () => {
         </button>
 
         {/* Map Container - Full Screen */}
-        <div ref={mapContainerRef} className="absolute inset-0">
+        <div ref={mapContainerRef} className="absolute inset-0" id="public-map-container">
           {/* Floating UI Controls Container - Top Right */}
           <div className="absolute top-56 right-4 z-[1000] space-y-4" data-map-control="true">
             {/* Report Generator Button (RG-02) - Only for authenticated users */}
@@ -683,7 +684,7 @@ const PublicMap: React.FC = () => {
       </div>
 
       {/* Stats Footer */}
-      <footer className="bg-white border-t border-gray-200 py-3 z-[9999]">
+      <footer className="bg-white border-t border-gray-200 py-3 z-[9999]" data-realtime-footer="true">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between text-sm text-gray-600">
             <div>
@@ -700,6 +701,56 @@ const PublicMap: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Onboarding Tutorial */}
+      <MapOnboarding
+        autoStart
+        steps={[
+          {
+            id: 'map',
+            selector: '#public-map-container',
+            title: 'Interactive Live Map',
+            description: 'Pan and zoom to explore active hazards. The map updates continuously as new reports are validated.',
+            placement: 'bottom',
+            padding: 8,
+          },
+          {
+            id: 'zoom',
+            selector: '.leaflet-control-zoom',
+            title: 'Zoom Controls',
+            description: 'Use + and − to zoom. You can also use your mouse wheel or pinch gestures.',
+            placement: 'right',
+          },
+          {
+            id: 'layers',
+            selector: '.leaflet-control-layers',
+            title: 'Base Map Layers',
+            description: 'Switch between OpenStreetMap, Satellite, and Topographic views to suit your analysis.',
+            placement: 'right',
+          },
+          {
+            id: 'cluster',
+            selector: '[data-tour="cluster-toggle"]',
+            title: 'Marker Clustering',
+            description: 'Group nearby hazards for clarity. Toggle off to see individual markers at all zoom levels.',
+            placement: 'left',
+          },
+          {
+            id: 'heatmap',
+            selector: '[data-tour="heatmap-toggle"]',
+            title: 'Heatmap Overlay',
+            description: 'Visualize hazard density. The heatmap auto-disables when you zoom in for detailed inspection.',
+            placement: 'left',
+          },
+          {
+            id: 'realtime',
+            selector: '[data-realtime-footer="true"]',
+            title: 'Real-Time Updates',
+            description: 'The map refreshes every 30s. See the latest update time here and total active hazards shown.',
+            placement: 'top',
+          },
+        ]}
+      />
     </div>
   );
 };

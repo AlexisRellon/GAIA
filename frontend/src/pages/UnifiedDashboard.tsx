@@ -55,6 +55,7 @@ import ReportTriage from '../components/admin/ReportTriage';
 import ActivityMonitor from '../components/admin/ActivityMonitor';
 import RSSFeedsView from '../components/admin/RSSFeedsView';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import AdminOnboarding from '../components/admin/AdminOnboarding';
 
 // Navigation items type
 type NavItem = {
@@ -225,7 +226,7 @@ export default function UnifiedDashboard() {
     <SidebarProvider>
       <div className="flex h-screen w-full overflow-hidden">
         {/* Sidebar */}
-        <Sidebar className="border-r">
+        <Sidebar className="border-r" data-tour="sidebar">
           <SidebarContent>
             {/* Header */}
             <SidebarGroup>
@@ -243,7 +244,7 @@ export default function UnifiedDashboard() {
 
             {/* Navigation */}
             <SidebarGroup>
-              <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+              <SidebarGroupLabel data-tour="sidebar-navigation">Navigation</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {filteredNavItems.map((item) => (
@@ -252,6 +253,7 @@ export default function UnifiedDashboard() {
                         onClick={() => handleViewChange(item.view)}
                         isActive={activeView === item.view}
                         tooltip={item.title}
+                        data-tour={`nav-${item.view}`}
                       >
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
@@ -281,7 +283,7 @@ export default function UnifiedDashboard() {
 
         {/* Main Content */}
         <SidebarInset className="flex-1 overflow-auto">
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4" data-tour="admin-header">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
             <h1 className="text-lg font-semibold">
@@ -296,6 +298,9 @@ export default function UnifiedDashboard() {
           <main className="p-6">
             {renderViewContent()}
           </main>
+
+          {/* Onboarding */}
+          <AdminOnboarding />
         </SidebarInset>
       </div>
     </SidebarProvider>
