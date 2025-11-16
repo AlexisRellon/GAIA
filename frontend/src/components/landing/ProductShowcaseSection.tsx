@@ -21,27 +21,27 @@ export const ProductShowcaseSection: React.FC = () => {
   ];
 
   return (
-    <div className="box-border flex flex-col gap-[80px] h-[1030px] items-center justify-center overflow-clip px-[64px] py-[10px] w-[1280px] mx-auto">
-      <div className="box-border flex flex-col gap-[10px] items-center justify-center px-[20px] py-0 text-center">
-        <h2 className="flex flex-col font-lato font-extrabold justify-center text-[39px] leading-[59px] text-[#334155]">
+    <div className="box-border flex flex-col gap-10 items-center justify-center overflow-visible px-4 sm:px-6 lg:px-16 py-16 w-full max-w-screen-xl mx-auto">
+      <div className="box-border flex flex-col gap-3 items-center justify-center px-[20px] py-0 text-center">
+        <h2 className="flex flex-col font-lato font-extrabold justify-center text-[28px] sm:text-[32px] md:text-[36px] leading-[1.2] text-[#334155]">
           GAIA&apos;s AI-Generated Assessments
         </h2>
-        <p className="flex flex-col font-lato justify-center max-w-[620px] text-[16px] leading-[24px] text-black">
+        <p className="flex flex-col font-lato justify-center max-w-[720px] text-[14px] sm:text-[16px] leading-[24px] text-black">
           Explore the real-time outputs from our AI pipeline, turning unstructured reports into live intelligence.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-[20px] items-center justify-center overflow-clip w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 items-stretch justify-center overflow-visible w-full">
         {showcaseItems.map((item, index) => (
           <div 
             key={index}
-            className={`bg-[#d9d9d9] flex flex-col gap-[10px] h-[360px] items-start justify-end min-w-[330px] ${index % 2 === 0 ? 'w-[405px]' : 'w-[406px]'}`}
+            className="bg-[#d9d9d9] flex flex-col gap-[10px] h-[256px] sm:h-[288px] md:h-[320px] lg:h-[360px] items-start justify-end w-full"
           >
-            <div className="bg-gradient-to-t box-border flex flex-col from-10% from-[rgba(10,42,77,0.9)] gap-[10px] items-start justify-end overflow-clip px-[20px] py-[50px] text-white to-95% to-[rgba(0,0,0,0)] w-full">
-              <h5 className="flex flex-col font-lato font-semibold justify-center text-[20px] leading-[30px] text-center">
+            <div className="bg-gradient-to-t box-border flex flex-col from-10% from-[rgba(10,42,77,0.9)] gap-[10px] items-start justify-end overflow-clip px-[20px] py-[40px] sm:py-[50px] text-white to-95% to-[rgba(0,0,0,0)] w-full">
+              <h5 className="flex flex-col font-lato font-semibold justify-center text-[18px] sm:text-[20px] leading-[28px] sm:leading-[30px] text-center">
                 {item.title}
               </h5>
-              <p className="flex flex-col font-lato font-semibold justify-center text-[20px] leading-[30px] w-full">
+              <p className="flex flex-col font-lato font-medium justify-center text-[14px] sm:text-[16px] leading-[24px] w-full">
                 {item.description}
               </p>
             </div>

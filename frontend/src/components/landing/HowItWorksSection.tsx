@@ -26,33 +26,33 @@ export const HowItWorksSection: React.FC = () => {
   ];
 
   return (
-    <div id="how-it-works-section" className="box-border flex flex-col gap-[10px] h-[769px] items-center justify-center overflow-clip px-[64px] py-[10px] w-[1280px] mx-auto">
-      <div className="box-border flex flex-col gap-[10px] items-center justify-center px-[20px] py-0 text-center">
-        <h2 className="flex flex-col font-lato font-extrabold justify-center text-[39px] leading-[59px] text-[#334155]">
+    <div id="how-it-works-section" className="box-border flex flex-col gap-6 items-center justify-center overflow-visible px-4 sm:px-6 lg:px-16 py-16 w-full max-w-screen-xl mx-auto">
+      <div className="box-border flex flex-col gap-3 items-center justify-center px-[20px] py-0 text-center">
+        <h2 className="flex flex-col font-lato font-extrabold justify-center text-[28px] sm:text-[32px] md:text-[36px] leading-[1.2] text-[#334155]">
           From Raw Data to Real-Time Decision
         </h2>
-        <p className="flex flex-col font-lato justify-center max-w-[620px] text-[16px] leading-[24px] text-black">
+        <p className="flex flex-col font-lato justify-center max-w-[720px] text-[14px] sm:text-[16px] leading-[24px] text-black">
           GAIA&apos;s intelligent pipeline transforms unstructured text reports into verified, actionable geospatial alerts in four steps.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-[10px] items-center justify-center w-full">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start justify-center w-full">
         {steps.map((step, index) => (
           <React.Fragment key={index}>
-            <div className="flex flex-col gap-[10px] items-start overflow-clip w-[230px] h-full">
-              <p className="flex flex-col font-lato font-black justify-center text-[61px] leading-[92px] text-[#575757] w-full">
+            <div className="flex flex-col gap-2 items-start overflow-visible w-full">
+              <p className="flex flex-col font-lato font-black justify-center text-[44px] sm:text-[52px] md:text-[61px] leading-[1.1] text-[#575757] w-full">
                 {step.number}
               </p>
-              <h3 className="flex flex-col font-lato font-bold justify-center text-[20px] leading-[30px] text-black">
+              <h3 className="flex flex-col font-lato font-bold justify-center text-[18px] sm:text-[20px] leading-[28px] sm:leading-[30px] text-black">
                 {step.title}
               </h3>
-              <p className="flex flex-col font-lato justify-center text-[16px] leading-[24px] text-black w-full">
+              <p className="flex flex-col font-lato justify-center text-[14px] sm:text-[16px] leading-[24px] text-black w-full">
                 {step.description}
               </p>
             </div>
             
             {index < steps.length - 1 && (
-              <div className="flex items-center justify-center relative shrink-0">
+              <div className="hidden lg:flex items-center justify-center relative shrink-0">
                 <div className="flex-none scale-y-[-100%]">
                   <img 
                     src={landingAssets.icons.arrowRight} 
