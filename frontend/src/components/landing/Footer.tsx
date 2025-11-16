@@ -7,7 +7,7 @@ export const Footer: React.FC = () => {
     { label: 'Home', to: '/' },
     { label: 'Documentation', to: 'https://github.com/AlexisRellon/GAIA/blob/main/README.md' },
     { label: 'Hazard Map', to: '/map' },
-    { label: 'Contact', to: '/contact' },
+    { label: 'Status', to: '/status' },
   ];
 
   return (

@@ -17,6 +17,7 @@ import PublicMap from './pages/PublicMap';
 import CitizenReportForm from './pages/CitizenReportForm';
 import ReportConfirmation from './pages/ReportConfirmation';
 import ReportTracking from './pages/ReportTracking';
+import StatusPage from './pages/StatusPage';
 
 /**
  * Main App component with realtime notifications
@@ -40,6 +41,7 @@ function AppContent() {
             <Route path="/report" element={<CitizenReportForm />} />
             <Route path="/report/confirmation/:trackingId" element={<ReportConfirmation />} />
             <Route path="/track" element={<ReportTracking />} />
+            <Route path="/status" element={<StatusPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/update-password" element={<UpdatePassword />} />

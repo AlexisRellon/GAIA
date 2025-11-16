@@ -177,6 +177,10 @@ app.include_router(rss_admin_router, prefix="/api/v1")  # RSS Feed Management
 from backend.python.analytics_api import router as analytics_router
 app.include_router(analytics_router, prefix="/api/v1")  # Analytics API
 
+# Import status API router
+from backend.python.status_api import router as status_router
+app.include_router(status_router, prefix="/api/v1")  # System Status API (SHM-04)
+
 
 # Pydantic models for request/response validation
 class ClassifyTextRequest(BaseModel):

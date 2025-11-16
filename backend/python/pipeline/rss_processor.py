@@ -32,9 +32,8 @@ class RSSProcessor:
     
     # Default Philippine news RSS feeds
     DEFAULT_FEEDS = [
-        'https://www.gmanetwork.com/news/rss/news/',
-        'https://www.gmanetwork.com/news/rss/publicaffairs/',
-        'https://newsinfo.inquirer.net/category/regions/feed',
+        'https://data.gmanetwork.com/gno/rss/news/nation/feed.xml',
+        'https://data.gmanetwork.com/gno/rss/news/metro/feed.xml',
         'https://www.rappler.com/nation/rss',
     ]
     
