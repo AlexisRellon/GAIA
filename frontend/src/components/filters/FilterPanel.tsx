@@ -17,9 +17,10 @@
  */
 
 import React, { useState } from 'react';
-import { Filter, X, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import { Filter, X, ChevronDown, ChevronUp, RotateCcw, Map } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { Checkbox } from '../ui/checkbox';
 import { HazardTypeFilter } from './HazardTypeFilter';
 import { TimeWindowFilter } from './TimeWindowFilter';
 import { SourceTypeFilter } from './SourceTypeFilter';
@@ -29,16 +30,33 @@ import { useHazardFilters, type Hazard, type SourceType } from '../../hooks/useH
 // TYPE DEFINITIONS
 // ============================================================================
 
+export interface BoundarySettings {
+  showRegions: boolean;
+  showProvinces: boolean;
+  showMunicipalities: boolean;
+}
+
 export interface FilterPanelProps {
   hazards: Hazard[];
   className?: string;
+  boundarySettings?: BoundarySettings;
+  onBoundarySettingsChange?: (settings: BoundarySettings) => void;
 }
 
 // ============================================================================
 // COMPONENT
 // ============================================================================
 
-export function FilterPanel({ hazards, className = '' }: FilterPanelProps) {
+export function FilterPanel({ 
+  hazards, 
+  className = '',
+  boundarySettings = {
+    showRegions: false,
+    showProvinces: false,
+    showMunicipalities: false,
+  },
+  onBoundarySettingsChange,
+}: FilterPanelProps) {
   const {
     filters,
     updateFilters,
@@ -53,6 +71,7 @@ export function FilterPanel({ hazards, className = '' }: FilterPanelProps) {
     hazardTypes: true,
     timeWindow: true,
     sourceTypes: true,
+    boundaries: true, // Add boundaries section
   });
 
   /**
@@ -218,6 +237,102 @@ export function FilterPanel({ hazards, className = '' }: FilterPanelProps) {
         )}
       </div>
 
+      {/* Administrative Boundaries Section */}
+      <div className="space-y-2">
+        <button
+          onClick={() => toggleSection('boundaries')}
+          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
+        >
+          <div className="flex items-center gap-2">
+            <Map className="w-4 h-4 text-gray-600" />
+            <h3 className="text-sm font-semibold text-gray-900">Administrative Boundaries</h3>
+            {(boundarySettings.showRegions || boundarySettings.showProvinces || boundarySettings.showMunicipalities) && (
+              <Badge variant="secondary" className="text-xs">
+                Active
+              </Badge>
+            )}
+          </div>
+          {expandedSections.boundaries ? (
+            <ChevronUp className="w-4 h-4 text-gray-600" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-gray-600" />
+          )}
+        </button>
+
+        {expandedSections.boundaries && (
+          <Card className="p-4 space-y-3">
+            <p className="text-xs text-gray-600 mb-3">
+              Show administrative boundaries on the map. Visibility is automatically adjusted based on zoom level.
+            </p>
+            
+            {/* Regions Checkbox */}
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="boundary-regions"
+                checked={boundarySettings.showRegions}
+                onCheckedChange={(checked) =>
+                  onBoundarySettingsChange?.({
+                    ...boundarySettings,
+                    showRegions: checked === true,
+                  })
+                }
+              />
+              <div className="flex-1">
+                <label
+                  htmlFor="boundary-regions"
+                  className="text-sm font-medium text-gray-900 cursor-pointer"
+                >
+                  Regions (17 regions)
+                </label>
+                <p className="text-xs text-gray-500">Visible at zoom 5-8</p>
+              </div>
+            </div>
+
+            {/* Provinces Checkbox */}
+            <div className="flex items-center space-x-3 opacity-50 cursor-not-allowed" title="Coming soon">
+              <Checkbox
+                id="boundary-provinces"
+                checked={false}
+                disabled
+              />
+              <div className="flex-1">
+                <label
+                  htmlFor="boundary-provinces"
+                  className="text-sm font-medium text-gray-900"
+                >
+                  Provinces (82 provinces)
+                </label>
+                <p className="text-xs text-gray-500">Coming soon - Visible at zoom 9-11</p>
+              </div>
+            </div>
+
+            {/* Municipalities Checkbox */}
+            <div className="flex items-center space-x-3 opacity-50 cursor-not-allowed" title="Coming soon">
+              <Checkbox
+                id="boundary-municipalities"
+                checked={false}
+                disabled
+              />
+              <div className="flex-1">
+                <label
+                  htmlFor="boundary-municipalities"
+                  className="text-sm font-medium text-gray-900"
+                >
+                  Municipalities (1,634 cities/municipalities)
+                </label>
+                <p className="text-xs text-gray-500">Coming soon - Visible at zoom 12+</p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-gray-200">
+              <p className="text-xs text-gray-500">
+                💡 Tip: Boundaries help identify which administrative areas are affected by hazards. Toggle them on/off as needed.
+              </p>
+            </div>
+          </Card>
+        )}
+      </div>
+
       {/* Filter Summary */}
       {activeFilterCount > 0 && (
         <Card className="p-4 bg-blue-50 border-blue-200">
@@ -242,6 +357,7 @@ export function FilterPanel({ hazards, className = '' }: FilterPanelProps) {
                 >
                   {type.replace(/_/g, ' ')}
                   <button
+                    aria-label={`Remove filter for ${type.replace(/_/g, ' ')}`}
                     onClick={() =>
                       updateFilters({
                         hazardTypes: filters.hazardTypes.filter((t) => t !== type),
@@ -268,6 +384,13 @@ export function FilterPanel({ hazards, className = '' }: FilterPanelProps) {
                     ? 'Last 7 days'
                     : 'Last 30 days'}
                   <button
+                    aria-label={`Remove filter for time window ${filters.timeWindow === 'custom'
+                      ? 'Custom dates'
+                      : filters.timeWindow === '24h'
+                      ? 'Last 24 hours'
+                      : filters.timeWindow === '7d'
+                      ? 'Last 7 days'
+                      : 'Last 30 days'}`}
                     onClick={() => updateFilters({ timeWindow: 'all', customDateRange: undefined })}
                     className="ml-1 hover:text-blue-900"
                   >
@@ -291,6 +414,11 @@ export function FilterPanel({ hazards, className = '' }: FilterPanelProps) {
                       ? 'Verified Citizen'
                       : 'Unverified Citizen'}
                     <button
+                      aria-label={`Remove filter for source type ${source === 'rss_feed'
+                        ? 'News Feed'
+                        : source === 'citizen_verified'
+                        ? 'Verified Citizen'
+                        : 'Unverified Citizen'}`}
                       onClick={() =>
                         updateFilters({
                           sourceTypes: filters.sourceTypes.filter((s) => s !== source),

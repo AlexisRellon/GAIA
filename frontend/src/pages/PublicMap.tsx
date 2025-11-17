@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl, ScaleControl, LayersControl, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
+import { OpenStreetMapProvider } from 'leaflet-geosearch';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Alert } from '../components/ui/alert';
@@ -12,6 +13,7 @@ import { HeatmapLayer, useHeatmapSettings } from '../components/map/HeatmapLayer
 import { MapControls } from '../components/map/MapControls';
 import { MapOnboarding } from '../components/map/MapOnboarding';
 import { FilterPanel } from '../components/filters/FilterPanel';
+import { BoundaryLayer } from '../components/map/BoundaryLayer';
 import { ReportGenerator } from '../components/reports/ReportGenerator';
 import { useHazardFilters } from '../hooks/useHazardFilters';
 import { 
@@ -53,7 +55,7 @@ interface Hazard {
 }
 
 interface NominatimResult {
-  place_id: number;
+  place_id: number | string;  // GeoSearch can return string or number
   lat: string;
   lon: string;
   display_name: string;
@@ -111,6 +113,9 @@ const PublicMap: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isFollowingSearch, setIsFollowingSearch] = useState(false);
+  const [boundaryBounds, setBoundaryBounds] = useState<L.LatLngBoundsExpression | null>(null);
+  const [boundaryLevel, setBoundaryLevel] = useState<string | null>(null);
   
   // Map enhancements state (GV-03, GV-04)
   const [clusteringEnabled, setClusteringEnabled] = useState(true);
@@ -165,6 +170,24 @@ const PublicMap: React.FC = () => {
   const filteredHazards = applyFilters(hazards);
 
   // Search location using Nominatim geocoding API
+  // Initialize geocoding provider (Leaflet-Geosearch)
+  const searchProviderRef = useRef<OpenStreetMapProvider | null>(null);
+  
+  useEffect(() => {
+    // Initialize provider once
+    if (!searchProviderRef.current) {
+      searchProviderRef.current = new OpenStreetMapProvider({
+        params: {
+          countrycodes: 'ph', // Philippines only
+          addressdetails: 1,
+          'accept-language': 'en',
+          limit: 5
+        }
+      });
+    }
+  }, []);
+
+  // Search location using Leaflet-Geosearch
   const searchLocation = async (query: string) => {
     if (!query || query.length < 3) {
       setSearchSuggestions([]);
@@ -173,28 +196,24 @@ const PublicMap: React.FC = () => {
 
     setIsSearching(true);
     try {
-      // Use Nominatim API with Philippines country code filter
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?` +
-        `q=${encodeURIComponent(query)}` +
-        `&countrycodes=ph` + // Philippines only
-        `&format=json` +
-        `&addressdetails=1` +
-        `&limit=5`,
-        {
-          headers: {
-            'Accept-Language': 'en',
-          }
-        }
-      );
-
-      if (!response.ok) throw new Error('Search failed');
-
-      const results = await response.json();
-      setSearchSuggestions(results);
+      const provider = searchProviderRef.current;
+      if (!provider) throw new Error('Geosearch provider not initialized');
+      
+      const results = await provider.search({ query });
+      
+      // Transform GeoSearch results to match our NominatimResult interface
+      const suggestions = results.map((result: { raw: { place_id: string | number; address?: Record<string, unknown> }; y: number; x: number; label: string }) => ({
+        place_id: result.raw.place_id.toString(),
+        lat: result.y.toString(),
+        lon: result.x.toString(),
+        display_name: result.label,
+        address: result.raw.address || {}
+      }));
+      
+      setSearchSuggestions(suggestions);
       setShowSuggestions(true);
     } catch (err) {
-      console.error('Location search error:', err);
+      console.error('GeoSearch error:', err);
       setSearchSuggestions([]);
     } finally {
       setIsSearching(false);
@@ -220,32 +239,101 @@ const PublicMap: React.FC = () => {
   // Handle suggestion selection - coordinates will be used by SearchController
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lon: number } | null>(null);
   
+  // Searched location name for boundary highlighting (GV-01 optimization)
+  const [searchedLocationName, setSearchedLocationName] = useState<string | null>(null);
+  
   const handleSelectSuggestion = (suggestion: NominatimResult) => {
     setSearchQuery(suggestion.display_name);
     setShowSuggestions(false);
     setSelectedLocation({ lat: parseFloat(suggestion.lat), lon: parseFloat(suggestion.lon) });
+    setIsFollowingSearch(true); // Enable following when new location selected
+    
+    // Extract city/municipality name from display_name (first part before comma)
+    const locationName = suggestion.display_name.split(',')[0].trim();
+    setSearchedLocationName(locationName);
+    console.log('[PublicMap] Searched location:', locationName);
   };
 
   // SearchController component to control map from selected location
-  const SearchController: React.FC<{ location: { lat: number; lon: number } | null }> = ({ location }) => {
+  const SearchController: React.FC<{ 
+    location: { lat: number; lon: number } | null;
+    bounds: L.LatLngBoundsExpression | null;
+    boundaryLevel: string | null;
+    isFollowing: boolean;
+    onStopFollowing: () => void;
+  }> = ({ location, bounds, boundaryLevel, isFollowing, onStopFollowing }) => {
     const map = useMap();
     const previousLocationRef = useRef<{ lat: number; lon: number } | null>(null);
+    const hasFlownRef = useRef(false);
 
     useEffect(() => {
-      // Only fly to location if it's different from the previous one
-      if (location && 
+      // Only fly to location if following is enabled
+      if (isFollowing && location && 
           (!previousLocationRef.current || 
            previousLocationRef.current.lat !== location.lat || 
-           previousLocationRef.current.lon !== location.lon)) {
+           previousLocationRef.current.lon !== location.lon ||
+           !hasFlownRef.current)) {
         
-        map.flyTo([location.lat, location.lon], 15, {
-          duration: 1.5
-        });
+        // If we have boundary bounds, use fitBounds for better UX
+        if (bounds) {
+          // Adaptive padding based on boundary level
+          const paddingOptions: { [key: string]: [number, number] } = {
+            municipality: [50, 50],
+            province: [30, 30],
+            region: [20, 20],
+            default: [40, 40]
+          };
+          
+          const padding = paddingOptions[boundaryLevel as keyof typeof paddingOptions] || paddingOptions.default;
+          
+          map.fitBounds(bounds, {
+            padding,
+            animate: true,
+            duration: 1.5
+          });
+        } else {
+          // Fallback to flyTo with fixed zoom if no bounds available
+          map.flyTo([location.lat, location.lon], 15, {
+            duration: 1.5
+          });
+        }
         
         // Update the ref to track this location
         previousLocationRef.current = location;
+        hasFlownRef.current = true;
       }
-    }, [location, map]);
+    }, [location, bounds, boundaryLevel, map, isFollowing]);
+
+    // Detect user interaction (drag, zoom) to auto-disable following
+    useEffect(() => {
+      if (!isFollowing) return;
+
+      const handleUserInteraction = () => {
+        // Only disable following if user manually moved the map
+        // (not during the initial flyTo animation)
+        if (hasFlownRef.current) {
+          onStopFollowing();
+        }
+      };
+
+      // Listen for map drag and zoom events
+      map.on('dragstart', handleUserInteraction);
+      map.on('zoomstart', handleUserInteraction);
+
+      return () => {
+        map.off('dragstart', handleUserInteraction);
+        map.off('zoomstart', handleUserInteraction);
+      };
+    }, [map, isFollowing, onStopFollowing]);
+
+    // Reset hasFlownRef when location changes
+    useEffect(() => {
+      if (location && previousLocationRef.current && 
+          (previousLocationRef.current.lat !== location.lat || 
+           previousLocationRef.current.lon !== location.lon)) {
+        hasFlownRef.current = false;
+      }
+    }, [location]);
 
     return null;
   };
@@ -375,11 +463,27 @@ const PublicMap: React.FC = () => {
                   </div>
                 )}
               </div>
+              
+              {/* Stop Following Button - shown when following active */}
+              {isFollowingSearch && selectedLocation && (
+                <button
+                  onClick={() => setIsFollowingSearch(false)}
+                  className="mt-2 w-full px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 rounded-md hover:bg-amber-100 transition-colors text-sm flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Stop Following Location
+                </button>
+              )}
             </div>
 
             {/* FilterPanel Component (FP-01, FP-02, FP-03, FP-04) */}
             <div className="p-4">
-              <FilterPanel hazards={hazards} />
+              <FilterPanel 
+                hazards={hazards}
+                className="h-full"
+              />
             </div>
 
             {/* Active Hazards Count */}
@@ -516,7 +620,13 @@ const PublicMap: React.FC = () => {
             <ScaleControl position="bottomleft" />
             
             {/* Search Controller - flies map to selected location */}
-            <SearchController location={selectedLocation} />
+            <SearchController 
+              location={selectedLocation}
+              bounds={boundaryBounds}
+              boundaryLevel={boundaryLevel}
+              isFollowing={isFollowingSearch}
+              onStopFollowing={() => setIsFollowingSearch(false)}
+            />
             
             {/* Zoom Tracker - updates current zoom for heatmap auto-disable */}
             <ZoomTracker onZoomChange={setCurrentZoom} />
@@ -529,6 +639,18 @@ const PublicMap: React.FC = () => {
               blur={heatmapSettings.blur}
               maxZoom={heatmapSettings.maxZoom}
               gradient={heatmapSettings.gradient}
+            />
+            
+            {/* Boundary Layer (GV-01) - Location-Based Highlighting */}
+            {/* Shows highlighted boundary when user searches for a location */}
+            <BoundaryLayer
+              enabled={searchedLocationName !== null}
+              locationName={searchedLocationName}
+              highlightColor="#3b82f6" // Tailwind blue-500
+              onBoundsCalculated={(bounds, level) => {
+                setBoundaryBounds(bounds);
+                setBoundaryLevel(level);
+              }}
             />
             
             {/* Layers Control - Base Map Switcher */}
