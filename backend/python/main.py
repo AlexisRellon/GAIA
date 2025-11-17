@@ -38,6 +38,9 @@ from backend.python.admin_api import router as admin_router
 # Import RSS admin router
 from backend.python.rss_admin_api import router as rss_admin_router
 
+# Import boundaries API router
+from backend.python.boundaries_api import router as boundaries_router
+
 # Import security middleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -172,6 +175,7 @@ app.include_router(reports_router, prefix="/api/v1")  # PDF Report Generation
 app.include_router(citizen_reports_router, prefix="/api/v1")  # Citizen Reports
 app.include_router(admin_router, prefix="/api/v1")  # Admin Dashboard
 app.include_router(rss_admin_router, prefix="/api/v1")  # RSS Feed Management
+app.include_router(boundaries_router)  # Boundaries API (no prefix - uses /api/boundaries)
 
 # Import analytics router
 from backend.python.analytics_api import router as analytics_router
