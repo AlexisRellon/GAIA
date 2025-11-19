@@ -23,7 +23,7 @@ import {
 } from '@tanstack/react-table';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Shield, CheckCircle, XCircle, MapPin, AlertCircle } from 'lucide-react';
+import { Shield, CheckCircle, XCircle, MapPin, AlertCircle, Image as ImageIcon } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -54,9 +54,51 @@ interface TriageReport {
   validated: boolean;
   submitted_at: string;
   image_urls: string[] | null;
+  image_url?: string | null; // Backend may return this as well
 }
 
 const columnHelper = createColumnHelper<TriageReport>();
+
+// Component for displaying report photos with error handling
+const ReportPhoto: React.FC<{ imageUrl: string; index: number }> = ({ imageUrl, index }) => {
+  const [imageError, setImageError] = useState(false);
+
+  if (imageError) {
+    return (
+      <div className="p-4 text-center text-sm text-muted-foreground">
+        <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <p>Image failed to load</p>
+        <a 
+          href={imageUrl} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-blue-600 hover:underline mt-1 block"
+        >
+          Open in new tab
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <img
+        src={imageUrl}
+        alt={`Hazard photo ${index + 1}`}
+        className="w-full h-auto max-h-64 object-contain"
+        onError={() => setImageError(true)}
+      />
+      <a
+        href={imageUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs hover:bg-opacity-70 transition-opacity"
+      >
+        Open Full Size
+      </a>
+    </>
+  );
+};
 
 const ReportTriage: React.FC = () => {
   // Filter state
@@ -157,6 +199,29 @@ const ReportTriage: React.FC = () => {
           <Badge variant={variant}>
             {percentage}%
           </Badge>
+        );
+      },
+    }),
+    columnHelper.display({
+      id: 'photo',
+      header: 'Photo',
+      cell: ({ row }) => {
+        const report = row.original;
+        // Handle both image_urls (array) and image_url (string) formats
+        const imageUrls = report.image_urls || (report.image_url ? [report.image_url] : []);
+        const hasPhoto = imageUrls.length > 0 && imageUrls[0] && imageUrls[0] !== null;
+
+        if (!hasPhoto) {
+          return <span className="text-muted-foreground text-sm">-</span>;
+        }
+
+        return (
+          <div className="flex items-center gap-2">
+            <ImageIcon className="h-4 w-4 text-blue-600" />
+            <span className="text-sm text-blue-600 font-medium">
+              {imageUrls.length} photo{imageUrls.length !== 1 ? 's' : ''}
+            </span>
+          </div>
         );
       },
     }),
@@ -460,6 +525,40 @@ const ReportTriage: React.FC = () => {
                     <p className="text-sm text-muted-foreground">{selectedReport.description}</p>
                   </div>
                 </div>
+
+                {/* Photo Display */}
+                {(() => {
+                  // Handle both image_urls (array) and image_url (string) formats
+                  const imageUrls = selectedReport.image_urls || (selectedReport.image_url ? [selectedReport.image_url] : []);
+                  const validImageUrls = imageUrls.filter(url => url && url !== null && url !== '');
+
+                  if (validImageUrls.length === 0) {
+                    return (
+                      <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <ImageIcon className="h-4 w-4" />
+                          <span>No photo provided</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium">Photo Evidence ({validImageUrls.length})</span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3">
+                        {validImageUrls.map((imageUrl, index) => (
+                          <div key={index} className="relative border rounded-lg overflow-hidden bg-gray-50">
+                            <ReportPhoto imageUrl={imageUrl} index={index} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <Alert className={actionType === 'validate' ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}>
                   <AlertCircle className={actionType === 'validate' ? 'h-4 w-4 text-green-600' : 'h-4 w-4 text-red-600'} />

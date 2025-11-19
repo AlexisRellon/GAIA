@@ -193,47 +193,88 @@ async def submit_citizen_report(
     
     if image and image.filename:
         try:
+            # Security: Validate file type and extension
+            ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+            ALLOWED_MIME_TYPES = {'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'}
+            
+            # Validate MIME type
+            if image.content_type and image.content_type not in ALLOWED_MIME_TYPES:
+                raise ValueError(f"Invalid file type: {image.content_type}. Only images are allowed.")
+            
+            # Sanitize and validate file extension
+            original_filename = image.filename.lower()
+            file_extension = original_filename.split('.')[-1] if '.' in original_filename else 'jpg'
+            
+            # Security: Whitelist file extensions to prevent executable uploads
+            if file_extension not in ALLOWED_EXTENSIONS:
+                raise ValueError(f"Invalid file extension: {file_extension}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
+            
+            # Security: Generate safe filename - use tracking_id (server-generated) + validated extension
+            # This prevents path traversal attacks since tracking_id is server-controlled
+            unique_filename = f"citizen-reports/{tracking_id}.{file_extension}"
+            
+            # Security: Validate filename doesn't contain path traversal attempts
+            if '..' in unique_filename or '/' not in unique_filename or unique_filename.startswith('/'):
+                raise ValueError("Invalid filename format detected")
+            
             # Read image content
             image_content = await image.read()
             
-            # Generate unique filename
-            file_extension = image.filename.split('.')[-1] if '.' in image.filename else 'jpg'
-            unique_filename = f"citizen-reports/{tracking_id}.{file_extension}"
+            # Security: Validate file size (5MB limit)
+            MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+            if len(image_content) > MAX_FILE_SIZE:
+                raise ValueError(f"File size exceeds {MAX_FILE_SIZE / (1024*1024)}MB limit")
             
             # Upload to Supabase Storage
-            storage_response = supabase.storage.from_("hazard-images").upload(
+            storage_response = supabase.storage.from_("citizen-report-images").upload(
                 path=unique_filename,
                 file=image_content,
                 file_options={"content-type": image.content_type or "image/jpeg"}
             )
             
-            # Get public URL
-            image_url = supabase.storage.from_("hazard-images").get_public_url(unique_filename)
+            # Get public URL - manually construct with proper URL encoding for security
+            # Format: {SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}
+            from lib.supabase_client import SUPABASE_URL
+            from urllib.parse import quote
+            
+            # Security: URL encode the path to prevent injection attacks
+            # The bucket name is hardcoded, and path is server-controlled, so this is safe
+            encoded_path = quote(unique_filename, safe='/')  # Keep '/' for path structure
+            image_url = f"{SUPABASE_URL}/storage/v1/object/public/citizen-report-images/{encoded_path}"
+            
+            # Verify the URL was generated correctly
+            logger.info(f"Image uploaded successfully: {unique_filename}")
+            logger.debug(f"Image public URL: {image_url}")
             
             image_metadata = {
-                "filename": image.filename,
+                "filename": image.filename,  # Store original for reference
                 "content_type": image.content_type,
-                "size": len(image_content)
+                "size": len(image_content),
+                "stored_path": unique_filename  # Store server-controlled path
             }
             
-            logger.info(f"Image uploaded successfully: {unique_filename}")
-            
+        except ValueError as e:
+            # Security: Don't expose internal errors, log them instead
+            logger.error(f"Image validation failed: {e}")
+            image_url = None
+            image_metadata = {"error": "Invalid image file"}
         except Exception as e:
             logger.error(f"Image upload failed: {e}")
             # Don't fail the entire request if image upload fails
             image_url = None
-            image_metadata = {"error": str(e)}
+            image_metadata = {"error": "Upload failed"}
     
     # 5. Insert report into database with UNVERIFIED status and 30% confidence (CR-04)
     try:
         # Build report data - only include location if coordinates are provided
+        # Note: image_url column is TEXT[] array, so we need to pass an array
         report_data = {
             "tracking_id": tracking_id,
             "hazard_type": hazard_type,
             "description": description,
             "location_name": location_name,
             "contact_method": contact_method,
-            "image_url": image_url,
+            "image_url": [image_url] if image_url else None,  # Convert string to array for TEXT[] column
             "image_metadata": image_metadata,
             "source": "citizen_unverified",
             "confidence_score": 0.30,  # CR-04: Low base confidence for unverified reports

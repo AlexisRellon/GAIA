@@ -623,11 +623,19 @@ async def get_triage_queue(
         response = query.order("submitted_at", desc=False).range(offset, offset + limit - 1).execute()
         
         # Transform database fields to match Pydantic model
-        # Database has 'image_url' (TEXT[]), model expects 'image_urls' (List[str])
+        # Database has 'image_url' (TEXT or TEXT[]), model expects 'image_urls' (List[str])
         transformed_data = []
         for report in response.data:
-            # Map image_url -> image_urls (handle both column names)
-            report['image_urls'] = report.get('image_url') or report.get('image_urls') or []
+            # Map image_url -> image_urls (handle both column names and convert string to array)
+            image_url_value = report.get('image_url') or report.get('image_urls')
+            if image_url_value:
+                # If it's already a list, use it; if it's a string, convert to list
+                if isinstance(image_url_value, list):
+                    report['image_urls'] = image_url_value
+                else:
+                    report['image_urls'] = [image_url_value]
+            else:
+                report['image_urls'] = []
             # Ensure validated field exists (computed column or manual calculation)
             if 'validated' not in report:
                 report['validated'] = report.get('validated_by') is not None
