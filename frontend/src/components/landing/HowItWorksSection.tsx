@@ -6,7 +6,7 @@ export const HowItWorksSection: React.FC = () => {
     {
       number: '01',
       title: 'Multi-Source Ingestion',
-      description: 'The system continuously monitors and ingests data from a wide array of sources, including official RSS feeds from agencies like PAGASA and PHIVOLCS.',
+      description: 'The system continuously monitors and ingests data from a wide array of sources, including official RSS feeds from News Outlets like GMA News, Rappler, and Inquirer.',
     },
     {
       number: '02',

@@ -22,6 +22,10 @@ from lib.supabase_client import supabase
 # Import ActivityLogger for comprehensive activity tracking
 from backend.python.middleware.activity_logger import ActivityLogger
 
+# Import AI models for Zero-Shot classification and GeoNER
+from backend.python.models.classifier import classifier
+from backend.python.models.geo_ner import geo_ner
+
 logger = logging.getLogger(__name__)
 
 # Initialize router - main.py adds /api/v1 prefix, so this becomes /api/v1/citizen-reports
@@ -176,18 +180,104 @@ async def submit_citizen_report(
     #         detail="Error verifying Turnstile token"
     #     )
     
-    # 2. Validate Philippine boundaries (4-21°N, 116-127°E) - only if coordinates provided
-    if latitude is not None and longitude is not None:
-        if not (4 <= latitude <= 21 and 116 <= longitude <= 127):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Coordinates outside Philippine boundaries"
-            )
+    # 2. AI Processing: Zero-Shot Classification and GeoNER
+    ai_hazard_type = None
+    ai_confidence = 0.0
+    extracted_latitude = None
+    extracted_longitude = None
+    coordinates_source = "user" if (latitude is not None and longitude is not None) else None
     
-    # 3. Generate unique tracking ID
+    try:
+        # Combine location_name and description for better context
+        combined_text = f"{location_name}. {description}"
+        
+        # Zero-Shot Classification: Verify/classify hazard type from description
+        logger.info(f"Running Zero-Shot classification on report description...")
+        classification_result = classifier.classify(combined_text, threshold=0.3)
+        
+        if classification_result.get('is_hazard') and classification_result.get('hazard_type'):
+            ai_hazard_type = classification_result['hazard_type']
+            ai_confidence = classification_result['score']
+            logger.info(f"AI classified hazard as: {ai_hazard_type} (confidence: {ai_confidence:.3f})")
+        else:
+            logger.info(f"AI did not detect a clear hazard type (confidence too low)")
+        
+        # GeoNER: Extract coordinates if not provided by user
+        if latitude is None or longitude is None:
+            logger.info(f"Extracting coordinates using GeoNER from location and description...")
+            try:
+                # First, try extracting locations from the combined text
+                locations = geo_ner.extract_locations(combined_text)
+                
+                # Find the best location match (prefer locations with coordinates)
+                best_location = None
+                for loc in locations:
+                    if 'latitude' in loc and 'longitude' in loc:
+                        # Validate coordinates are within Philippine boundaries
+                        lat = loc['latitude']
+                        lng = loc['longitude']
+                        if 4 <= lat <= 21 and 116 <= lng <= 127:
+                            best_location = loc
+                            # Prefer pattern-matched locations (higher confidence)
+                            if loc.get('source') == 'pattern':
+                                break
+                
+                # If no location with coordinates found, try geocoding the location_name directly
+                if not best_location and location_name:
+                    logger.info(f"Attempting to geocode location_name directly: {location_name}")
+                    # Use GeoNER's internal geocoding (it's the only way to geocode a single location)
+                    geo_ner.load_model()  # Ensure model is loaded
+                    coords = geo_ner._geocode_location(f"{location_name}, Philippines")
+                    if coords and 'latitude' in coords and 'longitude' in coords:
+                        lat = coords['latitude']
+                        lng = coords['longitude']
+                        if 4 <= lat <= 21 and 116 <= lng <= 127:
+                            best_location = {
+                                'location_name': location_name,
+                                'latitude': lat,
+                                'longitude': lng,
+                                'confidence': 0.8,
+                                'source': 'geocoded'
+                            }
+                
+                if best_location:
+                    extracted_latitude = best_location['latitude']
+                    extracted_longitude = best_location['longitude']
+                    coordinates_source = "ai_extracted"
+                    logger.info(f"AI extracted coordinates: {extracted_latitude:.6f}, {extracted_longitude:.6f}")
+                else:
+                    logger.warning(f"Could not extract coordinates from location and description")
+            except Exception as e:
+                logger.error(f"Error during GeoNER coordinate extraction: {e}", exc_info=True)
+                # Continue without coordinates if extraction fails
+        
+    except Exception as e:
+        logger.error(f"Error during AI processing: {e}", exc_info=True)
+        # Don't fail the submission if AI processing fails - continue with user-provided data
+    
+    # 3. Use AI-extracted coordinates if user didn't provide them
+    final_latitude = latitude if latitude is not None else extracted_latitude
+    final_longitude = longitude if longitude is not None else extracted_longitude
+    
+    # 4. Validate Philippine boundaries (4-21°N, 116-127°E) - only if coordinates available
+    if final_latitude is not None and final_longitude is not None:
+        if not (4 <= final_latitude <= 21 and 116 <= final_longitude <= 127):
+            logger.warning(f"Coordinates outside Philippine boundaries: {final_latitude}, {final_longitude}")
+            # Reset to None if outside boundaries
+            if coordinates_source == "ai_extracted":
+                final_latitude = None
+                final_longitude = None
+                coordinates_source = None
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Coordinates outside Philippine boundaries"
+                )
+    
+    # 5. Generate unique tracking ID
     tracking_id = f"CR{datetime.utcnow().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
     
-    # 4. Handle image upload (if provided)
+    # 6. Handle image upload (if provided)
     image_url = None
     image_metadata = None
     
@@ -264,8 +354,16 @@ async def submit_citizen_report(
             image_url = None
             image_metadata = {"error": "Upload failed"}
     
-    # 5. Insert report into database with UNVERIFIED status and 30% confidence (CR-04)
+    # 7. Insert report into database with UNVERIFIED status and AI-enhanced confidence (CR-04)
     try:
+        # Calculate confidence score: base 30% + AI confidence boost (if AI detected hazard)
+        base_confidence = 0.30
+        if ai_confidence > 0.5:  # If AI has high confidence, boost the score
+            # Blend user selection with AI confidence (weighted average)
+            confidence_score = min(0.95, base_confidence + (ai_confidence * 0.4))
+        else:
+            confidence_score = base_confidence
+        
         # Build report data - only include location if coordinates are provided
         # Note: image_url column is TEXT[] array, so we need to pass an array
         report_data = {
@@ -277,7 +375,7 @@ async def submit_citizen_report(
             "image_url": [image_url] if image_url else None,  # Convert string to array for TEXT[] column
             "image_metadata": image_metadata,
             "source": "citizen_unverified",
-            "confidence_score": 0.30,  # CR-04: Low base confidence for unverified reports
+            "confidence_score": confidence_score,
             "status": "unverified",
             # "recaptcha_score": recaptcha_result.get("score", 0.0),  # TEMPORARILY DISABLED
             "captcha_token": "<TOKEN PLACEHOLDER>",  # Edit This when re-enabling CAPTCHA
@@ -285,11 +383,27 @@ async def submit_citizen_report(
             "created_at": datetime.utcnow().isoformat()
         }
         
-        # Add coordinates only if provided (location column has NOT NULL constraint in DB)
-        if latitude is not None and longitude is not None:
-            report_data["latitude"] = latitude
-            report_data["longitude"] = longitude
-            report_data["location"] = f"POINT({longitude} {latitude})"
+        # Add coordinates if available (from user or AI extraction)
+        if final_latitude is not None and final_longitude is not None:
+            report_data["latitude"] = final_latitude
+            report_data["longitude"] = final_longitude
+            report_data["location"] = f"POINT({final_longitude} {final_latitude})"
+        
+        # Store AI processing metadata in image_metadata or create separate metadata field
+        # For now, we'll add it to image_metadata if it exists, otherwise create it
+        ai_metadata = {
+            "ai_hazard_type": ai_hazard_type,
+            "ai_confidence": ai_confidence,
+            "coordinates_source": coordinates_source,
+            "ai_processing_timestamp": datetime.utcnow().isoformat()
+        }
+        
+        if image_metadata:
+            image_metadata["ai_processing"] = ai_metadata
+        else:
+            image_metadata = {"ai_processing": ai_metadata}
+        
+        report_data["image_metadata"] = image_metadata
         
         result = supabase.schema("gaia").from_("citizen_reports").insert(report_data).execute()
         
@@ -308,8 +422,12 @@ async def submit_citizen_report(
                 details={
                     "hazard_type": hazard_type,
                     "location_name": location_name,
-                    "confidence_score": 0.30,
-                    "source": "citizen_unverified"
+                    "confidence_score": confidence_score,
+                    "source": "citizen_unverified",
+                    "ai_hazard_type": ai_hazard_type,
+                    "ai_confidence": ai_confidence,
+                    "coordinates_source": coordinates_source,
+                    "has_coordinates": final_latitude is not None and final_longitude is not None
                 }
             )
         except Exception:

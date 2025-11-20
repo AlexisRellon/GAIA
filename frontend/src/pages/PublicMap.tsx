@@ -165,6 +165,13 @@ const PublicMap: React.FC = () => {
   // Default map center: Manila, Philippines
   const philippinesCenter: [number, number] = [14.5995, 120.9842];
   const defaultZoom = 6;
+  
+  // Philippines geographic bounds to restrict map panning
+  // Format: [[south, west], [north, east]]
+  const philippinesBounds: L.LatLngBoundsExpression = [
+    [4.0, 116.0],  // Southwest corner
+    [21.0, 127.0]  // Northeast corner
+  ];
 
   // Apply filters using hook (includes hazard type, time, source, and severity)
   const filteredHazards = applyFilters(hazards);
@@ -607,6 +614,9 @@ const PublicMap: React.FC = () => {
             center={philippinesCenter}
             zoom={defaultZoom}
             zoomControl={false}
+            minZoom={5}
+            maxBounds={philippinesBounds}
+            maxBoundsViscosity={1.0}
             style={{ height: '100%', width: '100%' }}
             className="z-0"
           >

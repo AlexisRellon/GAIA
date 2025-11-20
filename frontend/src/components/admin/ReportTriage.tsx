@@ -55,6 +55,14 @@ interface TriageReport {
   submitted_at: string;
   image_urls: string[] | null;
   image_url?: string | null; // Backend may return this as well
+  image_metadata?: {
+    ai_processing?: {
+      ai_hazard_type?: string | null;
+      ai_confidence?: number;
+      coordinates_source?: string | null;
+      ai_processing_timestamp?: string;
+    };
+  } | null;
 }
 
 const columnHelper = createColumnHelper<TriageReport>();
@@ -515,9 +523,27 @@ const ReportTriage: React.FC = () => {
                   {selectedReport.latitude && selectedReport.longitude && (
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-mono">
-                        {selectedReport.latitude.toFixed(4)}, {selectedReport.longitude.toFixed(4)}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-mono">
+                          {selectedReport.latitude.toFixed(4)}, {selectedReport.longitude.toFixed(4)}
+                        </span>
+                        {selectedReport.image_metadata?.ai_processing?.coordinates_source === 'ai_extracted' && (
+                          <span className="text-xs text-blue-600 mt-0.5">
+                            Coordinates extracted from location and description
+                          </span>
+                        )}
+                        {selectedReport.image_metadata?.ai_processing?.coordinates_source === 'user' && (
+                          <span className="text-xs text-gray-500 mt-0.5">
+                            Coordinates provided by user
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {!selectedReport.latitude && !selectedReport.longitude && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="h-4 w-4" />
+                      <span>No coordinates available</span>
                     </div>
                   )}
                   <div className="space-y-1">

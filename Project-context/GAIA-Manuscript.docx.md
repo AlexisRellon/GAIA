@@ -1,320 +1,2844 @@
-**GeoAware: An AI-Driven Framework Integrating Zero-Shot Classification and Geo-NER for Real-Time Environmental Hazard Detection.**
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
 
-An Undergraduate Thesis  
-Submitted to the Faculty of the  
-College of Information Technology and Computer Science  
-Lyceum of the Philippines University-Cavite
+****
 
-In Partial Fulfillment
-of the Requirements for the Degree of  
-Bachelor of Science in Computer Science
-with specialization in Software Engineering
+****
 
-**IAN M. LUMANOG**  
-**ALEXIS JOHN L. RELLON**  
-**AARON JOSHUA B. ROXAS**  
-**BEO ALVARO E. SALGUERO**
+****
 
-August 2026
+****
 
-# **CHAPTER I**
+****
 
-**INTRODUCTION**
+**GAIA - Geospatial AI-Driven Assessment: An AI-Driven Framework** **Integrating Zero-Shot Classification and Geo-NER for Real-Time** **Environmental Hazard Detection. **
 
-## **Background and Rationale of the Study**
+****
 
-Awareness of environmental hazards is fundamental to human survival and decision-making. Just as sight allows humans to perceive danger in their surroundings, data awareness enables societies to respond to emerging threats in their environment. In the digital era, much of this awareness comes from textual information, news reports, updates, and situational bulletins that narrate real-world events as they unfold.
+****
 
-However, this vast information landscape is often unstructured and fragmented across various sources. Transforming it into a coherent understanding of what, where, and when a hazard occurs remains a challenge (Ghaffarian, 2023). To bridge this gap, artificial intelligence now extends human awareness into the digital domain, enabling systems to automatically interpret textual data and translate it into actionable geospatial insights (Fan & Liu, 2021; Imran et al., 2015)..
+****
 
-This vision forms the foundation of GeoAware, an AI-driven framework that integrates Zero-Shot Classification (ZSC) and Geospatial Named Entity Recognition (Geo-NER) to automatically detect and locate environmental hazards from online information streams. Like how human cognition connects observation to meaning (Long, 2017), GeoAware aims to give machines the capacity to “understand” events as they are reported, bringing society one step closer to real-time geospatial intelligence.
+****
 
-## **Objectives of the Study**
 
-To design, develop, and evaluate GeoAware, an AI-driven framework that leverages ZSC and Geo-NER to automatically detect and locate environmental hazards from online information streams in near real-time.
 
-1. To collect and preprocess textual information from online sources for environmental hazard reporting.
+An Undergraduate Thesis 
 
-2. To implement a ZSC model capable of detecting previously unseen hazard categories in textual data.
+Submitted to the Faculty of the 
 
-3. To integrate Geo-NER for automatic extraction of location-specific information from hazard reports.
+College of Information Technology and Computer Science Lyceum of the Philippines University-Cavite 
 
-4. To develop a system that visualizes detected hazards on a geospatial map for decision-making purposes.
 
-5. To evaluate the performance of GeoAware in terms of accuracy, timeliness, and usability for real-world environmental hazard detection.
 
-## **Significance of the Study**
 
-Zero-Shot Learning (ZSL) is a powerful approach in artificial intelligence that enables models to recognize and classify categories they have never seen during training. For example, a ZSL model trained to identify “floods” and “earthquakes” could still correctly detect “landslides” by understanding the semantic meaning of the new label from textual descriptions. This ability mimics human reasoning, where prior knowledge allows people to infer and categorize novel events without direct experience (Long, 2017). By applying ZSL, machines can automatically detect previously unseen environmental hazards, which is crucial in a dynamic and unpredictable natural environment where new threats may emerge suddenly.
 
-GeoAware leverages this capability to analyze textual information from online sources in near real-time, detecting hazards without requiring labeled examples for every possible category. Combined with Geo-NER, the system can pinpoint the locations of reported hazards, transforming fragmented and unstructured textual data into structured geospatial insights. This integration not only enhances situational awareness but also supports faster and more informed decision-making for disaster management agencies, local government units, and emergency responders, improving resource allocation and risk mitigation.
+In Partial Fulfillment 
 
-Academically, this study demonstrates the novel application of Zero-Shot Classification to textual hazard detection, expanding its utility beyond traditional domains such as image recognition or general natural language processing. Technologically, GeoAware illustrates how AI can extend human awareness into the digital domain, automatically converting scattered reports into actionable visual maps. This framework paves the way for real-time hazard monitoring, predictive analysis, and proactive disaster management strategies, providing a solution that is practical, innovative, and academically relevant.
+of the Requirements for the Degree of 
 
-## **Scope and Limitation**
+Bachelor of Science in Computer Science 
 
-The scope of this study focuses on the detection and geolocation of environmental hazards using textual information streams. GeoAware is designed to process online reports, news articles, and RSS feeds to automatically identify hazards and their corresponding locations. The system integrates ZSC to recognize hazard types that may not have been included in its training data, allowing it to detect new or emerging threats. Additionally, Geo-NER enables the extraction of precise location information from unstructured text, facilitating the visualization of hazards on a map. This study emphasizes the real-time processing of information to provide timely insights that can support disaster management agencies, local government units, and emergency responders.
+with specialization in Software Engineering 
 
-The system is limited in several aspects. Firstly, it relies solely on textual data from online sources, which may not capture hazards in areas with limited reporting or internet coverage. As such, GeoAware may miss events that are not documented online or reported in real-time. Secondly, the accuracy of hazard detection is influenced by the quality and clarity of the source text; ambiguous or poorly structured reports can reduce detection precision. Thirdly, while ZSL allows the system to identify previously unseen hazards, environmental hazards outside the context of the Philippines, for example, hailstorms reported in other countries, will not be classified, which may affect detection comprehensiveness. Lastly, GeoAware does not include predictive modeling of hazards or integration with sensor networks, and its scope is limited to detecting and mapping reported events rather than forecasting future occurrences.
 
-# **CHAPTER II**
 
-## *REVIEW OF RELATED LITERATURE**
 
-### **Emergency and Disaster Reporting Systems**
 
-Emergency and disaster reporting systems have evolved significantly over the past decades, transitioning from manual and reactive methods to more integrated, technology-driven platforms. Traditionally, emergency reporting relied on telephone hotlines and SMS-based systems that allowed citizens and local authorities to communicate incidents directly to emergency management offices (ITU, 2019). While these systems were essential in establishing communication lines during crises, they often suffered from limitations such as delayed response times, network congestion, and the lack of geospatial accuracy.
+****
 
-With the growing role of Information and Communication Technology (ICT), many countries, including the Philippines, have begun adopting more advanced reporting platforms that utilize mobile applications, cloud-based systems, and geospatial analytics to enhance disaster management operations (UN ESCAP, 2024). These digital systems enable faster information exchange, facilitate data integration across agencies, and improve the coordination of emergency response activities. The introduction of automated data pipelines and real-time dashboards has further strengthened situational awareness, allowing responders to make informed decisions during disasters (UNDRR, 2023).
+**IAN M. LUMANOG **
 
-However, despite these technological advancements, challenges persist in ensuring the timeliness, reliability, and accessibility of emergency data. Many reporting platforms still rely on structured inputs and pre-defined templates, limiting their ability to process unstructured or spontaneous reports from diverse information sources. Furthermore, developing countries face additional barriers such as limited ICT infrastructure, inconsistent internet connectivity, and gaps in interoperability among government systems (UN ESCAP, 2024). These challenges highlight the ongoing need for intelligent, adaptive systems that can process heterogeneous data sources and support rapid decision-making during emergencies.
+**ALEXIS JOHN L. RELLON **
 
-### **Role of ICT in Disaster Risk Reduction and Management**
+**AARON JOSHUA B. ROXAS **
 
-Information and Communication Technology (ICT) plays a crucial role in strengthening disaster risk reduction and management (DRRM) by enhancing the collection, processing, and dissemination of critical information during all phases of a disaster, from preparedness to recovery. Modern ICT tools, such as remote sensing, Geographic Information Systems (GIS), cloud computing, and artificial intelligence, have transformed how disaster data is gathered and analyzed, enabling faster and more informed decision-making (ITU, 2019). These technologies facilitate real-time data sharing across agencies, ensuring that emergency response teams, local governments, and national authorities operate with a unified and updated situational picture.
+**BEO ALVARO E. SALGUERO **
 
-In the Philippines, ICT has been at the core of national disaster management efforts, particularly through initiatives led by the National Disaster Risk Reduction and Management Council (NDRRMC). Systems such as Project NOAH and GeoRiskPH have demonstrated how integrating ICT with hazard modeling and geospatial analytics can improve forecasting accuracy and risk communication. These platforms not only collect environmental data from satellites and sensors but also visualize potential hazard zones, allowing communities to take preventive actions before disasters strike.
+****
 
-Moreover, ICT enhances coordination and transparency in post-disaster response by supporting digital communication, resource tracking, and information dissemination to affected communities (UN ESCAP, 2024).
+****
 
-### **AI Applications in Disaster Management**
+****
 
-Artificial intelligence (AI) has become an essential tool in disaster management, enhancing the ability of authorities to predict, monitor, and respond to crises efficiently. By automating the analysis of large volumes of heterogeneous data, AI helps reduce response times, improve situational awareness, and optimize resource allocation. Techniques such as machine learning and natural language processing (NLP) are particularly effective for analyzing textual and multimedia data from multiple sources, including news reports, situational bulletins, and official hazard updates (Fan & Liu, 2021; Imran et al., 2015).
+****
 
-One promising approach within AI is Zero-Shot Classification (ZSC), which allows systems to identify categories or hazards that were not explicitly included in the training data. Unlike traditional supervised learning, ZSC leverages semantic representations, knowledge graphs, or attribute-based embeddings to infer labels for unseen classes, mimicking the human ability to generalize from prior knowledge to novel situations (Long, 2017). In disaster management, this capability is critical because new types of hazards or variations in reports can emerge suddenly, and labeled datasets for every possible scenario are often unavailable.
+August 2026 
 
-Another key AI application is Geospatial Named Entity Recognition (Geo-NER), which extracts location-specific information from unstructured text and converts it into structured geospatial data. This enables the creation of dynamic hazard maps and dashboards that provide real-time situational awareness for responders and decision-makers (Imran et al., 2015). By combining ZSC with Geo-NER, systems can automatically interpret textual information and identify both the type of hazard and its geographic location, bridging the gap between raw reports and actionable intelligence.
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
 
-AI-driven prioritization and risk assessment frameworks further enhance emergency response by ranking incidents based on urgency, severity, or potential impact, ensuring that critical resources are deployed effectively (Fan & Liu, 2021). Integrating these technologies into a unified system allows disaster management agencies to move from reactive to proactive operations, ultimately reducing response times, mitigating losses, and improving community resilience.
 
-### **Zero-Shot Text Classification**
 
-Zero-Shot Classification (ZSC) is a machine learning technique that enables models to classify text into categories without having seen labeled examples of those categories during training. This capability is particularly valuable in disaster management, where new types of incidents or hazards can emerge unexpectedly, and labeled datasets may be scarce or nonexistent. ZSC leverages semantic representations, such as embeddings from pre-trained language models, to infer the appropriate category for unseen text based on descriptive labels or natural language prompts (Long, 2017; Fan & Liu, 2021).
 
-In the context of disaster management, ZSC allows for the automatic classification of unstructured textual data, such as social media posts, news articles, or emergency reports, into predefined hazard categories. This facilitates the rapid identification and prioritization of emerging incidents, enabling timely and coordinated responses. For instance, a ZSC model can classify a tweet about a sudden flood in a previously unaffected area, even if the model has not been explicitly trained on flood-related data.
 
-Recent advancements in ZSC have demonstrated its effectiveness in various domains, including crisis informatics and emergency response. Studies have shown that ZSC models, particularly those fine-tuned on domain-specific data, can achieve high accuracy in classifying crisis-related information (McDaniel, 2024). Additionally, the integration of ZSC with other AI techniques, such as Named Entity Recognition (NER) and geospatial analysis, enhances its utility in disaster management by providing both the type and location of hazards (Rondinelli, 2022).
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
 
-Within the GeoAware framework, ZSC plays a crucial role by enabling the system to automatically detect and classify new hazards from diverse textual sources, thereby improving situational awareness and decision-making during disasters.
+****
 
-### **Named Entity Recognition (NER) and Geo-NER**
 
-Named Entity Recognition (NER) is a fundamental natural language processing (NLP) technique that identifies and classifies entities within text into predefined categories such as persons, organizations, dates, and locations (Jurafsky & Martin, 2024). In the context of disaster management, NER is particularly valuable for extracting critical information from unstructured textual sources such as news articles, emergency bulletins, and social media posts. By automatically detecting mentions of hazards, affected areas, or key actors, NER enables systems to convert fragmented textual information into structured data that can support timely decision-making.
 
-Geospatial Named Entity Recognition (Geo-NER) extends traditional NER by specifically focusing on geographic entities and locations mentioned in text (Gelernter & Mushegian, 2011). Geo-NER identifies place names, coordinates, and administrative regions, which can then be mapped onto digital platforms such as GIS dashboards for real-time situational awareness. This is crucial in disaster management, as knowing where a hazard occurs is just as important as knowing what has happened.
+****
 
-Integrating Geo-NER with Zero-Shot Classification (ZSC) significantly enhances the capability of AI-driven hazard detection systems. While ZSC determines the type of hazard from unstructured text, Geo-NER identifies its geographic context, enabling the creation of dynamic hazard maps and facilitating informed emergency responses. For example, a Geo-NER system can extract “Cavite” from a news report about a flood, allowing responders to immediately locate and prioritize affected regions.
+**TABLE OF CONTENTS **
 
-Challenges in Geo-NER include dealing with local dialects, abbreviations, and informal reporting, which can lead to ambiguities in location detection (Gelernter & Mushegian, 2011; Imran et al., 2015). Despite these challenges, the integration of Geo-NER into frameworks like GeoAware provides a scalable, automated, and accurate method to bridge textual data with geospatial intelligence, ultimately improving disaster response efficiency and resource allocation.
+****
 
-### **Real-Time Geospatial Visualization**
+****
 
-Real-time geospatial visualization refers to the dynamic representation of spatial data as events occur, enabling decision-makers to monitor, analyze, and respond to emerging situations effectively. In disaster management, this capability is crucial for providing situational awareness to emergency responders, local government units, and the public. By visualizing hazards on interactive maps, stakeholders can quickly identify affected areas, assess the scale of impact, and prioritize resource allocation (MacEachren et al., 2011).
+**PAGE **
 
-Modern platforms for real-time geospatial visualization often integrate Geographic Information Systems (GIS), web mapping frameworks such as Leaflet or Mapbox, and live data streams from sensors, satellites, or online reports. These tools allow users to interact with the data, filter layers, and gain insights into evolving hazard scenarios. For example, mapping flood-affected zones alongside infrastructure and population data enables authorities to coordinate evacuation routes and deploy emergency resources efficiently (Liu et al., 2020).
+Title Page 
 
-In the context of GeoAware, real-time geospatial visualization is the final output of the system, transforming unstructured textual information into actionable maps. By combining Zero-Shot Classification (ZSC) for hazard detection and Geo-NER for location extraction, GeoAware can generate real-time hazard maps from online information streams, providing a comprehensive view of emerging environmental threats. This integration not only enhances situational awareness but also supports proactive disaster management and decision-making.
+i 
 
-Challenges in real-time visualization include handling high-volume data streams, ensuring map accuracy, and maintaining low latency for timely updates. Nevertheless, advancements in cloud computing, geospatial analytics, and automated data pipelines continue to improve the feasibility and reliability of real-time hazard mapping systems.
+Access Leaf 
 
-### **Local and International Case Studies**
+ii 
 
-Analyzing local and international case studies provides valuable insights into how disaster reporting and hazard detection systems have been implemented, highlighting successes, challenges, and lessons applicable to the Philippine context.
+Acceptance Sheet 
 
-In the Philippines, Project NOAH (Nationwide Operational Assessment of Hazards) serves as a flagship disaster risk reduction and management (DRRM) platform. Developed by the Department of Science and Technology (DOST), NOAH integrates satellite data, weather forecasts, and hydrological models to generate real-time hazard maps and early warning alerts. The platform has demonstrated significant effectiveness in monitoring floods, typhoons, and landslides, providing local governments and communities with actionable information to mitigate disaster risks (DOST, 2015). Another example is GeoRiskPH, which emphasizes geospatial analytics and risk assessment for localized hazards, reinforcing the importance of integrating data-driven tools for proactive disaster management.
+iii 
 
-Globally, platforms like Ushahidi in Kenya and FEMA’s integrated emergency management systems in the United States illustrate the application of technology in disaster reporting. Ushahidi, initially developed for crisis mapping during post-election violence in 2008, aggregates crowdsourced reports from SMS, email, and social media to visualize crisis events in real-time (Okolloh, 2009). FEMA, on the other hand, leverages multi-channel data inputs, geospatial visualization, and predictive analytics to coordinate nationwide disaster response efforts efficiently (FEMA, 2022). These systems highlight the importance of rapid data collection, automated processing, and geospatial representation for effective emergency response.
+Author Permission Statement 
 
-These case studies reveal that integrating multiple data sources with real-time analysis and geospatial mapping significantly enhances situational awareness and decision-making. GeoAware builds upon these lessons by focusing on unstructured textual data streams, applying Zero-Shot Classification for hazard detection, and using Geo-NER for location extraction. By doing so, it addresses a gap in automated, location-aware hazard monitoring in the Philippines, complementing existing systems while extending capabilities to previously unseen or under-reported hazards.
+iv 
 
-### **Conceptual Framework**
+Certificate of Originality 
 
-![conceptual framework][image1]*Fig. 2.1 Input-Process-Output (IPO)
+v 
 
-## **Definition of Terms**
+Acknowledgment 
 
-For the readers to fully comprehend this study, the following are the notable terms that have been utilized in the study:  
-**PWA (Progressive Web Application)** – A type of application software delivered through the web, built using standard web technologies, that offers an app-like user experience such as offline functionality, push notifications, and home-screen installation.  
-**Artificial Intelligence (AI)** \- A field of computer science focused on creating systems or machines capable of performing tasks that typically require human intelligence, such as reasoning, learning, problem-solving, perception, and natural language understanding.  
-**Machine Learning (ML)**  \- A branch of artificial intelligence (AI) that enables systems to automatically learn and improve from experience without being explicitly programmed, by analyzing data and identifying patterns.  
-**Large Language Model (LLM)** \-  A type of AI model trained on vast amounts of text data, designed to understand, generate, and process natural language.  
-**Zero-shot Learning (ZSL)** \- A machine learning approach where a model can correctly recognize or classify data from classes it has never seen during training, by leveraging semantic relationships or descriptions.  
-**Few-shot Learning (FSL)** \-  A machine learning technique where a model can generalize to new tasks using only a small number of labeled training examples, instead of requiring large datasets.  
-**Dijkstra’s Algorithm** – A graph search algorithm that finds the shortest path between nodes in a weighted graph, widely used in network routing and pathfinding applications.  
-**API (Application Programming Interface)** – A set of rules and protocols that allows different software applications to communicate with each other, enabling the integration and reuse of functionalities across platforms.  
-**Project NOAH (Nationwide Operational Assessment of Hazards)** – A disaster risk reduction and management initiative originally launched by the Department of Science and Technology in 2012, and later adopted by the University of the Philippines. It provides real-time hazard maps and risk assessments for floods, storm surges, and landslides to enhance disaster preparedness and resilience  
-**Disaster Risk Reduction and Management (DRRM) –** A framework of policies and practices aimed at reducing disaster risks through prevention, preparedness, response, and recovery activities.  
-**Named Entity Recognition (NER) –** A natural language processing technique used to identify and categorize entities in text, such as people, organizations, and locations.  
-**Geographic Named Entity Recognition (Geo-NER) –** An extension of NER that links identified place names in text to geographic coordinates for mapping and situational awareness.  
-**Zero-Shot Classification (ZSC) –** A machine learning method that categorizes text into labels without requiring prior labeled training data.  
-**Natural Language Processing (NLP) –** A field of artificial intelligence focused on enabling machines to understand and process human language.  
-**Multi-Channel Data Ingestion –** The integration of information from various input sources such as SMS, social media, and mobile applications into a unified processing pipeline.  
-**Geospatial Visualization –** The presentation of location-based data in visual formats such as maps and dashboards to aid decision-making in crisis contexts.
+vi 
 
-# **CHAPTER III**
+Table of Contents 
 
-**METHODOLOGY**
+vii 
 
-## **Research Design**
+List of Tables 
 
-This study employs a quantitative research design under an Agile development methodology. The quantitative approach focuses on objectively evaluating the performance and reliability of the GeoAware system through measurable indicators such as model accuracy, precision, recall, and F1-score. Agile methodology, on the other hand, guides the system’s iterative development, allowing flexibility and continuous improvement based on performance outcomes and system testing results.
+viii 
 
-The research design integrates two main phases: (1) System Development and (2) Model Evaluation. During system development, Agile sprints are used to incrementally design, build, and refine the GeoAware framework. Each sprint involves planning, implementation, and testing cycles to ensure functionality aligns with the project’s objectives. The evaluation phase quantitatively measures the performance of the Zero-Shot Classification (ZSC) and Geospatial Named Entity Recognition (Geo-NER) components using real-world environmental hazard datasets.
+List of Figures 
 
-The ZSC module leverages a pretrained language model based on Facebook’s BART architecture to automatically classify environmental hazards from unstructured textual data. The model’s ability to detect unseen hazard categories without prior training data is tested using standard machine learning metrics, precision, recall, F1-score, and accuracy. Evaluation focuses on how effectively the ZSC model identifies relevant hazard categories within Philippine environmental contexts.
+ix 
 
-The Geo-NER module, on the other hand, is quantitatively evaluated through its location extraction accuracy, measuring how well it identifies and maps geospatial entities (e.g., cities, provinces, landmarks) mentioned in hazard reports. The combined performance of both modules is assessed through their integration in the GeoAware system to ensure real-time hazard detection and geospatial visualization.
+List of Appendices 
 
-To maintain alignment with Agile principles, feedback from each testing iteration is used to refine model performance, improve system efficiency, and enhance user interaction. The process continues until the system reaches stable functionality and acceptable evaluation metrics. All collected performance results are numerically analyzed to provide objective conclusions on the system’s effectiveness in environmental hazard detection and visualization.
+x 
 
-## **Sampling Technique**
+Abstract 
 
-This study utilizes a purposive sampling technique focused on the collection of relevant textual data from verified online news outlets and information sources. Unlike traditional research that involves human participants, this study draws its data exclusively from RSS feeds that report environmental hazards within the Philippine context.
+xi 
 
-Purposive sampling is used because it ensures that only data relevant to the study’s objectives, such as hazard-related news, bulletins, and situational updates, are included in the dataset. The selection criteria prioritize news entries that explicitly mention or describe environmental hazard events such as floods, earthquakes, landslides, typhoons, and volcanic eruptions.
 
-Each sampled text entry serves as an input for the Zero-Shot Classification (ZSC) and Geospatial Named Entity Recognition (Geo-NER) models. The ZSC component categorizes the hazard type, while the Geo-NER module extracts corresponding location entities. To maintain data consistency and integrity, non-hazard-related or ambiguous entries are excluded from the dataset.
 
-The sample size depends on the number of valid hazard-related RSS entries collected over a fixed observation period. The study focuses solely on reports originating from or related to the Philippines, ensuring that the model evaluation aligns with the system’s intended operational context.
 
-This approach guarantees that the sampled data accurately represent real-world textual inputs encountered by the GeoAware system, providing a valid basis for evaluating model performance in classifying hazards and identifying affected locations.
 
-## **Participants of the Study**
+**CHAPTER I: INTRODUCTION** 
 
-The participants of the study primarily involve news organizations that publish environmental and disaster-related updates through RSS feeds. These outlets serve as the main data sources for GeoAware, providing continuous streams of structured and unstructured textual information related to environmental hazards, such as floods, landslides, earthquakes, and typhoons.
+Background and Rationale of the Study 
 
-The researchers do not collect data directly from individual respondents. Instead, they utilize publicly available RSS feeds from reputable news agencies such as GMA News, ABS-CBN, and Inquirer.net to extract real-time reports. These articles and snippets are then processed by the system for classification and geospatial analysis.
+1 
 
-In addition, environmental officers, data analysts, and IT specialists act as system evaluators. They assess the performance, accuracy, and usability of the GeoAware framework, particularly its ability to detect, classify, and visualize environmental incidents in real time.
+Objectives of the Study 
 
-All data used are publicly accessible and contain no personal or sensitive information, ensuring compliance with ethical research and data privacy standards.
+2 
 
-## **Research Locale**
+Significance of the Study 
 
-The Philippine archipelago has been designated as the singular research locale and the exclusive geographical boundary for the GeoAware framework. This selection is strategically driven by two primary factors: the country's unique, high-risk environmental profile, which necessitates advanced real-time detection systems, and the project’s specific goal of developing a crisis informatics tool tailored to the requirements of the national Disaster Risk Reduction and Management (DRRM) ecosystem. As a nation situated along the Pacific Ring of Fire and one of the most active global typhoon belts, the Philippines provides a continuous and diverse data environment (characterized by concurrent hazards such as typhoons, earthquakes, volcanic eruptions, landslides, and complex flooding events). This setting is ideal for the rigorous testing and validation of the GeoAware system, ensuring the framework is trained and evaluated on the full spectrum of real-world hazard reports.
+4 
 
-The constraints of the research locale are architecturally enforced within the system’s design. Specifically, the GeoAware Input-Process-Output (IPO) architecture is configured to accept and process textual data streams almost exclusively from reputable Philippine news sources and RSS feeds, guaranteeing the relevance of the information. Crucially, the Geo-NER module, which extracts location names, is integrated with comprehensive geospatial reference data corresponding to Philippine administrative divisions (provinces, cities, and municipalities). This localized geospatial dictionary is used during the Validation and Filtering process to precisely geocode extracted entities and eliminate false positives or reports irrelevant to the operational scope. This intentional design limits the framework’s focus, ensuring that the final output, geolocated hazard markers, is consistently accurate and directly actionable by the designated end-users: Local Government Units (LGUs) and emergency responders within the Philippines.
+Scope and Limitation 
 
-Furthermore, the locale profoundly influences the technical implementation of the Natural Language Processing components. News reports and public communication in the Philippines frequently exhibit code-switching and contain localized linguistic features, blending English, Tagalog, and various regional dialects. The efficacy of the GeoAware framework, particularly its Zero-Shot Classification (ZSC) module utilizing the BART model, is contingent upon its ability to maintain semantic integrity and contextual understanding across these specific linguistic boundaries. By focusing on this challenging, domain-specific linguistic environment, the study aims to validate the framework's robustness, ensuring its output is fair and accurate across all regions of the country, thereby directly supporting equitable situational awareness for all disaster management stakeholders.
+5 
 
-## **Research Instrument**
 
-The GeoAware framework's development and rigorous evaluation require a mixed set of technical and evaluative instruments. The initial stage relies on Data Acquisition and Preprocessing Tools to gather and prepare the unstructured text data. This process is anchored by RSS Feed Aggregators, which serve as the primary instrument for continuously collecting real-time hazard reports from validated Philippine news outlets, forming the raw input stream. This data is then processed using the Python Programming Language alongside specialized libraries like NLTK/spaCy for essential text cleaning, tokenization, and lemmatization, and Pandas for structuring the collected information into an organized dataset ready for the AI pipeline. These tools collectively ensure the collected textual data is both relevant and in a usable format for the subsequent modeling phases.
 
-The core functionality of the system is built using dedicated System Development Instruments. The key AI mechanism for classification is the BART-Based Pretrained Model, which acts as the instrument for Zero-Shot Classification (ZSC), allowing the system to categorize hazard types even for previously unseen events. Complementing this is a specialized Geo-NER Model (Geospatial Named Entity Recognition), which serves as the instrument for extracting location names from the text. The geocoded output and the crucial Geospatial Reference Data (Philippine administrative boundaries) are managed and processed within a PostgreSQL/PostGIS Database, which facilitates the geographic constraint validation. Finally, the user interface, the Progressive Web Application (PWA), is visualized using GIS Libraries such as Leaflet or Mapbox, making the geolocated hazard data accessible in near real-time.
 
-The final phase, Performance and Usability Evaluation, employs both objective and subjective instruments. Standard Machine Learning Metrics (Accuracy, Precision, Recall, and F1-score) are used as the primary quantitative instruments to assess the technical efficacy of the ZSC and Geo-NER models. These calculations objectively measure the system’s ability to correctly classify hazards and minimize errors. To gauge the framework's real-world utility, a custom-designed Expert Usability and Timeliness Questionnaire is administered to domain specialists (e.g., LGU staff, emergency officers). This instrument utilizes a Likert scale and open-ended questions to subjectively evaluate critical operational factors, including the system's Time-to-Action (TtA) and the overall usability and relevance of the geospatial visualization for informed decision-making in crisis scenarios.
 
-## **Data Gathering Procedure**
+**CHAPTER II: REVIEW OF RELATED LITERATURE** 
 
-The data gathering procedure for the GeoAware framework is a systematic, multi-stage process designed to acquire, preprocess, and prepare the specific textual and geospatial data required for the training, validation, and testing of the Zero-Shot Classification (ZSC) and Geo-NER components. This procedure adheres strictly to the purposive sampling technique, ensuring the collected dataset is highly relevant, authoritative, and specific to real-time environmental hazard detection within the Philippine context.
+Literature Review 
 
-The process begins with Source Identification and Textual Data Collection. Raw, unstructured textual data is collected continuously from verified online news outlets and information sources within the Philippines (e.g., major news agencies like GMA News, ABS-CBN, and Inquirer.net) using RSS Feed Aggregators. This method is chosen to capture the most immediate and domain-specific reports, which form the GeoAware system's input stream. Once collected, the raw text undergoes Data Preprocessing and Annotation. The data is first cleaned using Python libraries (NLTK/spaCy) for tasks like tokenization and lemmatization. Subsequently, it is subjected to Manual Annotation by domain experts (or researchers acting as annotators) to create the ground truth dataset, which includes two crucial labels: the specific Hazard Type (e.g., "Typhoon," "Landslide") and the corresponding Geospatial Entities (location names) mentioned in the text.
+6 
 
-## **System Development Process**
+Conceptual Framework 
 
-The GeoAware framework was developed utilizing an Agile development methodology, a choice made to effectively manage the complexity inherent in integrating two distinct AI models: Zero-Shot Classification (ZSC) and Geospatial Named Entity Recognition (Geo-NER). This iterative approach facilitated continuous testing, rapid feedback, and seamless integration between the novel NLP components and the final output interface. The development commenced with the Architecture Design and Setup phase, which translated the conceptual Input-Process-Output (IPO) model into a functional technical blueprint. During this time, researchers defined data structures, established APIs for fetching real-time RSS feeds, and critically, configured the PostGIS database. This database was set up to manage high-volume incoming hazard reports and to house the static, authoritative Geospatial Reference Data (Philippine administrative boundaries) essential for later validation.
+15 
 
-Following the design phase, Component Development and Model Training began, focusing on the parallel, independent creation of the two core AI components. The Zero-Shot Classification (ZSC) Model, built upon the pretrained BART architecture, was fine-tuned using the annotated training set to enhance its semantic understanding of localized Philippine crisis reporting, thereby optimizing its Recall to minimize missed detections of critical, unseen hazard types. Simultaneously, the specialized Geo-NER Model was trained to accurately identify location entities, with efforts focused on achieving high Precision in entity extraction to mitigate homonym and ambiguity issues common in geographical text. Intermediate performance checks were conducted against the validation set to ensure each model achieved stable functionality before the core integration step.
+Definition of Terms 
 
-The subsequent phase was Integration, Validation, and Geospatial Mapping, where the intellectual novelty of GeoAware was realized. The two models were linked sequentially: the classified Hazard Type from the ZSC component was paired with the extracted Location from the Geo-NER component. A critical Geospatial Validation routine was implemented, automatically passing raw Geo-NER output to the PostGIS database to match the extracted location names against the stored Geospatial Reference Data. Only locations that successfully matched an official Philippine administrative boundary were assigned validated coordinates. This strict filtering mechanism ensured geographic accuracy and relevance before the data was passed to the Mapping Engine Development component, which utilized front-end GIS Libraries (like Leaflet) to dynamically render the final real-time, interactive hazard map.
+20 
 
-he final stage involved Evaluation and Final Deployment. The complete GeoAware framework, spanning from raw RSS input to the PWA map output, was rigorously tested on the reserved, unseen Testing Set. The system's performance was objectively measured using standard machine learning metrics (Accuracy, F1-score) and subjectively assessed by domain specialists via the Expert Usability and Timeliness Questionnaire. These results guided final refinements to optimize operational speed (Time-to-Action, TtA) and user experience. The system was then packaged and deployed as a fully functional Progressive Web Application (PWA), designed for operational continuity and ready for use by disaster management stakeholders.
 
-## **System Architecture**
 
-The GeoAware framework is engineered around a modular, three-tiered architecture designed for real-time processing of unstructured text into actionable geospatial intelligence, ensuring high throughput and clear separation of concerns among data ingestion, core AI processing, and final visualization. The system initiates at the Data Ingestion Layer, which is responsible for acquiring all necessary inputs. The primary input is the Unstructured Textual Data Stream, continuously collected in real-time from verified online news outlets via RSS Feed Aggregators. This layer also integrates two critical static reference datasets: the Predefined Hazard Categories (the ontology for the ZSC model) and the Geospatial Reference Data (official Philippine administrative boundaries and coordinates) stored in the PostGIS database, ensuring the system only processes authoritative and contextually relevant information.
 
-The data then moves to the Core Processing (AI Pipeline) Layer, the central operational tier where the critical Natural Language Processing (NLP) and validation occur. First, the Preprocessing Module cleanses and normalizes the raw text. This clean text is then fed into the Zero-Shot Classification (ZSC) Module, which uses the BART-based model to identify and classify the event, assigning the primary Hazard Type and, importantly, calculating an Uncertainty Quantification (Confidence Score). Subsequently, the text proceeds to the Geospatial Named Entity Recognition (Geo-NER) Module to extract all mentioned Geographical Entities (locations). This is followed by a crucial step: the Geospatial Validation and Filtering Module. Here, the extracted locations are cross-referenced with the Geospatial Reference Data in the PostGIS database to convert raw names into standardized, validated (X, Y) coordinates, filtering out any ambiguous mentions or data irrelevant to the Philippine administrative boundary. The output of this layer is fully structured intelligence: {Hazard Type,  X, Y Coordinate, Confidence Score}.
 
-Finally, the validated structured intelligence is passed to the Presentation and Output Layer, which transforms the data into a consumable format for end-users, implemented as a Progressive Web Application (PWA) to ensure operational continuity and accessibility. Before visualization, the validated data is immediately logged in the PostGIS database for historical analysis. The core output is driven by the Geospatial Visualization Module, where the validated {Hazard Type, X, Y Coordinate} tuples are consumed by GIS libraries (e.g., Leaflet) to dynamically render the Real-Time Interactive Hazard Map. Concurrently, the Alerting and Reporting module provides summarized reports and push notifications to emergency responders, ensuring the intelligence is delivered immediately to support timely decision-making and optimize the crucial Time-to-Action (TtA) metric.
+**CHAPTER III: METHODOLOGY** 
 
-## **Data Analysis**
+Research Design 
 
-The data analysis procedure for the GeoAware framework is two-fold, employing a mix of quantitative statistical analysis to evaluate the technical efficacy of the core AI models and descriptive analysis of qualitative data to assess the system's operational viability and usability. The objective performance of the Zero-Shot Classification (ZSC) and Geospatial Named Entity Recognition (Geo-NER) modules will be quantitatively assessed using the reserved Testing Set against the human-annotated Ground Truth data. The primary metrics computed will include Accuracy, measuring overall correctness; Precision, assessing the rate of false alarms, which is crucial for minimizing resource misallocation; Recall, assessing the rate of missed detections, essential for capturing all reported hazards; and the F1-score, which provides a balanced measure of performance, particularly important for handling potentially imbalanced hazard datasets. Furthermore, the quantitative analysis will include Algorithmic Fairness Analysis by comparing F1-scores across different linguistic inputs (English vs. local dialects) and geographic regions to detect and address potential discriminatory bias in detection rates, along with a statistical aggregation of the ZSC model's Uncertainty Quantification (Confidence Scores) to contextualize output reliability.
+23 
 
-The second stage of analysis focuses on the system's real-world utility, relying on data collected from the Expert Usability and Timeliness Questionnaire. The system's Timeliness (Time-to-Action, TtA) will be analyzed using descriptive statistics (mean, median, standard deviation) on the recorded elapsed time between the article publication and the hazard marker's appearance on the PWA map. This quantitative TtA measurement will be triangulated with the subjective ratings from the domain specialists to verify if the speed meets the "near real-time" operational requirements of emergency response.
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
 
-## **Ethical Considerations**
 
-In an IT research or capstone project, ethical considerations play a significant role in ensuring that the project is conducted responsibly and aligns with professional and societal standards. Here are key ethical considerations to keep in mind
 
-**1\. Data Privacy and Confidentiality**
 
-* **Sensitive Information Protection**: Researchers must ensure that any personal or sensitive data (e.g., health, financial, or identifiable information) is protected and handled with strict confidentiality.
 
-* **Data Anonymization**: If the research involves user data, it's crucial to anonymize it to prevent identification of individuals.
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
 
-* **Compliance with Data Protection Laws**: Adherence to laws such as GDPR (General Data Protection Regulation) or HIPAA (Health Insurance Portability and Accountability Act) is essential when handling sensitive data.
 
-  **3\. Intellectual Property and Plagiarism**
 
-* **Original Work**: Capstone projects should avoid plagiarism, ensuring proper citation of sources and acknowledgment of previous research.
 
-* **Copyright and Licensing**: Use of third-party software, libraries, or tools should respect copyright and licensing agreements.
 
-  **4\. Social Impact and Responsibility**
+Sampling Technique 
 
-* **Impact on Society**: The potential societal effects of the project should be evaluated. Avoid projects that could have negative consequences, such as violating human rights or enabling harmful practices.
+24 
 
-* **Sustainability and Inclusivity**: Consider environmental sustainability and inclusivity, ensuring that technology developed benefits a broad range of users without discrimination.
+Participants of the Study 
 
-  **5\. Cybersecurity and Protection from Harm**
+25 
 
-* **Ensuring Security**: If the project involves software development, ethical consideration must include building secure and resilient systems to protect users from cyber threats.
+Research Locale 
 
-* **Avoiding Harm**: Projects should avoid causing harm to individuals or systems, whether through negligence, vulnerabilities, or malicious design.
+25 
 
-  **6\. Bias and Fairness**
+Research Instrument 
 
-* **Algorithmic Bias**: If the project involves algorithms, ensure that they are fair and unbiased. Biased systems can lead to discriminatory outcomes, so fairness should be a priority.
+26 
 
-* **Transparency**: Be transparent about how data is used and analyzed to prevent hidden biases from affecting results.
+Data Gathering Procedure 
 
-  **7\. Accountability and Integrity**
+26 
 
-* **Accuracy in Reporting**: Researchers should report findings honestly, without fabricating, falsifying, or misrepresenting data or results.
+System Development Process 
 
-* **Responsibility for Actions**: Take responsibility for the ethical conduct of your research, including acknowledging any limitations or weaknesses in the study.
+27 
 
-  **8\. Dual-Use Technology**
+System Architecture 
 
-* **Potential for Misuse**: Consider if the technology or research developed could be used for both beneficial and harmful purposes, and take steps to mitigate any risks of misuse.
+27 
 
-  These ethical considerations ensure that an IT capstone project or research is conducted responsibly, safeguarding the interests of individuals, society, and the broader tech community.
+Data Analysis 
 
-# **LITERATURE CITED**
+28 
 
-Fan, R., & Liu, L. (2021). Deep learning-based named entity recognition and knowledge graph construction for geological hazards. ISPRS Journal of Photogrammetry and Remote Sensing, 175, 1–13. <https://www.mdpi.com/2220-9964/9/1/15>
+Ethical Considerations 
 
-Ghaffarian, S. (2023). Introducing digital risk twin for disaster risk management. Nature Communications, 6(1), 135\. <https://www.sciencedirect.com/science/article/pii/S2212420923006039?via%3Dihub>
+28 
 
-Imran, M., Castillo, C., Diaz, F., & Vieweg, S. (2015). AIDR: Artificial intelligence for disaster response. Proceedings of the 24th International Conference on World Wide Web, 159–162. <https://dl.acm.org/doi/10.1145/2736277.2741135>
 
-Long, Y. (2017). Zero-shot image classification \[Doctoral dissertation, University of Sheffield\]. White Rose eTheses Online. [https://etheses.whiterose.ac.uk/id/eprint/18613/](https://etheses.whiterose.ac.uk/id/eprint/18613/)
 
-International Telecommunication Union. (2019). Disaster Management and ICTs: Review of Emerging Trends. Retrieved from <https://www.itu.int/hub/publication/d-stg-sg02-05-2-2021/>
 
-United Nations Economic and Social Commission for Asia and the Pacific. (2024). Harnessing digital technologies for disaster risk reduction in Asia and the Pacific. Retrieved from <https://www.unescap.org/our-work/ict-disaster-risk-reduction>
 
-United Nations Office for Disaster Risk Reduction. (2023). Global Assessment Report on Disaster Risk Reduction 2023: Mapping Resilience for the Sustainable Development Goals. Retrieved from [https://www.undrr.org/gar/gar2023-special-report](https://www.undrr.org/gar/gar2023-special-report)
+**LITERATURE CITED **
 
-McDaniel, E. (2024). Zero-shot classification of crisis tweets using instruction-finetuned large language models. arXiv. <https://arxiv.org/abs/2410.00182>
+51 
 
-Rondinelli, A. (2022). Zero-shot topic labeling for hazard classification. Information, 13(10), 444\. [https://www.mdpi.com/2078-2489/13/10/444](https://www.mdpi.com/2078-2489/13/10/444)
 
-Jurafsky, D., & Martin, J. H. (2024). Speech and Language Processing (4th ed., draft). [https://web.stanford.edu/\~jurafsky/slp3/](https://web.stanford.edu/~jurafsky/slp3/)
 
-Gelernter, J., & Mushegian, N. (2011). Geo-parsing messages from microtext. Transactions in GIS, 15(6), 753–773. [https://onlinelibrary.wiley.com/doi/10.1111/j.1467-9671.2011.01256.x](https://onlinelibrary.wiley.com/doi/10.1111/j.1467-9671.2011.01256.x)
 
-MacEachren, A. M., Jaiswal, A., Robinson, A., Pezanowski, S., Savelyev, A., Mitra, P., & Blanford, J. (2011). Geo-Twitter analytics: Applications in crisis management. Cartography and Geographic Information Science, 38(2),171–185.[https://icaci.org/files/documents/ICC\_proceedings/ICC2011/Oral%20Presentations%20PDF/C3-Geovisualisation%20and%20data%20exploration/CO-244.pdf](https://icaci.org/files/documents/ICC_proceedings/ICC2011/Oral%20Presentations%20PDF/C3-Geovisualisation%20and%20data%20exploration/CO-244.pdf)
 
-Havas, C., & Resch, B. (2021). Portability of semantic and spatial–temporal machine learning methods to analyse social media for near-real-time disaster monitoring. Natural Hazards. Advance online publication. [https://link.springer.com/article/10.1007/s11069-021-04808-4](https://link.springer.com/article/10.1007/s11069-021-04808-4)
+**APPENDICES **
 
-UP NOAH Center. (n.d.). Nationwide Operational Assessment of Hazards (NOAH). University of the Philippines. <https://noah.up.edu.ph/>
+72 
 
-FEMA. (2022). FEMA integrated emergency management. Federal Emergency Management Agency. [https://www.fema.gov/emergency-managers/practitioners](https://www.fema.gov/emergency-managers/practitioners)
+****
 
-Okolloh, O. (2009). Ushahidi, or ‘testimony’: Web 2.0 tools for crowdsourcing crisis information. Participatory Learning and Action, 59(1), 65–70. <https://www.iied.org/sites/default/files/pdfs/migrate/G02842.pdf>
 
-[image1]: <data:image/png;base64,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>
+
+
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+**LIST OF TABLES **
+
+****
+
+****
+
+**TABLE **
+
+****
+
+**PAGE **
+
+****
+
+1 
+
+Non quis animi et saepe sunt et veritatis 22 
+
+officia qui illo commodi at ducimus dolores. 
+
+Ab libero eaque qui distinctio facilis aut autem enim et 
+
+
+
+2 
+
+Est iure excepturi et recusandae voluptatem 28 
+
+est quia quidem est perferendis dolores ut porro voluptates sed be 
+
+
+
+3 
+
+Non quis animi et saepe sunt et veritatis 41 
+
+officia qui illo commodi at ducimus dolores. 
+
+Ab libero eaque qui distinctio facilis aut autem enim et 
+
+
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+**LIST OF FIGURES **
+
+****
+
+****
+
+**TABLE **
+
+****
+
+**PAGE **
+
+****
+
+1 
+
+Ab libero eaque qui distinctio facilis aut 22 
+
+autem enim et 
+
+
+
+2 
+
+Est iure excepturi et recusandae voluptatem 28 
+
+est quia quidem est perferendis dolores ut porro voluptates sed be 
+
+
+
+3 
+
+Ab libero eaque qui distinctio facilis aut 41 
+
+autem enim et 
+
+
+
+****
+
+
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+**LIST OF APPENDICES **
+
+****
+
+****
+
+**TABLE **
+
+****
+
+**PAGE **
+
+****
+
+A 
+
+Letter of Request 
+
+81 
+
+
+
+B 
+
+Survey Questionnaire 
+
+82 
+
+
+
+C 
+
+Informed Consent Form 
+
+83 
+
+
+
+****
+
+
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+**LIST OF ABBREVIATIONS **
+
+****
+
+****
+
+DNA 
+
+Deoxyribonucleic acid 
+
+
+
+PCR 
+
+Polymerase chain reaction 
+
+RNA 
+
+Ribonucleic acid 
+
+
+
+
+
+****
+
+
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+**CHAPTER I **
+
+****
+
+**INTRODUCTION **
+
+****
+
+**Background and Rationale of the Study **
+
+Awareness of environmental hazards is fundamental to human survival and decision-making. Just as sight allows humans to perceive danger in their surroundings, data awareness enables societies to respond to emerging threats in their environment. In the digital era, much of this awareness comes from textual information, news reports, updates, and situational bulletins that narrate real-world events as they unfold. 
+
+
+
+Fig. 1.1 Bridging the Gap from Fragmented Text to Actionable Geospatial Intelligence 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+However, this vast information landscape is often unstructured and fragmented across various sources. Transforming it into a coherent understanding of what, where, and when a hazard occurs remains a challenge \(Ghaffarian, 2023\). 
+
+To bridge this gap, artificial intelligence now extends human awareness into the digital domain, enabling systems to automatically interpret textual data and translate it into actionable geospatial insights \(Fan & Liu, 2021; Imran et al., 2015\).. 
+
+
+
+This vision forms the foundation of GAIA, an AI-driven framework that integrates Zero-Shot Classification \(ZSC\) and Geospatial Named Entity Recognition \(Geo-NER\) to automatically detect and locate environmental hazards from online information streams. Like how human cognition connects observation to meaning \(Long, 2017\), GAIA aims to give machines the capacity to 
+
+“understand” events as they are reported, bringing society one step closer to real-time geospatial intelligence. 
+
+
+
+**Objectives of the Study **
+
+To design, develop, and evaluate GAIA, an AI-driven framework that leverages ZSC and Geo-NER to automatically detect and locate environmental hazards from online information streams in near real-time. 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+1. To collect and preprocess textual information from online sources for environmental hazard reporting. 
+
+2. To implement a ZSC model capable of detecting previously unseen hazard categories in textual data. 
+
+3. To integrate Geo-NER for automatic extraction of location-specific information from hazard reports. 
+
+4. To develop a system that visualizes detected hazards on a geospatial map for decision-making purposes. 
+
+5. To evaluate the performance of GAIA in terms of accuracy, timeliness, and usability for real-world environmental hazard detection. 
+
+
+
+****
+
+**Significance of the Study **
+
+
+
+Zero-Shot Learning \(ZSL\) is a powerful approach in artificial intelligence that enables models to recognize and classify categories they have never seen during training. For example, a ZSL model trained to identify “floods” 
+
+and “earthquakes” could still correctly detect “landslides” by understanding the semantic meaning of the new label from textual descriptions. This ability mimics COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+human reasoning, where prior knowledge allows people to infer and categorize novel events without direct experience \(Long, 2017\). By applying ZSL, machines can automatically detect previously unseen environmental hazards, which is crucial in a dynamic and unpredictable natural environment where new threats may emerge suddenly. 
+
+
+
+Fig. 1.2 ZSC Analogy in Hazard Detection 
+
+GAIA leverages this capability to analyze textual information from online sources in near real-time, detecting hazards without requiring labeled examples for every possible category. Combined with Geo-NER, the system can pinpoint the locations of reported hazards, transforming fragmented and unstructured textual data into structured geospatial insights. This integration not only enhances situational awareness but also supports faster and more informed COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+decision-making for disaster management agencies, local government units, and emergency responders, improving resource allocation and risk mitigation. 
+
+
+
+Academically, this study demonstrates the novel application of Zero-Shot Classification to textual hazard detection, expanding its utility beyond traditional domains such as image recognition or general natural language processing. 
+
+Technologically, GAIA illustrates how AI can extend human awareness into the digital domain, automatically converting scattered reports into actionable visual maps. This framework paves the way for real-time hazard monitoring, predictive analysis, and proactive disaster management strategies, providing a solution that is practical, innovative, and academically relevant. 
+
+****
+
+
+
+**Scope and Limitation **
+
+
+
+The scope of this study focuses on the detection and geolocation of environmental hazards using textual information streams. GAIA is designed to process online reports, news articles, and RSS feeds to automatically identify hazards and their corresponding locations. The system integrates ZSC to recognize hazard types that may not have been included in its training data, allowing it to detect new or emerging threats. Additionally, Geo-NER enables the extraction of precise location information from unstructured text, facilitating the COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+visualization of hazards on a map. This study emphasizes the real-time processing of information to provide timely insights that can support disaster management agencies, local government units, and emergency responders. 
+
+
+
+The system is limited in several aspects. Firstly, it relies solely on textual data from online sources, which may not capture hazards in areas with limited reporting or internet coverage. As such, GAIA may miss events that are not documented online or reported in real-time. Secondly, the accuracy of hazard detection is influenced by the quality and clarity of the source text; ambiguous or poorly structured reports can reduce detection precision. Thirdly, while ZSL 
+
+allows the system to identify previously unseen hazards, environmental hazards outside the context of the Philippines, for example, hailstorms reported in other countries, will not be classified, which may affect detection comprehensiveness. 
+
+Lastly, GAIA does not include predictive modeling of hazards or integration with sensor networks, and its scope is limited to detecting and mapping reported events rather than forecasting future occurrences. 
+
+****
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+**CHAPTER II **
+
+****
+
+**REVIEW OF RELATED LITERATURE** 
+
+****
+
+**Emergency and Disaster Reporting Systems **
+
+Emergency and disaster reporting systems have evolved significantly over the past decades, transitioning from manual and reactive methods to more integrated, technology-driven platforms. Traditionally, emergency reporting relied on telephone hotlines and SMS-based systems that allowed citizens and local authorities to communicate incidents directly to emergency management offices \(ITU, 2019\). While these systems were essential in establishing communication lines during crises, they often suffered from limitations such as delayed response times, network congestion, and the lack of geospatial accuracy. 
+
+
+
+With the growing role of Information and Communication Technology \(ICT\), many countries, including the Philippines, have begun adopting more advanced reporting platforms that utilize mobile applications, cloud-based systems, and geospatial analytics to enhance disaster management operations \(UN 
+
+ESCAP, 2024\). These digital systems enable faster information exchange, facilitate data integration across agencies, and improve the coordination of emergency response activities. The introduction of automated data pipelines and real-time dashboards has further strengthened situational awareness, allowing responders to make informed decisions during disasters \(UNDRR, 2023\). 
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+However, despite these technological advancements, challenges persist in ensuring the timeliness, reliability, and accessibility of emergency data. Many reporting platforms still rely on structured inputs and pre-defined templates, limiting their ability to process unstructured or spontaneous reports from diverse information sources. Furthermore, developing countries face additional barriers such as limited ICT infrastructure, inconsistent internet connectivity, and gaps in interoperability among government systems \(UN ESCAP, 2024\). These challenges highlight the ongoing need for intelligent, adaptive systems that can process heterogeneous data sources and support rapid decision-making during emergencies. 
+
+
+
+**Role of ICT in Disaster Risk Reduction and Management** Information and Communication Technology \(ICT\) plays a crucial role in strengthening disaster risk reduction and management \(DRRM\) by enhancing the collection, processing, and dissemination of critical information during all phases of a disaster, from preparedness to recovery. Modern ICT tools, such as remote sensing, Geographic Information Systems \(GIS\), cloud computing, and artificial intelligence, have transformed how disaster data is gathered and analyzed, enabling faster and more informed decision-making \(ITU, 2019\). These technologies facilitate real-time data sharing across agencies, ensuring that COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+emergency response teams, local governments, and national authorities operate with a unified and updated situational picture. 
+
+
+
+In the Philippines, ICT has been at the core of national disaster management efforts, particularly through initiatives led by the National Disaster Risk Reduction and Management Council \(NDRRMC\). Systems such as Project NOAH and GeoRiskPH have demonstrated how integrating ICT with hazard modeling and geospatial analytics can improve forecasting accuracy and risk communication. These platforms not only collect environmental data from satellites and sensors but also visualize potential hazard zones, allowing communities to take preventive actions before disasters strike. 
+
+
+
+Moreover, ICT enhances coordination and transparency in post-disaster response by supporting digital communication, resource tracking, and information dissemination to affected communities \(UN ESCAP, 2024\). 
+
+
+
+****
+
+**AI Applications in Disaster Management** 
+
+Artificial intelligence \(AI\) has become an essential tool in disaster management, enhancing the ability of authorities to predict, monitor, and respond to crises efficiently. By automating the analysis of large volumes of heterogeneous data, AI helps reduce response times, improve situational COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+awareness, and optimize resource allocation. Techniques such as machine learning and natural language processing \(NLP\) are particularly effective for analyzing textual and multimedia data from multiple sources, including news reports, situational bulletins, and official hazard updates \(Fan & Liu, 2021; Imran et al., 2015\). 
+
+
+
+One promising approach within AI is Zero-Shot Classification \(ZSC\), which allows systems to identify categories or hazards that were not explicitly included in the training data. Unlike traditional supervised learning, ZSC 
+
+leverages semantic representations, knowledge graphs, or attribute-based embeddings to infer labels for unseen classes, mimicking the human ability to generalize from prior knowledge to novel situations \(Long, 2017\). In disaster management, this capability is critical because new types of hazards or variations in reports can emerge suddenly, and labeled datasets for every possible scenario are often unavailable. 
+
+
+
+Another key AI application is Geospatial Named Entity Recognition \(Geo-NER\), which extracts location-specific information from unstructured text and converts it into structured geospatial data. This enables the creation of dynamic hazard maps and dashboards that provide real-time situational awareness for responders and decision-makers \(Imran et al., 2015\). 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+By combining ZSC with Geo-NER, systems can automatically interpret textual information and identify both the type of hazard and its geographic location, bridging the gap between raw reports and actionable intelligence. 
+
+
+
+AI-driven prioritization and risk assessment frameworks further enhance emergency response by ranking incidents based on urgency, severity, or potential impact, ensuring that critical resources are deployed effectively \(Fan & Liu, 2021\). Integrating these technologies into a unified system allows disaster management agencies to move from reactive to proactive operations, ultimately reducing response times, mitigating losses, and improving community resilience. 
+
+
+
+**Zero-Shot Text Classification **
+
+Zero-Shot Classification \(ZSC\) is a machine learning technique that enables models to classify text into categories without having seen labeled examples of those categories during training. This capability is particularly valuable in disaster management, where new types of incidents or hazards can emerge unexpectedly, and labeled datasets may be scarce or nonexistent. ZSC 
+
+leverages semantic representations, such as embeddings from pre-trained language models, to infer the appropriate category for unseen text based on descriptive labels or natural language prompts \(Long, 2017; Fan & Liu, 2021\). 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+The theoretical foundation of zero-shot learning rests on the ability to transfer knowledge from seen classes to unseen classes through intermediate semantic representations. As demonstrated by Xian et al. \(2017\) in their comprehensive evaluation of zero-shot learning approaches, the effectiveness of ZSC critically depends on the quality of semantic embeddings and the alignment between visual or textual features and class descriptions. Their work established benchmark evaluation protocols that distinguish between classical zero-shot learning \(where test classes are completely disjoint from training classes\) and generalized zero-shot learning \(where both seen and unseen classes may appear during inference\), a distinction highly relevant to disaster management, where systems must recognize both known hazard types and novel incident categories. 
+
+
+
+In the context of disaster management, ZSC allows for the automatic classification of unstructured textual data, such as social media posts, news articles, or emergency reports, into predefined hazard categories. This facilitates the rapid identification and prioritization of emerging incidents, enabling timely and coordinated responses. For instance, a ZSC model can classify a tweet about a sudden flood in a previously unaffected area, even if the model has not been explicitly trained on flood-related data. The generalized zero-shot learning paradigm described by Xian et al. \(2017\) is particularly applicable here: GAIA's ZSC implementation must handle both familiar hazard types encountered during COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+model pre-training \(typhoons, earthquakes\) and potentially novel or rare events \(toxic spills, dam failures\) that may not have been explicitly included in the training corpus. 
+
+
+
+Recent advancements in ZSC have demonstrated its effectiveness in various domains, including crisis informatics and emergency response. Studies have shown that ZSC models, particularly those fine-tuned on domain-specific data, can achieve high accuracy in classifying crisis-related information \(McDaniel, 2024\). The transition from attribute-based zero-shot learning \(where classes are described by predefined attributes\) to text-based zero-shot classification \(where natural language descriptions serve as class definitions\) has proven especially powerful for NLP tasks. This aligns with Xian et al.'s \(2017\) findings that the choice of semantic representation significantly impacts zero-shot learning performance, in GAIA's case, using natural language hazard descriptions \("flooding", "typhoon"\) as class labels rather than hand-crafted attribute vectors enables the model to leverage rich semantic knowledge encoded in pre-trained language models. 
+
+
+
+Additionally, the integration of ZSC with other AI techniques, such as Named Entity Recognition \(NER\) and geospatial analysis, enhances its utility in disaster management by providing both the type and location of hazards COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+\(Rondinelli, 2022\). This multi-modal integration addresses one of the key challenges identified by Xian et al. \(2017\): the "semantic gap" between low-level features \(raw text\) and high-level semantic concepts \(hazard categories\). By combining ZSC for hazard type identification with Geo-NER for spatial grounding, GAIA creates a more robust representation that bridges textual descriptions and real-world geographic contexts. 
+
+
+
+**Hazard Category Taxonomy **
+
+****
+
+The GAIA system classifies disaster-related text into nine Philippine-relevant hazard categories. The operational hazard taxonomy comprises: 
+
+● Flooding - Monsoon-induced inundation, flash floods, urban flooding 
+
+● Fire - Residential, commercial, and industrial fires 
+
+● Earthquake - Tectonic activity, seismic events \(Philippines is located on the Pacific Ring of Fire\) 
+
+● Typhoon - Tropical cyclones, the most frequent disaster type \(20\+ 
+
+annually\) 
+
+● Landslide - Rainfall-triggered slope failures, particularly in mountainous regions 
+
+● Volcanic Eruption - Activity from 23 active volcanoes \(Taal, Mayon, Kanlaon, etc.\) 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+● Drought - El Niño-induced water scarcity, agricultural impacts 
+
+● Tsunami - Earthquake-triggered coastal inundation 
+
+● Storm Surge - Typhoon-related coastal flooding, elevated sea levels This taxonomy reflects the actual disaster risk profile of the Philippines as documented by NDRRMC hazard maps and PAGASA climate data. 
+
+
+
+**Model Selection and Comparative Analysis **
+
+The selection of an appropriate ZSC model is critical for achieving reliable disaster detection performance. To ensure optimal performance within the GAIA framework, we conducted a comprehensive evaluation of four prominent zero-shot classification models: DeBERTa-v3-base-zeroshot, BART-large-mnli, ClimateBERT, and XLM-RoBERTa-large-xnli. These models were evaluated based on multiple criteria including accuracy, inference speed, resource requirements, and suitability for Philippine disaster contexts. 
+
+
+
+**Evaluation Methodology **
+
+The evaluation employed a dual-dataset strategy to address the complementary needs of controlled model comparison and real-world validation: COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+**Dataset 1: Synthetic Balanced Dataset \(N=900\)** Due to limited manually labeled Philippine disaster data and severe class imbalance in real-world news coverage, we generated a synthetic balanced dataset of 900 samples \(100 samples per category across all 9 hazard types\) using template-based generation with Philippine-specific context. This approach follows established NLP research practices \(Bowman et al., 2015; Anaby-Tavor et al., 2020\) for creating evaluation datasets when real-world labeled data are scarce. 
+
+
+
+The generation method employed 270\+ unique templates incorporating authentic Philippine locations \(150\+ cities/provinces across all 18 administrative regions\), PAGASA typhoon nomenclature, PHIVOLCS volcanic/seismic terminology, and realistic casualty ranges. Linguistic diversity was ensured through approximately 30% English \(formal news style\), 35% Tagalog \(local news\), and 35% Taglish \(code-switched text common in Philippine media and citizen reports\). Geographic stratification provided proportional representation across NCR, CAR, Regions I-XIII, and BARMM, while contextual realism incorporated actual Filipino news patterns, damage estimates in Philippine pesos, and local measurement units. 
+
+
+
+This dataset enables fair, apples-to-apples model comparison without class imbalance confounds. Following Xian et al.'s \(2017\) recommendation for COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+comprehensive evaluation protocols, the balanced dataset includes both high-frequency classes \(flooding, typhoons—analogous to "seen" classes in traditional zero-shot learning\) and low-frequency classes \(tsunami, volcanic eruption—analogous to "unseen" classes\), enabling assessment of generalization capability across the full spectrum of Philippine hazards. 
+
+
+
+**Dataset 2: Real-World RSS Feed Dataset \(N=177\)** To validate model generalization to actual news text patterns, we collected 177 news articles from verified Philippine RSS feeds \(GMA News, Rappler, Inquirer\) representing real-world disaster coverage over a 3-month observation period \(August–November 2025\). 
+
+
+
+This dataset exhibits natural class imbalance reflecting actual Philippine disaster frequency \(volcanic eruptions dominate the sample due to Kanlaon and Taal activity during the collection period, followed by earthquakes, fires, and flooding\). Linguistic variation includes a mix of English formal journalism, code-switched English-Tagalog, and colloquial expressions. The dataset contains uncontrolled diversity in article length \(headlines to full reports\), writing style \(breaking news vs. situational updates\), and semantic complexity. Manual annotation ensured human-labeled ground truth for each article, with hazard types verified by two independent annotators. 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+This dataset serves as the external validation set to assess whether models trained/evaluated on synthetic data generalize to actual operational text encountered in RSS processing. This addresses the domain shift challenge discussed by Xian et al. \(2017\), where models must generalize across different data distributions—in this case, from template-based synthetic text to natural news prose. 
+
+****
+
+**Comparative Results** 
+
+Table 2.1 presents the performance comparison of the four evaluated models. DeBERTa-v3-base-zeroshot emerged as the top-performing model with an F1-score of 0.89, accuracy of 91.2%, and ROC-AUC of 0.94. The model demonstrated consistent performance across all hazard categories, with particularly strong results in typhoon detection \(F1: 0.93\) and flooding \(F1: 0.91\). 
+
+Critically, DeBERTa-v3 exhibited excellent confidence calibration, meaning its prediction confidence scores accurately reflected actual classification accuracy, a crucial property for automated decision-making in disaster response COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+
+
+**Model **
+
+**Parame**
+
+**F1-Scor Accurac ROC-A Inferenc**
+
+**Model **
+
+**Memor**
+
+**ters **
+
+**e **
+
+**y **
+
+**UC **
+
+**e Speed **
+
+**Size **
+
+**y \(GPU\) **
+
+**\(GPU\) **
+
+DeBERTa
+
+184M 
+
+0.89 
+
+91.2% 
+
+0.94 
+
+150ms 
+
+730 MB 
+
+2.5 GB 
+
+-v3-base-z
+
+eroshot 
+
+BART-lar
+
+407M 
+
+0.85 
+
+87.5% 
+
+0.91 
+
+300ms 
+
+1.6 GB 
+
+4.5 GB 
+
+ge-mnli 
+
+ClimateB
+
+82M 
+
+0.62 
+
+64.3% 
+
+0.72 
+
+80ms 
+
+330 MB 
+
+1.2 GB 
+
+ERT 
+
+XLM-Ro
+
+561M 
+
+0.82 
+
+84.1% 
+
+0.88 
+
+450ms 
+
+2.2 GB 
+
+6.0 GB 
+
+BERTa-lar
+
+ge-xnli 
+
+Table 2.1 Zero-Shot Classification Model Performance Comparison BART-large-mnli, a widely-used industry-standard model, achieved an F1-score of 0.85 with 87.5% accuracy. While its performance was strong, it required significantly more computational resources \(4.5 GB GPU memory\) and exhibited slower inference times \(300ms per sequence\) compared to DeBERTa-v3. However, its proven reliability and extensive documentation make it a suitable fallback option. 
+
+
+
+ClimateBERT, despite being the smallest and fastest model \(82M 
+
+parameters, 80ms inference\), demonstrated poor performance on disaster COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+detection tasks with an F1-score of only 0.62. Analysis revealed that this model, trained primarily on climate science literature focusing on emissions and temperature data, lacks the semantic knowledge necessary for identifying acute disaster events. It frequently confused climate change discussions with actual hazard occurrences, resulting in high false positive rates. This finding underscores the importance of training data alignment with the target domain, climate science text differs fundamentally from disaster event descriptions. 
+
+
+
+XLM-RoBERTa-large-xnli achieved an F1-score of 0.82 and demonstrated superior multilingual capabilities, performing exceptionally well on Filipino and code-switched text \(the linguistic context common in Philippine citizen reports\). 
+
+However, its large size \(561M parameters, 2.2 GB\) and slow inference speed \(450ms\) made it less suitable for real-time RSS processing where rapid classification is essential. Nonetheless, its multilingual strength positions it as a valuable component for future system enhancements focused on processing citizen reports in local languages. 
+
+
+
+**Language and Context-Specific Performance **
+
+An important consideration for the Philippine context is the handling of code-switched English-Tagalog text, which is prevalent in both news articles and citizen reports. DeBERTa-v3 demonstrated strong performance on code-switched COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+text, correctly classifying 87% of mixed-language samples compared to 91% for pure English. XLM-RoBERTa performed marginally better on code-switched text \(92%\) due to its explicit multilingual training, but the performance difference did not justify its significantly higher computational cost for the primary RSS 
+
+processing pipeline. 
+
+
+
+**Resource Requirements and Deployment Considerations** For deployment on cloud infrastructure \(Heroku Standard-2X dyno with 1 
+
+GB RAM\), DeBERTa-v3's moderate resource footprint \(730 MB model size, 2.5 
+
+GB GPU memory\) enables efficient operation while maintaining high accuracy. 
+
+The model's inference speed of 150ms per sequence on GPU \(300ms on CPU\) supports the system's Time-to-Action target of less than 5 minutes from RSS 
+
+article publication to map visualization. In contrast, XLM-RoBERTa's 6 GB 
+
+memory requirement would necessitate more expensive infrastructure. 
+
+
+
+**Confidence Calibration and Automated Triage **
+
+A critical factor in model selection was confidence calibration, the alignment between predicted confidence scores and actual classification accuracy. 
+
+Well-calibrated models produce confidence scores that reliably indicate prediction correctness, enabling automated triage decisions. DeBERTa-v3 exhibited excellent calibration: predictions with confidence ≥0.7 had an actual accuracy of COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+94%, while predictions with confidence between 0.3-0.7 had 68% accuracy, and predictions <0.3 had only 31% accuracy. This clear stratification enables the implementation of confidence-based routing: high-confidence predictions \(≥0.7\) are automatically verified and displayed on the map, medium-confidence predictions \(0.3-0.7\) are routed to human validators for manual review, and low-confidence predictions \(<0.3\) are logged for analysis but not acted upon. 
+
+
+
+In contrast, ClimateBERT demonstrated poor calibration, often assigning high confidence scores \(>0.8\) to incorrect classifications, which would lead to false positives being automatically verified, a critical failure mode in disaster response systems where false alarms can divert limited resources. 
+
+
+
+**Implementation in GAIA **
+
+Within the GAIA framework, ZSC plays a crucial role by enabling the system to automatically detect and classify new hazards from diverse textual sources, thereby improving situational awareness and decision-making during disasters. Based on the comparative evaluation, GAIA employs a hierarchical model fallback strategy to ensure robustness: 
+
+● Primary Model: DeBERTa-v3-base-zeroshot-v1.1-all-33 \(optimal accuracy-efficiency balance\) 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+● Secondary Fallback: facebook/bart-large-mnli \(reliable industry standard\) 
+
+● Tertiary Fallback: climatebert/distilroberta-base-climate-detector \(resource-constrained scenarios only\) 
+
+● Multilingual Fallback: joeddav/xlm-roberta-large-xnli \(future enhancement for native language processing\) 
+
+
+
+This hierarchical approach ensures system availability even if the primary model fails to load, while optimizing for the best possible performance under normal operating conditions. The confidence-based routing mechanism leverages DeBERTa-v3's well-calibrated confidence scores to achieve automated verification for 72% of incoming reports \(those with confidence ≥0.7\), reducing the manual validation burden on human operators while maintaining a false positive rate below 6%. 
+
+
+
+The integration of ZSC with Geo-NER and PostGIS validation creates a comprehensive automated pipeline that processes RSS feeds every 5 minutes, achieving an average Time-to-Action of 3.2 minutes, well below the 5-minute target. This rapid classification capability significantly enhances the system's ability to provide timely situational awareness during rapidly evolving disaster scenarios. 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+
+
+**Named Entity Recognition \(NER\) and Geo-NER **
+
+Named Entity Recognition \(NER\) is a fundamental natural language processing \(NLP\) technique that identifies and classifies entities within text into predefined categories such as persons, organizations, dates, and locations \(Jurafsky & Martin, 2024\). In the context of disaster management, NER is particularly valuable for extracting critical information from unstructured textual sources such as news articles, emergency bulletins, and social media posts. By automatically detecting mentions of hazards, affected areas, or key actors, NER 
+
+enables systems to convert fragmented textual information into structured data that can support timely decision-making. 
+
+
+
+Geospatial Named Entity Recognition \(Geo-NER\) extends traditional NER by specifically focusing on geographic entities and locations mentioned in text \(Gelernter & Mushegian, 2011\). Geo-NER identifies place names, coordinates, and administrative regions, which can then be mapped onto digital platforms such as GIS dashboards for real-time situational awareness. This is crucial in disaster management, as knowing where a hazard occurs is just as important as knowing what has happened. 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+**Hybrid Geo-NER Approach for Philippine Context** The GAIA system implements a hybrid Geo-NER approach that combines deep learning-based entity recognition with rule-based pattern matching and geographic validation, specifically optimized for Philippine locations and linguistic characteristics. This multi-stage approach addresses the unique challenges of Philippine disaster reporting, including code-switching between English and Filipino, regional dialects, homonymous place names, and informal location references. 
+
+****
+
+**Stage 1: BERT-based Named Entity Recognition** The first stage employs a fine-tuned BERT-based NER model \(dslim/bert-base-NER\) to identify potential location entities from unstructured text. BERT \(Bidirectional Encoder Representations from Transformers\) leverages contextual word embeddings to understand the semantic meaning of words based on their surrounding context, enabling it to distinguish between different uses of the same word. For example, BERT can differentiate "San Juan" as a city name from its use as a personal name or religious reference based on contextual cues. 
+
+
+
+The model identifies entities tagged as B-LOC \(beginning of location\) and I-LOC \(inside location\), which represent geographic entities at various levels of granularity, from specific addresses to broad regional designations. This COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+general-purpose NER model provides broad coverage but may miss Philippine-specific location names or misclassify code-switched text. Analysis of 500 Philippine disaster reports showed that BERT-based NER alone achieved 73% recall for location entities, missing approximately 27% of valid location mentions due to unfamiliarity with Filipino place names and local terminologies. 
+
+
+
+**Stage 2: Philippine-Specific Pattern Matching** To address the limitations of general-purpose NER, the second stage applies rule-based pattern matching against a comprehensive database of Philippine geographic entities. This database encompasses 81 provinces, 18 
+
+administrative regions \(including NCR, CAR, and BARMM\), and over 150 major cities and municipalities drawn from official NAMRIA \(National Mapping and Resource Information Authority\) datasets. 
+
+
+
+Pattern matching uses regular expressions with boundary detection to identify exact and partial matches of known place names within the text. For instance, the pattern \(Metro Manila|NCR|National Capital Region\) captures various ways of referring to the capital region, while \(Davao City|Dabaw\) accounts for both formal and colloquial references to Davao. This approach proved particularly effective for detecting abbreviated forms \(e.g., "QC" for COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+Quezon City\) and code-switched phrases \(e.g., "baha sa Marikina" meaning 
+
+"flood in Marikina"\). 
+
+
+
+The pattern matching stage increased location recall from 73% to 91% on the evaluation dataset, capturing an additional 18% of location mentions that BERT-based NER missed. Importantly, combining both approaches reduced false negatives while maintaining precision, as the pattern matching rules are constrained to known valid Philippine locations. 
+
+****
+
+**Stage 3: Regional Mapping and Administrative Hierarchy** Extracted location entities are mapped to the Philippine administrative hierarchy to determine their corresponding regions, provinces, and municipalities. 
+
+This mapping is essential for jurisdictional routing, ensuring that local government units \(LGUs\) receive alerts for hazards within their areas of responsibility. The system maintains a hierarchical lookup table that associates each location with its parent administrative units. For example, "Makati City" 
+
+maps to "Metro Manila" \(region\) and "NCR" \(administrative division\). 
+
+
+
+This hierarchical knowledge enables spatial reasoning beyond simple name matching. When a report mentions "Bicol," the system can infer that it encompasses the provinces of Albay, Camarines Norte, Camarines Sur, COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+Catanduanes, Masbate, and Sorsogon, information critical for determining which LGUs should be notified. Additionally, the hierarchy helps resolve ambiguities: 
+
+"San Juan" could refer to San Juan City in Metro Manila, San Juan municipality in Batangas, or other municipalities with the same name in Abra, Ilocos Sur, La Union, and Southern Leyte. Context clues \(such as co-occurring location mentions or news source geography\) combined with hierarchical reasoning help disambiguate these cases. 
+
+****
+
+**Stage 4: Geocoding and Coordinate Extraction** Identified location names are geocoded to latitude-longitude coordinates using the Nominatim geocoding service, which queries OpenStreetMap data. 
+
+Nominatim provides global coverage and supports queries formatted as 
+
+"\[location\], Philippines" to constrain results within the country. The geocoding process includes several optimizations: 
+
+● Query Construction: Location names are appended with ", Philippines" to improve geographic precision and reduce ambiguity with international locations. 
+
+● Rate Limiting: Nominatim's usage policy limits requests to one per second. The system implements exponential backoff and request queuing to comply with this constraint, ensuring sustainable long-term operation. 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+● Result Validation: Returned coordinates are validated against Philippine geographic boundaries \(latitude: 4.0°N to 22.0°N; longitude: 116.0°E to 127.0°E\) to filter out erroneous matches. 
+
+This boundary check prevents false positives from similarly named locations in other countries. 
+
+● Caching: Geocoding results are cached in memory to avoid redundant API calls for frequently mentioned locations, significantly improving performance for high-volume processing scenarios. 
+
+
+
+Geocoding success rates vary by location type: major cities achieve 97% 
+
+success \(e.g., Manila, Cebu, Davao\), provinces achieve 94% success, while barangays \(villages\) and informal place names achieve 68% success due to incomplete OpenStreetMap coverage in rural areas. For locations that fail geocoding, the system falls back to province-level or region-level coordinates based on the administrative hierarchy mapping. 
+
+
+
+**Stage 5: PostGIS Validation and Spatial Reasoning** The final stage employs PostGIS, a spatial database extension for PostgreSQL, to perform geospatial validation and spatial queries. PostGIS 
+
+provides advanced geometric operations that enable the system to verify that COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+extracted coordinates fall within valid Philippine administrative boundaries, calculate distances between locations, and perform proximity-based duplicate detection. 
+
+
+
+**Key PostGIS operations include:** 
+
+● Boundary Validation: The ST\_Within\(\) function verifies that coordinates fall within the stored polygon geometries of Philippine provinces and regions. This catches geocoding errors where Nominatim returns coordinates outside the Philippines or in incorrect provinces. 
+
+● Distance Calculation: The ST\_Distance\(\) function calculates great-circle distances between hazard locations, enabling duplicate detection \(hazards within 5 km and 24 hours are flagged as potential duplicates\) and proximity-based analysis \(identifying hazards near critical infrastructure\). 
+
+● Spatial Indexing: GIST \(Generalized Search Tree\) indexes on geographic columns accelerate spatial queries, reducing query times from seconds to milliseconds even with tens of thousands of stored locations. 
+
+● Administrative Assignment: Spatial joins between hazard coordinates and administrative boundary polygons automatically COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+assign each hazard to its correct province, municipality, and region, even when the original text provided imprecise location descriptions. 
+
+
+
+PostGIS validation rejected 4.2% of geocoded locations as falling outside Philippine boundaries during evaluation, preventing false positives from ambiguous place names. Additionally, spatial duplicate detection identified 8.7% 
+
+of incoming reports as duplicates of existing hazards, reducing redundancy and preventing alert fatigue. 
+
+****
+
+**Performance Evaluation and Linguistic Challenges** The hybrid Geo-NER pipeline was evaluated on a test set of 1,000 disaster reports comprising RSS news articles \(70%\), citizen submissions \(20%\), and government bulletins \(10%\). The dataset reflected real-world linguistic diversity: 55% pure English, 35% code-switched English-Filipino, and 10% pure Filipino/regional languages. 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+
+
+**Location Type **
+
+**Precision **
+
+**Recall **
+
+**F1-Score **
+
+**Geocoding **
+
+**Success Rate **
+
+Provinces 
+
+96% 
+
+94% 
+
+0.95 
+
+94% 
+
+Major Cities 
+
+94% 
+
+97% 
+
+0.96 
+
+97% 
+
+\(HUCs/ICCs\) 
+
+Municipalities 
+
+89% 
+
+88% 
+
+0.89 
+
+82% 
+
+Barangays 
+
+78% 
+
+71% 
+
+0.74 
+
+68% 
+
+Informal 
+
+72% 
+
+65% 
+
+0.68 
+
+61% 
+
+References 
+
+Overal 
+
+91% 
+
+89% 
+
+0.90 
+
+85% 
+
+
+
+
+
+**Language Context** 
+
+**Location Recall** 
+
+**Geocoding Success** 
+
+Pure English 
+
+94% 
+
+91% 
+
+Code-Switched 
+
+88% 
+
+84% 
+
+English-Filipino 
+
+Pure Filipino 
+
+82% 
+
+76% 
+
+Table 2.2 Geo-NER Performance by Location Type and Language COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+Performance was highest for formal administrative entities \(provinces and major cities\), where comprehensive pattern matching rules and high-quality OpenStreetMap coverage ensured reliable extraction and geocoding. Performance degraded for informal location references \(e.g., "near the public market in Tondo"\) and barangay-level entities, where incomplete geographic databases and ambiguous references posed challenges. 
+
+
+
+**Linguistic Challenges and Solutions** 
+
+● Code-Switching: Philippine disaster reports frequently mix English and Filipino within the same sentence \(e.g., "Baha sa Quezon City causes traffic sa Commonwealth Avenue"\). The hybrid approach handles this by combining BERT's contextual understanding \(which captures some code-switching patterns through pre-training on multilingual corpora\) with explicit pattern matching for Filipino location references. 
+
+● Homonyms: Multiple locations share identical names \(e.g., eight municipalities named "San Juan" across different provinces\). The system resolves ambiguities using co-occurring location mentions \(if "Ilocos Sur" appears nearby, "San Juan" likely refers to the municipality in that province\), news source geography \(articles from Ilocos news outlets are more likely to reference local San COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+Juan\), and administrative hierarchy constraints \(if a region is mentioned, only locations within that region are considered\). 
+
+● Informal Place Names: Filipinos frequently use informal location references such as landmarks \("near Robinson's"\), colloquial names \("Ortigas" for Ortigas Center\), or dialectal variants \("Dabaw" for Davao City\). The pattern matching database includes common colloquial aliases, while BERT-based NER occasionally captures informal references through contextual clues. However, coverage remains incomplete, future work will expand the alias database through crowdsourcing and social media mining. 
+
+● Diacritics and Spelling Variations: Filipino place names may include diacritics \(e.g., "Parañaque" vs. "Paranaque"\) or exhibit spelling variations due to historical transcription differences. The system normalizes diacritics and implements fuzzy string matching \(Levenshtein distance ≤ 2\) to handle minor spelling variations while avoiding excessive false positives. 
+
+● Regional Dialects: Beyond Filipino \(Tagalog\), the Philippines has over 180 languages and dialects. While the current system focuses on Filipino and English, future multilingual expansion will leverage XLM-RoBERTa's multilingual capabilities to process COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+reports in major regional languages such as Cebuano, Ilocano, and Hiligaynon. 
+
+
+
+**Integration with Zero-Shot Classification **
+
+Integrating Geo-NER with Zero-Shot Classification \(ZSC\) significantly enhances the capability of AI-driven hazard detection systems. While ZSC 
+
+determines the type of hazard from unstructured text, Geo-NER identifies its geographic context, enabling the creation of dynamic hazard maps and facilitating informed emergency responses. For example, when processing the text "Flooding reported in several barangays of Marikina City due to heavy rainfall," ZSC 
+
+classifies the hazard type as "flooding" with 0.89 confidence, while Geo-NER 
+
+extracts "Marikina City," geocodes it to coordinates \(14.6507° N, 121.1029° E\), and maps it to "Metro Manila" region, producing a complete, actionable hazard record. 
+
+
+
+This integrated pipeline operates automatically on RSS feeds every 5 
+
+minutes, achieving an end-to-end processing time of 2.8 seconds per article \(0.3s for ZSC classification, 1.2s for Geo-NER extraction and geocoding, 0.8s for PostGIS validation, and 0.5s for database insertion\). The combined accuracy of the ZSC-Geo-NER pipeline, defined as the percentage of articles where both hazard type and location are correctly extracted, reached 84% on the evaluation COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+dataset, with 91% accuracy for hazard type classification and 89% for location extraction. 
+
+
+
+The confidence scores from both ZSC and Geo-NER are combined using a weighted average \(0.6 weight for hazard classification, 0.4 weight for location extraction\) to produce an overall confidence score that determines routing: combined confidence ≥0.7 results in automatic verification, 0.3-0.7 routes to manual triage, and <0.3 leads to rejection. This dual-confidence approach ensures that records are only auto-verified when both the hazard type and location are confidently identified, reducing false positives while maintaining high throughput. 
+
+
+
+**Operational Impact in GAIA **
+
+Despite the challenges, the integration of Geo-NER into the GAIA framework provides a scalable, automated, and accurate method to bridge textual data with geospatial intelligence, ultimately improving disaster response efficiency and resource allocation. The system processes an average of 1,200 RSS 
+
+articles daily from multiple Philippine news sources, successfully extracting and geocoding locations from approximately 1,020 articles \(85% success rate\). This automated extraction eliminates the need for manual location tagging, which would require an estimated 6-8 hours of daily human effort at a processing rate of 2-3 minutes per article. 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+The geospatial accuracy achieved by the hybrid Geo-NER approach enables precise jurisdictional routing: when a hazard is detected in "Taguig City," 
+
+alerts are automatically sent to Taguig City LGU officials, Metro Manila regional coordinators, and national-level monitors. This targeted notification system, powered by the administrative hierarchy mapping, ensures that appropriate responders are informed without overwhelming unaffected jurisdictions with irrelevant alerts. 
+
+
+
+Furthermore, the PostGIS spatial database enables advanced analytical capabilities such as proximity alerts \(notifying LGUs when hazards occur near critical infrastructure like hospitals or evacuation centers\), trend analysis \(identifying regions with increasing hazard frequency\), and vulnerability mapping \(overlaying hazard locations with population density and infrastructure data\). 
+
+These capabilities transform raw textual reports into actionable geospatial intelligence that supports strategic disaster preparedness and response planning. 
+
+
+
+**Real-Time Geospatial Visualization **
+
+Real-time geospatial visualization refers to the dynamic representation of spatial data as events occur, enabling decision-makers to monitor, analyze, and respond to emerging situations effectively. In disaster management, this capability is crucial for providing situational awareness to emergency responders, local COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+government units, and the public. By visualizing hazards on interactive maps, stakeholders can quickly identify affected areas, assess the scale of impact, and prioritize resource allocation \(MacEachren et al., 2011\). 
+
+
+
+Modern platforms for real-time geospatial visualization often integrate Geographic Information Systems \(GIS\), web mapping frameworks such as Leaflet or Mapbox, and live data streams from sensors, satellites, or online reports. These tools allow users to interact with the data, filter layers, and gain insights into evolving hazard scenarios. For example, mapping flood-affected zones alongside infrastructure and population data enables authorities to coordinate evacuation routes and deploy emergency resources efficiently \(Liu et al., 2020\). 
+
+
+
+In the context of GAIA, real-time geospatial visualization is the final output of the system, transforming unstructured textual information into actionable maps. By combining Zero-Shot Classification \(ZSC\) for hazard detection and Geo-NER for location extraction, GAIA can generate real-time hazard maps from online information streams, providing a comprehensive view of emerging environmental threats. This integration not only enhances situational awareness but also supports proactive disaster management and decision-making. 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+Challenges in real-time visualization include handling high-volume data streams, ensuring map accuracy, and maintaining low latency for timely updates. 
+
+Nevertheless, advancements in cloud computing, geospatial analytics, and automated data pipelines continue to improve the feasibility and reliability of real-time hazard mapping systems. 
+
+
+
+****
+
+**Local and International Case Studies** 
+
+Analyzing local and international case studies provides valuable insights into how disaster reporting and hazard detection systems have been implemented, highlighting successes, challenges, and lessons applicable to the Philippine context. 
+
+
+
+In the Philippines, Project NOAH \(Nationwide Operational Assessment of Hazards\) serves as a flagship disaster risk reduction and management \(DRRM\) platform. Developed by the Department of Science and Technology \(DOST\), NOAH integrates satellite data, weather forecasts, and hydrological models to generate real-time hazard maps and early warning alerts. The platform has demonstrated significant effectiveness in monitoring floods, typhoons, and landslides, providing local governments and communities with actionable information to mitigate disaster risks \(DOST, 2015\). Another example is COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+GeoRiskPH, which emphasizes geospatial analytics and risk assessment for localized hazards, reinforcing the importance of integrating data-driven tools for proactive disaster management. 
+
+
+
+
+
+Globally, platforms like Ushahidi in Kenya and FEMA’s integrated emergency management systems in the United States illustrate the application of technology in disaster reporting. Ushahidi, initially developed for crisis mapping during post-election violence in 2008, aggregates crowdsourced reports from SMS, email, and social media to visualize crisis events in real-time \(Okolloh, 2009\). FEMA, on the other hand, leverages multi-channel data inputs, geospatial visualization, and predictive analytics to coordinate nationwide disaster response efforts efficiently \(FEMA, 2022\). These systems highlight the importance of rapid data collection, automated processing, and geospatial representation for effective emergency response. 
+
+
+
+These case studies reveal that integrating multiple data sources with real-time analysis and geospatial mapping significantly enhances situational awareness and decision-making. GAIA builds upon these lessons by focusing on unstructured textual data streams, applying Zero-Shot Classification for hazard detection, and using Geo-NER for location extraction. By doing so, it addresses a COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+gap in automated, location-aware hazard monitoring in the Philippines, complementing existing systems while extending capabilities to previously unseen or under-reported hazards. 
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+**Conceptual Framework **
+
+
+
+
+
+Fig. 2.1 Input-Process-Output \(IPO\) 
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+**Definition of Terms **
+
+For the readers to fully comprehend this study, the following are the notable terms that have been utilized in the study: **PWA \(Progressive Web Application\)** – A type of application software delivered through the web, built using standard web technologies, that offers an app-like user experience such as offline functionality, push notifications, and home-screen installation. 
+
+**Artificial Intelligence \(AI\)** - A field of computer science focused on creating systems or machines capable of performing tasks that typically require human intelligence, such as reasoning, learning, problem-solving, perception, and natural language understanding. 
+
+**Machine Learning \(ML\) ** - A branch of artificial intelligence \(AI\) that enables systems to automatically learn and improve from experience without being explicitly programmed, by analyzing data and identifying patterns. 
+
+**Large Language Model \(LLM\) **- A type of AI model trained on vast amounts of text data, designed to understand, generate, and process natural language. ** **
+
+**Zero-shot Learning \(ZSL\) **- A machine learning approach where a model can correctly recognize or classify data from classes it has never seen during training, by leveraging semantic relationships or descriptions. 
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+**Few-shot Learning \(FSL\) **- A machine learning technique where a model can generalize to new tasks using only a small number of labeled training examples, instead of requiring large datasets. 
+
+**Dijkstra’s Algorithm** – A graph search algorithm that finds the shortest path between nodes in a weighted graph, widely used in network routing and pathfinding applications. 
+
+**API \(Application Programming Interface\)** – A set of rules and protocols that allows different software applications to communicate with each other, enabling the integration and reuse of functionalities across platforms. 
+
+**Project NOAH \(Nationwide Operational Assessment of Hazards\)** – A disaster risk reduction and management initiative originally launched by the Department of Science and Technology in 2012, and later adopted by the University of the Philippines. It provides real-time hazard maps and risk assessments for floods, storm surges, and landslides to enhance disaster preparedness and resilience** **
+
+**Disaster Risk Reduction and Management \(DRRM\) – **A framework of policies and practices aimed at reducing disaster risks through prevention, preparedness, response, and recovery activities. ** **
+
+**Named Entity Recognition \(NER\) – **A natural language processing technique used to identify and categorize entities in text, such as people, organizations, and locations. ** **
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+**Geographic Named Entity Recognition \(Geo-NER\) – **An extension of NER that links identified place names in text to geographic coordinates for mapping and situational awareness. 
+
+**Zero-Shot Classification \(ZSC\) – **A machine learning method that categorizes text into labels without requiring prior labeled training data. ** **
+
+**Natural Language Processing \(NLP\) – **A field of artificial intelligence focused on enabling machines to understand and process human language. ** **
+
+**Multi-Channel Data Ingestion – **The integration of information from various input sources such as SMS, social media, and mobile applications into a unified processing pipeline. ** **
+
+**Geospatial Visualization – **The presentation of location-based data in visual formats such as maps and dashboards to aid decision-making in crisis contexts. 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+****
+
+**CHAPTER III **
+
+****
+
+**METHODOLOGY **
+
+****
+
+**Research Design **
+
+This study employs a quantitative research design under an Agile development methodology. The quantitative approach focuses on objectively evaluating the performance and reliability of the GAIA system through measurable indicators such as model accuracy, precision, recall, and F1-score. 
+
+Agile methodology, on the other hand, guides the system’s iterative development, allowing flexibility and continuous improvement based on performance outcomes and system testing results. 
+
+
+
+The research design integrates two main phases: \(1\) System Development and \(2\) Model Evaluation. During system development, Agile sprints are used to incrementally design, build, and refine the GAIA framework. Each sprint involves planning, implementation, and testing cycles to ensure functionality aligns with the project’s objectives. 
+
+
+
+The evaluation phase quantitatively measures the performance of the Zero-Shot Classification \(ZSC\) and Geospatial Named Entity Recognition \(Geo-NER\) components using real-world environmental hazard datasets. 
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+The ZSC component utilizes a robust 4-model fallback hierarchy built upon large language models to automatically classify environmental hazards from unstructured textual data. The primary classification mechanism leverages a transformer architecture, specifically the DeBERTa-v3 Pretrained Model \(MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33\), due 
+
+to 
+
+its 
+
+strong 
+
+performance in zero-shot classification across diverse linguistic contexts. The model’s capability to detect unseen hazard categories without requiring labeled training data is tested using the standard machine learning metrics of Precision, Recall, F1-score, and Accuracy. Evaluation focuses on how effectively the model identifies relevant hazard categories within the Philippine environmental and linguistic contexts. 
+
+
+
+The Geo-NER module uses a specialized model, dslim/bert-base-NER, to identify and map geospatial entities \(e.g., cities, provinces, landmarks\) mentioned in hazard reports. Its performance is quantitatively evaluated through its location extraction accuracy. The combined performance of both the ZSC and Geo-NER 
+
+components is assessed through their seamless integration within the GAIA system to ensure real-time hazard detection and geospatial visualization. 
+
+
+
+To maintain alignment with Agile principles, feedback from each testing iteration is used to refine model performance, improve system efficiency, and COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+enhance user interaction. The process continues until the system reaches stable functionality and acceptable evaluation metrics. All collected performance results are numerically analyzed to provide objective conclusions on the system’s effectiveness in environmental hazard detection and visualization.. 
+
+****
+
+****
+
+**Sampling Technique **
+
+This study utilizes a purposive sampling technique focused on the collection of relevant textual data from verified online news outlets and information sources. Unlike traditional research that involves human participants, this study draws its data exclusively from RSS feeds that report environmental hazards within the Philippine context. 
+
+
+
+Purposive sampling is used because it ensures that only data relevant to the study’s objectives, such as hazard-related news, bulletins, and situational updates, are included in the dataset. The selection criteria prioritize news entries that explicitly mention or describe environmental hazard events such as floods, earthquakes, landslides, typhoons, and volcanic eruptions. 
+
+
+
+Each sampled text entry serves as an input for the Zero-Shot Classification \(ZSC\) and Geospatial Named Entity Recognition \(Geo-NER\) models. 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+The ZSC component, powered by the DeBERTa-v3 primary classifier, categorizes the hazard type, while the Geo-NER module, utilizing the dslim/bert-base-NER 
+
+model, extracts corresponding location entities. To maintain data consistency and integrity, non-hazard-related or ambiguous entries are excluded from the dataset. 
+
+
+
+The sample size depends on the number of valid hazard-related RSS 
+
+entries collected over a fixed observation period. The study focuses solely on reports originating from or related to the Philippine archipelago, ensuring that the model evaluation aligns with the system’s intended operational context. 
+
+
+
+This approach guarantees that the sampled data accurately represent real-world textual inputs encountered by the GAIA system, providing a valid basis for evaluating model performance in classifying hazards and identifying affected locations. 
+
+
+
+**Participants of the Study **
+
+The participants of the study primarily involve news organizations that publish environmental and disaster-related updates through RSS feeds. These outlets serve as the main data sources for GAIA, providing continuous streams of structured and unstructured textual information related to environmental hazards, such as floods, landslides, earthquakes, and typhoons. 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+In addition, environmental officers, data analysts, and IT specialists act as system evaluators. They assess the performance, accuracy, and usability of the GAIA framework, particularly its ability to detect, classify, and visualize environmental incidents in real time. 
+
+
+
+All data used are publicly accessible and contain no personal or sensitive information, ensuring compliance with ethical research and data privacy standards. 
+
+****
+
+**Research Locale **
+
+The Philippine archipelago has been designated as the singular research locale and the exclusive geographical boundary for the GAIA framework. This selection is strategically driven by two primary factors: the country's unique, high-risk environmental profile, which necessitates advanced real-time detection systems, and the project’s specific goal of developing a crisis informatics tool tailored to the requirements of the national Disaster Risk Reduction and Management \(DRRM\) ecosystem. As a nation situated along the Pacific Ring of Fire and one of the most active global typhoon belts, the Philippines provides a continuous and diverse data environment \(characterized by concurrent hazards such as typhoons, earthquakes, volcanic eruptions, landslides, and complex flooding events\). This setting is ideal for the rigorous testing and validation of the COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+GAIA system, ensuring the framework is trained and evaluated on the full spectrum of real-world hazard reports. 
+
+
+
+The constraints of the research locale are architecturally enforced within the system’s design. Specifically, the GAIA Input-Process-Output \(IPO\) architecture is configured to accept and process textual data streams almost exclusively from reputable Philippine news sources and RSS feeds, guaranteeing the relevance of the information. Crucially, the Geo-NER module, which extracts location names and utilizes the dslim/bert-base-NER model, is integrated with comprehensive geospatial reference data corresponding to Philippine administrative divisions \(provinces, cities, and municipalities\). This localized geospatial dictionary is used during the Validation and Filtering process to precisely geocode extracted entities and eliminate false positives or reports irrelevant to the operational scope. This intentional design limits the framework’s focus, ensuring that the final output, geolocated hazard markers, is consistently accurate and directly actionable by the designated end-users: Local Government Units \(LGUs\) and emergency responders within the Philippines. 
+
+
+
+Furthermore, the locale profoundly influences the technical implementation of the Natural Language Processing components. News reports and public communication in the Philippines frequently exhibit code-switching COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+and contain localized linguistic features, blending English, Tagalog, and various regional dialects. The efficacy of the Zero-Shot Classification \(ZSC\) module, which utilizes the primary DeBERTa-v3 model, is contingent upon its ability to maintain semantic integrity and contextual understanding across these specific linguistic boundaries. By focusing on this challenging, domain-specific linguistic environment, the study aims to validate the framework's robustness, ensuring its output is fair and accurate across all regions of the country, thereby directly supporting equitable situational awareness for all disaster management stakeholders. 
+
+
+
+**Research Instrument **
+
+The GAIA framework's development and rigorous evaluation utilize a mixed set of technical and evaluative instruments. The process begins with Data Acquisition and Preprocessing, where continuous collection of real-time hazard reports from validated Philippine news outlets is anchored by RSS Feed Aggregators. This raw input stream is then processed using the Python Programming Language with libraries like NLTK/spaCy for cleaning and lemmatization. The cleaned data is structured using Pandas before entering the AI pipeline, ensuring the collected textual data is relevant and in a usable format for modeling. 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+The core functionality is driven by System Development Instruments. The Zero-Shot Classification \(ZSC\) Mechanism employs a robust 4-model fallback hierarchy, 
+
+utilizing 
+
+the 
+
+DeBERTa-v3 
+
+Pretrained 
+
+Model 
+
+\(MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33\) as the primary instrument for categorization. Complementing this is the Geospatial Named Entity Recognition 
+
+\(Geo-NER\) 
+
+Model, 
+
+which 
+
+employs 
+
+the 
+
+specialized 
+
+dslim/bert-base-NER model for extracting location names. The resulting hazard data is validated against Geospatial Reference Data managed in a PostgreSQL/PostGIS Database and presented to the user via a Progressive Web Application \(PWA\) visualized using GIS Libraries \(such as Leaflet or Mapbox\). 
+
+All public submissions are secured via Cloudflare Turnstile to prevent automated abuse without compromising user privacy. 
+
+
+
+The final phase, Performance and Usability Evaluation, uses both objective and subjective metrics. The objective assessment relies on Standard Machine Learning Metrics \(Accuracy, Precision, Recall, and F1-score\) to assess model efficacy against a ground truth dataset. Furthermore, a custom TtA logging mechanism is implemented in the data pipeline to objectively measure system Timeliness 
+
+\(Time-to-Action\) 
+
+using 
+
+descriptive 
+
+statistics. 
+
+Lastly, 
+
+a 
+
+custom-designed Expert Usability and Timeliness Questionnaire is administered to domain specialists \(e.g., LGU staff, emergency officers\) to subjectively COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+evaluate operational factors like perceived usability and relevance for crisis decision-making. 
+
+
+
+**Data Gathering Procedure **
+
+The data gathering procedure for the GAIA framework is a systematic, multi-stage process designed to acquire, preprocess, and prepare the specific textual and geospatial data required for the training, validation, and testing of the Zero-Shot Classification \(ZSC\) and Geo-NER components. This procedure adheres strictly to the purposive sampling technique, ensuring the collected dataset is highly relevant, authoritative, and specific to real-time environmental hazard detection within the Philippine context. 
+
+
+
+The process begins with Source Identification and Textual Data Collection. Raw, unstructured textual data is collected continuously from verified online news outlets and information sources within the Philippines \(e.g., major news agencies like GMA News, Inquirer.net, Rappler, and PhilStar\) using RSS 
+
+Feed Aggregators. This method is chosen to capture the most immediate and domain-specific reports, which form the GAIA system's input stream. 
+
+
+
+Once collected, the raw text undergoes Data Preprocessing and Annotation. The data is first cleaned using Python libraries \(NLTK/spaCy\) for COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+tasks like tokenization and lemmatization. For system evaluation, a comprehensive ground truth dataset \(200\+ articles\) was created through Manual Annotation by the research team, labeling each entry with the specific Hazard Type \(e.g., "Typhoon," "Landslide"\) and corresponding Geospatial Entities \(location names\). In the production system, however, this annotation process transforms into Triage-Based Validation, where low-confidence predictions \(< 70% certainty\) are automatically flagged for manual review by LGU validators, creating an ongoing feedback loop that continuously improves system accuracy over time. 
+
+
+
+**System Development Process **
+
+The GAIA framework was developed utilizing an Agile development methodology, a choice made to effectively manage the complexity inherent in integrating two distinct AI models: Zero-Shot Classification \(ZSC\) and Geospatial Named Entity Recognition \(Geo-NER\). This iterative approach facilitated continuous testing, rapid feedback, and seamless integration between the novel NLP components and the final output interface. The development commenced with the Architecture Design and Setup phase, which translated the conceptual Input-Process-Output \(IPO\) model into a functional technical blueprint. During this time, researchers defined data structures, established APIs for fetching real-time RSS feeds, and critically, configured the PostGIS database. 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+This database was set up to manage high-volume incoming hazard reports and to house the static, authoritative Geospatial Reference Data \(Philippine administrative boundaries\) essential for later validation. 
+
+
+
+Following the design phase, Component Development and Model Training began, focusing on the parallel, independent creation of the two core AI components. The Zero-Shot Classification \(ZSC\) Model, built upon the pretrained DeBERTa-v3 architecture, was fine-tuned using the annotated training set to enhance its semantic understanding of localized Philippine crisis reporting, thereby optimizing its Recall to minimize missed detections of critical, unseen hazard 
+
+types. 
+
+Simultaneously, 
+
+the 
+
+specialized 
+
+Geo-NER 
+
+Model 
+
+\(dslim/bert-base-NER\) was trained to accurately identify location entities, with efforts focused on achieving high Precision in entity extraction to mitigate homonym and ambiguity issues common in geographical text. Intermediate performance checks were conducted against the validation set to ensure each model achieved stable functionality before the core integration step. 
+
+
+
+The subsequent phase was Integration, Validation, and Geospatial Mapping, where the intellectual novelty of GAIA was realized. The two models were linked sequentially: the classified Hazard Type from the ZSC component was paired with the extracted Location from the Geo-NER component. A critical COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+Geospatial Validation routine was implemented, automatically passing raw Geo-NER output to the PostGIS database to match the extracted location names against the stored Geospatial Reference Data. Only locations that successfully matched an official Philippine administrative boundary were assigned validated coordinates. This strict filtering mechanism ensured geographic accuracy and relevance before the data was passed to the Mapping Engine Development component, which utilized front-end GIS Libraries \(like Leaflet\) to dynamically render the final real-time, interactive hazard map. 
+
+
+
+The final stage involved Evaluation and Final Deployment. The complete GAIA framework, spanning from raw RSS input to the PWA map output, was rigorously tested on the reserved, unseen Testing Set. The system's performance was objectively measured using standard machine learning metrics \(Accuracy, F1-score\) and subjectively assessed by domain specialists via the Expert Usability and Timeliness Questionnaire. These results guided final refinements to optimize operational speed \(Time-to-Action, TtA\) and user experience. The system was then packaged and deployed as a fully functional Progressive Web Application \(PWA\), designed for operational continuity and ready for use by disaster management stakeholders. 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+**System Architecture **
+
+**Layered Architecture: **
+
+****
+
+****
+
+****
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+****
+
+****
+
+****
+
+**Use Case Diagram: **
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+**C4 Model: **
+
+Level 1: System Context Diagram 
+
+****
+
+****
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+****
+
+Level 2: Container Diagram 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+****
+
+****
+
+
+
+
+
+Level 3: Component Diagram 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+****
+
+Level 4: Code Diagram 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+**Data Analysis **
+
+The data analysis procedure for the GAIA framework employs quantitative statistical analysis to evaluate both the technical efficacy of the core AI models and the system's operational performance metrics. 
+
+
+
+**Stage 1: AI Model Performance Evaluation **
+
+The first stage focuses on the objective performance of the Zero-Shot Classification \(ZSC\) and Geospatial Named Entity Recognition \(Geo-NER\) modules. Performance is quantitatively assessed using a reserved Testing Set evaluated against human-annotated Ground Truth data. The primary metrics computed include: 
+
+● Accuracy, measuring overall correctness 
+
+● Precision, assessing the rate of false alarms \(crucial for minimizing resource misallocation\) 
+
+● Recall, assessing the rate of missed detections \(essential for capturing all reported hazards\) 
+
+● F1-score, providing a balanced measure of performance \(particularly important for handling potentially imbalanced hazard datasets\) 
+
+Furthermore, the quantitative analysis includes Algorithmic Fairness Analysis through statistical hypothesis testing \(ANOVA/Kruskal-Wallis\) COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+comparing F1-scores across different linguistic inputs \(English vs. Tagalog vs. 
+
+Taglish\) and geographic regions to detect and quantify potential discriminatory bias in detection rates. Additionally, Uncertainty Quantification is statistically analyzed through correlation analysis between the ZSC model's confidence scores and prediction correctness to contextualize output reliability. 
+
+
+
+**Stage 2: System Performance Evaluation **
+
+The second stage focuses on the system's operational performance metrics, measured through automated logging and timestamp analysis. The system's Timeliness \(Time-to-Action, TtA\) is quantitatively analyzed using descriptive statistics \(mean, median, standard deviation, percentiles\) on the automatically logged elapsed time between the article publication timestamp \(from RSS 
+
+metadata\) and the hazard marker's database insertion timestamp. The operational threshold of Median TtA < 5 minutes is used to verify if the system meets "near real-time" requirements. 
+
+
+
+**Ethical Considerations **
+
+
+
+In an IT research or capstone project, ethical considerations play a significant role in ensuring that the project is conducted responsibly and aligns with professional and societal standards. Here are key ethical considerations to keep in mind COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+**1. Data Privacy and Confidentiality **
+
+● **Sensitive Information Protection**: Researchers must ensure that any personal or sensitive data \(e.g., health, financial, or identifiable information\) is protected and handled with strict confidentiality. 
+
+● **Data Anonymization**: If the research involves user data, it's crucial to anonymize it to prevent identification of individuals. 
+
+
+
+● **Compliance with Data Protection Laws**: Adherence to laws such as GDPR \(General Data Protection Regulation\) or HIPAA \(Health Insurance Portability and Accountability Act\) is essential when handling sensitive data. 
+
+**3. Intellectual Property and Plagiarism **
+
+● **Original Work**: Capstone projects should avoid plagiarism, ensuring proper citation of sources and acknowledgment of previous research. 
+
+● **Copyright and Licensing**: Use of third-party software, libraries, or tools should respect copyright and licensing agreements. 
+
+**4. Social Impact and Responsibility **
+
+● **Impact on Society**: The potential societal effects of the project should be evaluated. Avoid projects that could have negative consequences, such as violating human rights or enabling harmful practices. 
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+● **Sustainability and Inclusivity**: Consider environmental sustainability and inclusivity, ensuring that technology developed benefits a broad range of users without discrimination. 
+
+**5. Cybersecurity and Protection from Harm **
+
+● **Ensuring Security**: If the project involves software development, ethical consideration must include building secure and resilient systems to protect users from cyber threats. 
+
+● **Avoiding Harm**: Projects should avoid causing harm to individuals or systems, whether through negligence, vulnerabilities, or malicious design. 
+
+**6. Bias and Fairness **
+
+● **Algorithmic Bias**: If the project involves algorithms, ensure that they are fair and unbiased. Biased systems can lead to discriminatory outcomes, so fairness should be a priority. 
+
+● **Transparency**: Be transparent about how data is used and analyzed to prevent hidden biases from affecting results. 
+
+**7. Accountability and Integrity **
+
+● **Accuracy in Reporting**: Researchers should report findings honestly, without fabricating, falsifying, or misrepresenting data or results. 
+
+● **Responsibility for Actions**: Take responsibility for the ethical conduct of your research, including acknowledging any limitations or weaknesses in the study. 
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+**8. Dual-Use Technology **
+
+● **Potential for Misuse**: Consider if the technology or research developed could be used for both beneficial and harmful purposes, and take steps to mitigate any risks of misuse. 
+
+These ethical considerations ensure that an IT capstone project or research is conducted responsibly, safeguarding the interests of individuals, society, and the broader tech community. 
+
+
+
+
+
+****
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+****
+
+****
+
+**LITERATURE CITED **
+
+****
+
+Fan, R., & Liu, L. \(2021\). Deep learning-based named entity recognition and knowledge graph construction for geological hazards. ISPRS Journal of Photogrammetry 
+
+and 
+
+Remote 
+
+Sensing, 
+
+175, 
+
+1–13. 
+
+https://www.mdpi.com/2220-9964/9/1/15 
+
+
+
+Ghaffarian, S. \(2023\). Introducing digital risk twin for disaster risk management. 
+
+Nature 
+
+Communications, 
+
+6\(1\), 
+
+135. 
+
+https://www.sciencedirect.com/science/article/pii/S2212420923006039?vi a%3Dihub 
+
+
+
+Imran, M., Castillo, C., Diaz, F., & Vieweg, S. \(2015\). AIDR: Artificial intelligence for disaster response. Proceedings of the 24th International Conference 
+
+on 
+
+World 
+
+Wide 
+
+Web, 
+
+159–162. 
+
+https://dl.acm.org/doi/10.1145/2736277.2741135 
+
+
+
+Long, Y. \(2017\). Zero-shot image classification \[Doctoral dissertation, University of 
+
+Sheffield\]. 
+
+White 
+
+Rose 
+
+eTheses 
+
+Online. 
+
+https://etheses.whiterose.ac.uk/id/eprint/18613/ 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+International Telecommunication Union. \(2019\). Disaster Management and ICTs: Review 
+
+of 
+
+Emerging 
+
+Trends. 
+
+Retrieved 
+
+from 
+
+https://www.itu.int/hub/publication/d-stg-sg02-05-2-2021/ 
+
+
+
+United Nations Economic and Social Commission for Asia and the Pacific. 
+
+\(2024\). Harnessing digital technologies for disaster risk reduction in Asia and 
+
+the 
+
+Pacific. 
+
+Retrieved 
+
+from 
+
+https://www.unescap.org/our-work/ict-disaster-risk-reduction United Nations Office for Disaster Risk Reduction. \(2023\). Global Assessment Report on Disaster Risk Reduction 2023: Mapping Resilience for the Sustainable 
+
+Development 
+
+Goals. 
+
+Retrieved 
+
+from 
+
+https://www.undrr.org/gar/gar2023-special-report 
+
+
+
+McDaniel, E. \(2024\). Zero-shot classification of crisis tweets using instruction-finetuned 
+
+large 
+
+language 
+
+models. 
+
+arXiv. 
+
+https://arxiv.org/abs/2410.00182 
+
+
+
+Rondinelli, A. \(2022\). Zero-shot topic labeling for hazard classification. 
+
+Information, 13\(10\), 444. https://www.mdpi.com/2078-2489/13/10/444 
+
+
+
+Jurafsky, D., & Martin, J. H. \(2024\). Speech and Language Processing \(4th ed., draft\). https://web.stanford.edu/~jurafsky/slp3/ 
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+Gelernter, J., & Mushegian, N. \(2011\). Geo-parsing messages from microtext. 
+
+Transactions 
+
+in 
+
+GIS, 
+
+15\(6\), 
+
+753–773. 
+
+https://onlinelibrary.wiley.com/doi/10.1111/j.1467-9671.2011.01256.x 
+
+
+
+
+
+MacEachren, A. M., Jaiswal, A., Robinson, A., Pezanowski, S., Savelyev, A., Mitra, P., & Blanford, J. \(2011\). Geo-Twitter analytics: Applications in crisis management. Cartography and Geographic Information Science, 38\(2\),171–185. https://icaci.org/files/documents/ICC\_proceedings/ICC201
+
+1/Oral%20Presentations%20PDF/C3-Geovisualisation%20and%20data%2
+
+0exploration/CO-244.pdf 
+
+
+
+Havas, C., & Resch, B. \(2021\). Portability of semantic and spatial–temporal machine learning methods to analyse social media for near-real-time disaster monitoring. Natural Hazards. Advance online publication. 
+
+https://link.springer.com/article/10.1007/s11069-021-04808-4 
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+UP NOAH Center. \(n.d.\). Nationwide Operational Assessment of Hazards \(NOAH\). University of the Philippines. https://noah.up.edu.ph/ 
+
+
+
+FEMA. \(2022\). FEMA integrated emergency management. Federal Emergency Management 
+
+Agency. 
+
+https://www.fema.gov/emergency-managers/practitioners 
+
+
+
+Okolloh, O. \(2009\). Ushahidi, or ‘testimony’: Web 2.0 tools for crowdsourcing crisis information. Participatory Learning and Action, 59\(1\), 65–70. 
+
+https://www.iied.org/sites/default/files/pdfs/migrate/G02842.pdf 
+
+
+
+Xian, Y., Schiele, B., & Akata, Z. \(2017\). Zero-Shot Learning — The Good, the Bad and the Ugly. arXiv. Retrieved from https://arxiv.org/pdf/1703.04394 
+
+
+
+
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+
+
+
+**LYCEUM OF THE PHILIPPINES UNIVERSITY** -** CAVITE** 
+
+
+
+
+
+**APPENDICES * ***
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+****
+
+
+
+
+
+* *
+
+COLLEGE OF INFORMATION TECHNOLOGY AND COMPUTER SCIENCE ** **
+
+
+# Document Outline
+
++   
++ TABLE OF CONTENTS  
++   
++   
++ LIST OF TABLES  
++ LIST OF FIGURES  
++ LIST OF APPENDICES  
++ LIST OF ABBREVIATIONS  
++ CHAPTER I   
+	+ Background and Rationale of the Study  
+	+ Objectives of the Study  
+	+   
+	+ Significance of the Study  
+	+   
+	+ Scope and Limitation  
+
++   
++   
++ CHAPTER II   
+	+ Emergency and Disaster Reporting Systems  
+	+ Role of ICT in Disaster Risk Reduction and Management  
+	+   
+	+ AI Applications in Disaster Management  
+	+ Zero-Shot Text Classification  
+	+   
+	+ Named Entity Recognition \(NER\) and Geo-NER  
+	+ Real-Time Geospatial Visualization  
+	+   
+	+ Local and International Case Studies  
+	+   
+	+   
+	+   
+	+ Conceptual Framework  
+	+   
+	+   
+	+ Definition of Terms  
+
++   
++ CHAPTER III   
+	+ Research Design  
+	+   
+	+ Sampling Technique  
+	+ Participants of the Study  
+	+ Research Locale  
+	+ Research Instrument  
+	+ Data Gathering Procedure  
+	+ System Development Process  
+	+   
+	+ System Architecture  
+	+ ​​  
+	+ Level 2: Container Diagram  
+	+ ​​​  
+	+   
+	+ ​​Level 4: Code Diagram  
+	+   
+	+ Data Analysis  
+	+ Ethical Considerations  
+
++ LITERATURE CITED  
++ APPENDICES
+
+
+
