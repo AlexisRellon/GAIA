@@ -26,6 +26,9 @@ from backend.python.middleware.activity_logger import ActivityLogger
 from backend.python.models.classifier import classifier
 from backend.python.models.geo_ner import geo_ner
 
+# Import phone validation utility
+from backend.python.utils.phone_validation import is_valid_philippine_phone_number
+
 logger = logging.getLogger(__name__)
 
 # Initialize router - main.py adds /api/v1 prefix, so this becomes /api/v1/citizen-reports
@@ -137,6 +140,8 @@ async def submit_citizen_report(
     hazard_type: str = Form(..., description="Type of hazard"),
     description: str = Form(..., min_length=10, max_length=2000, description="Hazard description"),
     location_name: str = Form(..., description="Location name"),
+    name: str = Form(..., min_length=2, max_length=100, description="Reporter's name"),
+    contact_number: str = Form(..., description="Reporter's contact number (Philippine phone number)"),
     latitude: Optional[float] = Form(None, ge=-90, le=90, description="Latitude coordinate (optional)"),
     longitude: Optional[float] = Form(None, ge=-180, le=180, description="Longitude coordinate (optional)"),
     contact_method: Optional[str] = Form(None, description="Optional contact method"),
@@ -150,6 +155,8 @@ async def submit_citizen_report(
     - **hazard_type**: Type of hazard (flood, typhoon, etc.)
     - **description**: Detailed description of the hazard (10-2000 characters)
     - **location_name**: Human-readable location name
+    - **name**: Reporter's full name (required, 2-100 characters)
+    - **contact_number**: Reporter's Philippine phone number (required, validated)
     - **latitude/longitude**: GPS coordinates
     - **contact_method**: Optional contact information
     - **image**: Optional photo of the hazard
@@ -162,6 +169,33 @@ async def submit_citizen_report(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database service unavailable"
+        )
+    
+    # Validate name
+    name = name.strip()
+    if not name or len(name) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name must be at least 2 characters"
+        )
+    if len(name) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Name must be 100 characters or less"
+        )
+    
+    # Validate Philippine phone number
+    contact_number = contact_number.strip()
+    if not contact_number:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contact number is required"
+        )
+    
+    if not is_valid_philippine_phone_number(contact_number):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a valid Philippine phone number (e.g., 09123456789, +63 912 345 6789)"
         )
     
     # 1. Verify Turnstile - TEMPORARILY DISABLED
@@ -371,6 +405,8 @@ async def submit_citizen_report(
             "hazard_type": hazard_type,
             "description": description,
             "location_name": location_name,
+            "name": name,
+            "contact_number": contact_number,
             "contact_method": contact_method,
             "image_url": [image_url] if image_url else None,  # Convert string to array for TEXT[] column
             "image_metadata": image_metadata,
@@ -422,6 +458,8 @@ async def submit_citizen_report(
                 details={
                     "hazard_type": hazard_type,
                     "location_name": location_name,
+                    "name": name,
+                    "has_contact_number": bool(contact_number),
                     "confidence_score": confidence_score,
                     "source": "citizen_unverified",
                     "ai_hazard_type": ai_hazard_type,
