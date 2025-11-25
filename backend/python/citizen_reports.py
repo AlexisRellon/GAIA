@@ -248,8 +248,7 @@ async def submit_citizen_report(
                     source = best_location.get('source')
                     confidence = best_location.get('confidence', 'N/A')
                     logger.info(
-                        "AI successfully extracted coordinates from location/description "
-                        f"(source: {source}, confidence: {confidence})"
+                        "AI successfully extracted coordinates from location/description."
                     )
                 else:
                     logger.warning(f"Could not extract coordinates from location and description")
