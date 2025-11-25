@@ -245,9 +245,11 @@ async def submit_citizen_report(
                     extracted_longitude = best_location['longitude']
                     coordinates_source = "ai_extracted"
                     # Do NOT log latitude/longitude or any sensitive coordinates in logs.
+                    source = best_location.get('source')
+                    confidence = best_location.get('confidence', 'N/A')
                     logger.info(
                         "AI successfully extracted coordinates from location/description "
-                        f"(source: {best_location.get('source')}, confidence: {best_location.get('confidence', 'N/A')})"
+                        f"(source: {source}, confidence: {confidence})"
                     )
                 else:
                     logger.warning(f"Could not extract coordinates from location and description")
