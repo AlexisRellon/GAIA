@@ -262,7 +262,7 @@ async def submit_citizen_report(
     # 4. Validate Philippine boundaries (4-21°N, 116-127°E) - only if coordinates available
     if final_latitude is not None and final_longitude is not None:
         if not (4 <= final_latitude <= 21 and 116 <= final_longitude <= 127):
-            logger.warning(f"Coordinates outside Philippine boundaries: {final_latitude}, {final_longitude}")
+            logger.warning("Coordinates outside Philippine boundaries submitted.")
             # Reset to None if outside boundaries
             if coordinates_source == "ai_extracted":
                 final_latitude = None
