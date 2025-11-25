@@ -36,7 +36,7 @@ slowapi>=0.1.9
 
 # PDF Generation & Image Processing
 reportlab>=4.0.0
-Pillow>=10.0.0
+pillow>=10.0.0
 python-multipart>=0.0.6
 
 # Testing

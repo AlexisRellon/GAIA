@@ -4,11 +4,19 @@ FROM python:3.11-slim as builder
 # Set working directory
 WORKDIR /app
 
+# Upgrade pip
+RUN pip install --upgrade pip
+
 # Install system dependencies for building Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     build-essential \
+    libxml2-dev \
+    libxslt1-dev \
+    zlib1g-dev \
+    libffi-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
