@@ -545,7 +545,7 @@ class RSSProcessorEnhanced:
             lng = primary_location['longitude']
             
             if not (4.0 <= lat <= 22.0 and 116.0 <= lng <= 127.0):
-                logger.warning(f"Location outside Philippines: ({lat}, {lng})")
+                logger.warning(f"Location outside Philippines for: {content_data['title']}")
                 return None
             
             # Generate content hash for duplicate detection
