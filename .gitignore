@@ -118,3 +118,4 @@ QUICK_TEST_GUIDE*.md
 /package-lock.json
 /node_modules/
 .env-production-localdev(safe).ini
+/.env.production

@@ -13,6 +13,7 @@
 [![License](https://img.shields.io/badge/License-TBD-yellow?style=flat-square)]()
 [![GitHub deployments](https://img.shields.io/github/deployments/badges/shields/shields-staging?style=flat-square&logo=vercel&label=Vercel&color=000000)]()
 [![GitHub deployments](https://img.shields.io/github/deployments/badges/shields/shields-staging?style=flat-square&logo=Railway&label=Railway&color=0B0D0E)]()
+[![CodeQL Advanced](https://github.com/AlexisRellon/GAIA/actions/workflows/codeql.yml/badge.svg)](https://github.com/AlexisRellon/GAIA/actions/workflows/codeql.yml)
 
 
 
