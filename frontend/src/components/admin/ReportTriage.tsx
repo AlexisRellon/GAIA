@@ -79,6 +79,19 @@ const PH_BOUNDS = {
   maxLng: 127,
 };
 
+const EXCLUSION_ZONES = [
+  {
+    name: 'Sabah/Sarawak (Malaysia)',
+    latRange: [3.5, 7.5],
+    lngRange: [113.5, 118.5],
+  },
+  {
+    name: 'Brunei',
+    latRange: [4.0, 5.5],
+    lngRange: [114.0, 115.5],
+  },
+];
+
 const DEFAULT_CENTER: [number, number] = [12.8797, 121.774];
 const DEFAULT_ZOOM = 6;
 const MAP_BOUNDS: [[number, number], [number, number]] = [
@@ -97,11 +110,24 @@ const markerIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-const isWithinPhilippines = (lat: number, lng: number) =>
-  lat >= PH_BOUNDS.minLat &&
-  lat <= PH_BOUNDS.maxLat &&
-  lng >= PH_BOUNDS.minLng &&
-  lng <= PH_BOUNDS.maxLng;
+const isWithinPhilippines = (lat: number, lng: number) => {
+  const withinBoundingBox =
+    lat >= PH_BOUNDS.minLat &&
+    lat <= PH_BOUNDS.maxLat &&
+    lng >= PH_BOUNDS.minLng &&
+    lng <= PH_BOUNDS.maxLng;
+
+  if (!withinBoundingBox) {
+    return false;
+  }
+
+  // Exclude known nearby countries that overlap the bounding box (e.g., Malaysia, Brunei)
+  const insideExclusion = EXCLUSION_ZONES.some(({ latRange, lngRange }) => {
+    return lat >= latRange[0] && lat <= latRange[1] && lng >= lngRange[0] && lng <= lngRange[1];
+  });
+
+  return !insideExclusion;
+};
 
 const MapClickHandler: React.FC<{ onLocationSelect: (lat: number, lng: number) => void }> = ({ onLocationSelect }) => {
   useMapEvents({
@@ -239,15 +265,24 @@ const ReportTriage: React.FC = () => {
     setCoordinateError(null);
   }, [selectedReport]);
 
-  const handleCoordinateChange = useCallback((lat: number, lng: number) => {
-    if (!isWithinPhilippines(lat, lng)) {
-      setCoordinateError('Coordinates must remain within the Philippines (4°-21°N, 116°-127°E).');
-      return;
-    }
+  const handleCoordinateChange = useCallback(
+    (lat: number, lng: number, marker?: L.Marker) => {
+      if (!isWithinPhilippines(lat, lng)) {
+        setCoordinateError('Pins can only be placed within the Philippines (4°-21°N, 116°-127°E).');
 
-    setCoordinateError(null);
-    setEditedCoordinates({ lat, lng });
-  }, []);
+        if (marker) {
+          const fallback = editedCoordinates ?? { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] };
+          marker.setLatLng([fallback.lat, fallback.lng]);
+        }
+
+        return;
+      }
+
+      setCoordinateError(null);
+      setEditedCoordinates({ lat, lng });
+    },
+    [editedCoordinates]
+  );
 
   const resetToReportedCoordinates = useCallback(() => {
     if (
@@ -831,17 +866,17 @@ const ReportTriage: React.FC = () => {
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                           />
                           <MapAutoResize />
-                          <MapClickHandler onLocationSelect={handleCoordinateChange} />
+                  <MapClickHandler onLocationSelect={(lat, lng) => handleCoordinateChange(lat, lng)} />
                           {editedCoordinates && (
                             <Marker
                               position={[editedCoordinates.lat, editedCoordinates.lng]}
                               icon={markerIcon}
                               draggable
                               eventHandlers={{
-                                dragend: (event) => {
-                                  const marker = event.target;
+                        dragend: (event) => {
+                          const marker = event.target as L.Marker;
                                   const markerPosition = marker.getLatLng();
-                                  handleCoordinateChange(markerPosition.lat, markerPosition.lng);
+                          handleCoordinateChange(markerPosition.lat, markerPosition.lng, marker);
                                 },
                               }}
                             />
