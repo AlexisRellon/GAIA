@@ -23,7 +23,7 @@ import {
 } from '@tanstack/react-table';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Shield, CheckCircle, XCircle, MapPin, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { Shield, CheckCircle, XCircle, MapPin, AlertCircle, Image as ImageIcon, User, Phone } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -55,6 +55,8 @@ interface TriageReport {
   submitted_at: string;
   image_urls: string[] | null;
   image_url?: string | null; // Backend may return this as well
+  name?: string | null; // Reporter's name
+  contact_number?: string | null; // Reporter's contact number
   image_metadata?: {
     ai_processing?: {
       ai_hazard_type?: string | null;
@@ -187,6 +189,35 @@ const ReportTriage: React.FC = () => {
           )}
         </div>
       ),
+    }),
+    columnHelper.display({
+      id: 'reporter',
+      header: 'Reporter',
+      cell: ({ row }) => {
+        const report = row.original;
+        const hasReporterInfo = report.name || report.contact_number;
+        
+        if (!hasReporterInfo) {
+          return <span className="text-muted-foreground text-sm">-</span>;
+        }
+        
+        return (
+          <div className="flex flex-col gap-1 max-w-xs">
+            {report.name && (
+              <div className="flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-sm font-medium truncate">{report.name}</span>
+              </div>
+            )}
+            {report.contact_number && (
+              <div className="flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground font-mono truncate">{report.contact_number}</span>
+              </div>
+            )}
+          </div>
+        );
+      },
     }),
     columnHelper.accessor('description', {
       header: 'Description',
@@ -520,6 +551,23 @@ const ReportTriage: React.FC = () => {
                     <span className="text-sm font-medium">Hazard Type:</span>
                     <Badge variant="secondary">{selectedReport.hazard_type || 'Unclassified'}</Badge>
                   </div>
+                  {(selectedReport.name || selectedReport.contact_number) && (
+                    <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-md border border-gray-200">
+                      <span className="text-sm font-medium">Reporter Information:</span>
+                      {selectedReport.name && (
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{selectedReport.name}</span>
+                        </div>
+                      )}
+                      {selectedReport.contact_number && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-mono">{selectedReport.contact_number}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {selectedReport.latitude && selectedReport.longitude && (
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />

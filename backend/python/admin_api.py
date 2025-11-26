@@ -175,6 +175,8 @@ class TriageReportResponse(BaseModel):
     validated: bool = False  # Add default value to match database schema
     submitted_at: str
     image_urls: Optional[List[str]] = None  # Add default value, matches database TEXT[] array
+    name: Optional[str] = None  # Reporter's name
+    contact_number: Optional[str] = None  # Reporter's contact number
     
     class Config:
         # Allow extra fields from database that aren't in model
