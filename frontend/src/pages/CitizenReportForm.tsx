@@ -23,6 +23,7 @@ import ImageUpload from '../components/reports/ImageUpload';
 import LocationPicker from '../components/reports/LocationPicker';
 // import { supabase } from '../lib/supabase'; // TEMPORARILY DISABLED - backend handles image upload
 import { API_BASE_URL } from '../lib/api';
+import { isValidPhilippinePhoneNumber } from '../utils/phoneValidation';
 
 // ============================================================================
 // TYPES
@@ -32,6 +33,8 @@ interface FormData {
   hazardType: string;
   locationName: string;
   description: string;
+  name: string;
+  contactNumber: string;
   latitude?: number;
   longitude?: number;
   image?: File;
@@ -47,6 +50,8 @@ interface FormErrors {
   hazardType?: string;
   locationName?: string;
   description?: string;
+  name?: string;
+  contactNumber?: string;
   location?: string;
   captcha?: string;
   submit?: string;
@@ -66,6 +71,8 @@ const CitizenReportForm: React.FC = () => {
     hazardType: '',
     locationName: '',
     description: '',
+    name: '',
+    contactNumber: '',
     latitude: undefined,
     longitude: undefined,
     image: undefined,
@@ -81,6 +88,7 @@ const CitizenReportForm: React.FC = () => {
   const descriptionLength = formData.description.length;
   const descriptionMax = 1000;
   const locationNameMax = 200;
+  const nameMax = 100;
 
   // ============================================================================
   // VALIDATION
@@ -110,6 +118,22 @@ const CitizenReportForm: React.FC = () => {
       newErrors.description = 'Description must be at least 20 characters';
     } else if (formData.description.length > descriptionMax) {
       newErrors.description = `Description must be ${descriptionMax} characters or less`;
+    }
+
+    // Name validation
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required';
+    } else if (formData.name.length > nameMax) {
+      newErrors.name = `Name must be ${nameMax} characters or less`;
+    } else if (formData.name.trim().length < 2) {
+      newErrors.name = 'Name must be at least 2 characters';
+    }
+
+    // Contact number validation
+    if (!formData.contactNumber.trim()) {
+      newErrors.contactNumber = 'Contact number is required';
+    } else if (!isValidPhilippinePhoneNumber(formData.contactNumber)) {
+      newErrors.contactNumber = 'Please enter a valid Philippine phone number (e.g., 09123456789, +63 912 345 6789)';
     }
 
     setErrors(newErrors);
@@ -178,6 +202,8 @@ const CitizenReportForm: React.FC = () => {
       formDataPayload.append('hazard_type', formData.hazardType);
       formDataPayload.append('location_name', formData.locationName);
       formDataPayload.append('description', formData.description);
+      formDataPayload.append('name', formData.name.trim());
+      formDataPayload.append('contact_number', formData.contactNumber.trim());
       
       // Add optional fields only if provided
       if (formData.latitude !== undefined && formData.latitude !== null) {
@@ -312,6 +338,64 @@ const CitizenReportForm: React.FC = () => {
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* Name Input */}
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                Your Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="name"
+                type="text"
+                value={formData.name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                maxLength={nameMax}
+                placeholder="Enter your full name"
+                className={`w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  errors.name ? 'border-red-500' : 'border-gray-300'
+                }`}
+                disabled={isSubmitting}
+              />
+              <div className="mt-1 flex justify-between items-center">
+                {errors.name ? (
+                  <p className="text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle size={14} />
+                    {errors.name}
+                  </p>
+                ) : (
+                  <span className="text-sm text-gray-500">
+                    {formData.name.length}/{nameMax}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Contact Number Input */}
+            <div>
+              <label htmlFor="contact-number" className="block text-sm font-medium text-gray-700 mb-2">
+                Contact Number <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="contact-number"
+                type="tel"
+                value={formData.contactNumber}
+                onChange={(e) => handleInputChange('contactNumber', e.target.value)}
+                placeholder="e.g., 09123456789 or +63 912 345 6789"
+                className={`w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  errors.contactNumber ? 'border-red-500' : 'border-gray-300'
+                }`}
+                disabled={isSubmitting}
+              />
+              {errors.contactNumber && (
+                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle size={14} />
+                  {errors.contactNumber}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Philippine mobile or landline number (e.g., 09123456789, +63 912 345 6789, (02) 123-4567)
+              </p>
             </div>
 
             {/* Description Textarea */}
