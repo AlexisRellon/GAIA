@@ -134,7 +134,7 @@ def get_centroid_from_geocoding(name: str, hierarchy: Dict) -> Optional[Dict]:
                     'longitude': lon
                 }
             else:
-                logger.debug(f"Geocoded coordinates outside Philippine bounds: {lat}, {lon}")
+                logger.debug("Geocoded coordinates outside Philippine bounds")
                 return None
         else:
             logger.debug(f"No geocoding result for: {query}")
