@@ -162,7 +162,7 @@ def get_coordinates_from_nominatim(location_string: str) -> Optional[Dict[str, f
         
         # Validate coordinates are within Philippine bounds (4-21°N, 116-127°E)
         if not (4 <= lat <= 21 and 116 <= lon <= 127):
-            logger.warning(f"Geocoded coordinates outside Philippine bounds: {lat}, {lon}")
+            logger.warning("Geocoded coordinates outside Philippine bounds for location")
             return None
         
         # Step 5: Update Pinning - Return verified coordinates for map pinning
