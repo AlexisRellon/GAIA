@@ -11,7 +11,7 @@
  * Permissions: All admin roles (Master Admin, Validator, LGU Responder)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -24,6 +24,9 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { Shield, CheckCircle, XCircle, MapPin, AlertCircle, Image as ImageIcon, User, Phone } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -68,6 +71,86 @@ interface TriageReport {
 }
 
 const columnHelper = createColumnHelper<TriageReport>();
+
+const PH_BOUNDS = {
+  minLat: 4,
+  maxLat: 21,
+  minLng: 116,
+  maxLng: 127,
+};
+
+const EXCLUSION_ZONES = [
+  {
+    name: 'Sabah/Sarawak (Malaysia)',
+    latRange: [3.5, 7.5],
+    lngRange: [113.5, 118.5],
+  },
+  {
+    name: 'Brunei',
+    latRange: [4.0, 5.5],
+    lngRange: [114.0, 115.5],
+  },
+];
+
+const DEFAULT_CENTER: [number, number] = [12.8797, 121.774];
+const DEFAULT_ZOOM = 6;
+const MAP_BOUNDS: [[number, number], [number, number]] = [
+  [PH_BOUNDS.minLat, PH_BOUNDS.minLng],
+  [PH_BOUNDS.maxLat, PH_BOUNDS.maxLng],
+];
+const COORD_TOLERANCE = 0.00001;
+
+const markerIcon = new L.Icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const isWithinPhilippines = (lat: number, lng: number) => {
+  const withinBoundingBox =
+    lat >= PH_BOUNDS.minLat &&
+    lat <= PH_BOUNDS.maxLat &&
+    lng >= PH_BOUNDS.minLng &&
+    lng <= PH_BOUNDS.maxLng;
+
+  if (!withinBoundingBox) {
+    return false;
+  }
+
+  // Exclude known nearby countries that overlap the bounding box (e.g., Malaysia, Brunei)
+  const insideExclusion = EXCLUSION_ZONES.some(({ latRange, lngRange }) => {
+    return lat >= latRange[0] && lat <= latRange[1] && lng >= lngRange[0] && lng <= lngRange[1];
+  });
+
+  return !insideExclusion;
+};
+
+const MapClickHandler: React.FC<{ onLocationSelect: (lat: number, lng: number) => void }> = ({ onLocationSelect }) => {
+  useMapEvents({
+    click(event) {
+      onLocationSelect(event.latlng.lat, event.latlng.lng);
+    },
+  });
+  return null;
+};
+
+const MapAutoResize: React.FC = () => {
+  const map = useMapEvents({});
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
+    return () => clearTimeout(timeout);
+  }, [map]);
+
+  return null;
+};
 
 // Component for displaying report photos with error handling
 const ReportPhoto: React.FC<{ imageUrl: string; index: number }> = ({ imageUrl, index }) => {
@@ -126,6 +209,8 @@ const ReportTriage: React.FC = () => {
   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<'validate' | 'reject' | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [editedCoordinates, setEditedCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [coordinateError, setCoordinateError] = useState<string | null>(null);
 
   // Fetch reports with React Query
   const { 
@@ -162,6 +247,90 @@ const ReportTriage: React.FC = () => {
 
   const error = queryError ? (queryError as Error).message : null;
 
+  useEffect(() => {
+    if (
+      selectedReport &&
+      selectedReport.latitude !== null &&
+      selectedReport.latitude !== undefined &&
+      selectedReport.longitude !== null &&
+      selectedReport.longitude !== undefined
+    ) {
+      setEditedCoordinates({
+        lat: selectedReport.latitude,
+        lng: selectedReport.longitude,
+      });
+    } else {
+      setEditedCoordinates(null);
+    }
+    setCoordinateError(null);
+  }, [selectedReport]);
+
+  const handleCoordinateChange = useCallback(
+    (lat: number, lng: number, marker?: L.Marker) => {
+      if (!isWithinPhilippines(lat, lng)) {
+        setCoordinateError('Pins can only be placed within the Philippines (4°-21°N, 116°-127°E).');
+
+        if (marker) {
+          const fallback = editedCoordinates ?? { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] };
+          marker.setLatLng([fallback.lat, fallback.lng]);
+        }
+
+        return;
+      }
+
+      setCoordinateError(null);
+      setEditedCoordinates({ lat, lng });
+    },
+    [editedCoordinates]
+  );
+
+  const resetToReportedCoordinates = useCallback(() => {
+    if (
+      selectedReport &&
+      selectedReport.latitude !== null &&
+      selectedReport.latitude !== undefined &&
+      selectedReport.longitude !== null &&
+      selectedReport.longitude !== undefined
+    ) {
+      setEditedCoordinates({ lat: selectedReport.latitude, lng: selectedReport.longitude });
+      setCoordinateError(null);
+    } else {
+      setEditedCoordinates(null);
+    }
+  }, [selectedReport]);
+
+  const coordinatesChanged = useMemo(() => {
+    if (!selectedReport || !editedCoordinates) {
+      return false;
+    }
+
+    const originalLat = selectedReport.latitude;
+    const originalLng = selectedReport.longitude;
+
+    if (originalLat === null || originalLat === undefined || originalLng === null || originalLng === undefined) {
+      return true;
+    }
+
+    return (
+      Math.abs(originalLat - editedCoordinates.lat) > COORD_TOLERANCE ||
+      Math.abs(originalLng - editedCoordinates.lng) > COORD_TOLERANCE
+    );
+  }, [selectedReport, editedCoordinates]);
+
+  const hasOriginalCoordinates = Boolean(
+    selectedReport &&
+    selectedReport.latitude !== null &&
+    selectedReport.latitude !== undefined &&
+    selectedReport.longitude !== null &&
+    selectedReport.longitude !== undefined
+  );
+
+  const mapCenter: [number, number] = editedCoordinates
+    ? [editedCoordinates.lat, editedCoordinates.lng]
+    : DEFAULT_CENTER;
+  const mapZoom = editedCoordinates ? 13 : DEFAULT_ZOOM;
+  const isClient = typeof window !== 'undefined';
+
   const columns = [
     columnHelper.accessor('tracking_id', {
       header: 'Tracking ID',
@@ -182,7 +351,10 @@ const ReportTriage: React.FC = () => {
       cell: (info) => (
         <div className="flex flex-col max-w-xs">
           <span className="text-sm font-medium truncate">{info.getValue() || 'Unknown'}</span>
-          {info.row.original.latitude && info.row.original.longitude && (
+          {info.row.original.latitude !== null &&
+            info.row.original.latitude !== undefined &&
+            info.row.original.longitude !== null &&
+            info.row.original.longitude !== undefined && (
             <span className="text-xs text-muted-foreground font-mono">
               {info.row.original.latitude.toFixed(4)}, {info.row.original.longitude.toFixed(4)}
             </span>
@@ -328,6 +500,11 @@ const ReportTriage: React.FC = () => {
       return;
     }
 
+    if (actionType === 'validate' && coordinateError) {
+      alert('Please resolve the coordinate error before validating.');
+      return;
+    }
+
     console.log(`[ReportTriage] Starting ${actionType} for report:`, selectedReport.tracking_id);
     setIsProcessing(true);
 
@@ -336,7 +513,17 @@ const ReportTriage: React.FC = () => {
       console.log(`[ReportTriage] Calling adminApi.reports.${actionType}...`);
       
       if (actionType === 'validate') {
-        const result = await adminApi.reports.validate(selectedReport.tracking_id);
+        const payload: { latitude?: number; longitude?: number } = {};
+
+        if (editedCoordinates && coordinatesChanged) {
+          payload.latitude = Number(editedCoordinates.lat.toFixed(6));
+          payload.longitude = Number(editedCoordinates.lng.toFixed(6));
+        }
+
+        const result = await adminApi.reports.validate(
+          selectedReport.tracking_id,
+          Object.keys(payload).length ? payload : undefined
+        );
         console.log('[ReportTriage] Validate result:', result);
       } else {
         const result = await adminApi.reports.reject(selectedReport.tracking_id);
@@ -568,7 +755,10 @@ const ReportTriage: React.FC = () => {
                       )}
                     </div>
                   )}
-                  {selectedReport.latitude && selectedReport.longitude && (
+                  {selectedReport.latitude !== null &&
+                    selectedReport.latitude !== undefined &&
+                    selectedReport.longitude !== null &&
+                    selectedReport.longitude !== undefined && (
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
                       <div className="flex flex-col">
@@ -584,7 +774,10 @@ const ReportTriage: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  {!selectedReport.latitude && !selectedReport.longitude && (
+                  {(selectedReport.latitude === null ||
+                    selectedReport.latitude === undefined ||
+                    selectedReport.longitude === null ||
+                    selectedReport.longitude === undefined) && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-4 w-4" />
                       <span>No coordinates available</span>
@@ -630,6 +823,97 @@ const ReportTriage: React.FC = () => {
                   );
                 })()}
 
+                {actionType === 'validate' && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Adjust location on map</p>
+                        <p className="text-xs text-muted-foreground">
+                          Drag the pin or click on the map to correct inaccurate coordinates before validation.
+                        </p>
+                      </div>
+                      {hasOriginalCoordinates && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={resetToReportedCoordinates}
+                        >
+                          Reset to reported pin
+                        </Button>
+                      )}
+                    </div>
+
+                    {isClient ? (
+                      <div className="border rounded-lg overflow-hidden" style={{ height: 320 }}>
+                        <MapContainer
+                          key={selectedReport.tracking_id}
+                          center={mapCenter}
+                          zoom={mapZoom}
+                          minZoom={5}
+                          maxZoom={16}
+                          scrollWheelZoom
+                          style={{ height: '100%', width: '100%' }}
+                          maxBounds={MAP_BOUNDS}
+                          maxBoundsViscosity={0.9}
+                        >
+                          <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          />
+                          <MapAutoResize />
+                  <MapClickHandler onLocationSelect={(lat, lng) => handleCoordinateChange(lat, lng)} />
+                          {editedCoordinates && (
+                            <Marker
+                              position={[editedCoordinates.lat, editedCoordinates.lng]}
+                              icon={markerIcon}
+                              draggable
+                              eventHandlers={{
+                        dragend: (event) => {
+                          const marker = event.target as L.Marker;
+                                  const markerPosition = marker.getLatLng();
+                          handleCoordinateChange(markerPosition.lat, markerPosition.lng, marker);
+                                },
+                              }}
+                            />
+                          )}
+                        </MapContainer>
+                      </div>
+                    ) : (
+                      <div className="border rounded-lg p-4 text-sm text-muted-foreground">
+                        Map preview unavailable in this environment.
+                      </div>
+                    )}
+
+                    {coordinateError && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{coordinateError}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      {editedCoordinates ? (
+                        <>
+                          <span className="font-medium text-foreground">
+                            {editedCoordinates.lat.toFixed(5)}, {editedCoordinates.lng.toFixed(5)}
+                          </span>
+                          {coordinatesChanged && (
+                            <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+                              Updated pin will be saved
+                            </Badge>
+                          )}
+                          {!coordinatesChanged && (
+                            <span>The pin matches the reported coordinates.</span>
+                          )}
+                        </>
+                      ) : (
+                        <span>Click anywhere in the Philippines to drop a pin.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <Alert className={actionType === 'validate' ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}>
                   <AlertCircle className={actionType === 'validate' ? 'h-4 w-4 text-green-600' : 'h-4 w-4 text-red-600'} />
                   <AlertDescription className={actionType === 'validate' ? 'text-green-800' : 'text-red-800'}>
@@ -653,7 +937,7 @@ const ReportTriage: React.FC = () => {
               <Button
                 type="button"
                 onClick={confirmAction}
-                disabled={isProcessing}
+                disabled={isProcessing || (actionType === 'validate' && Boolean(coordinateError))}
                 variant={actionType === 'validate' ? 'default' : 'destructive'}
               >
                 {isProcessing ? 'Processing...' : actionType === 'validate' ? 'Confirm Validation' : 'Confirm Rejection'}

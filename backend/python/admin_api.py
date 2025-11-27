@@ -15,7 +15,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, status
-from pydantic import BaseModel, Field, EmailStr, validator
+from pydantic import BaseModel, Field, EmailStr, validator, root_validator
 
 # Add parent directory to path for lib imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -46,6 +46,9 @@ router = APIRouter(
     tags=["Admin Dashboard"],
     responses={403: {"description": "Forbidden - insufficient permissions"}},
 )
+
+PH_LAT_RANGE = (4.0, 21.0)
+PH_LNG_RANGE = (116.0, 127.0)
 
 
 # ============================================================================
@@ -654,8 +657,32 @@ async def get_triage_queue(
 class ReportTriageActionRequest(BaseModel):
     """Request body for validating or rejecting a citizen report"""
     notes: Optional[str] = Field(None, max_length=500, description="Optional validation/rejection notes")
-    latitude: Optional[float] = Field(None, ge=-90, le=90, description="Optional corrected latitude coordinate")
-    longitude: Optional[float] = Field(None, ge=-180, le=180, description="Optional corrected longitude coordinate")
+    latitude: Optional[float] = Field(
+        None,
+        ge=-90.0,
+        le=90.0,
+        description="Updated latitude (must stay within Philippine bounds)"
+    )
+    longitude: Optional[float] = Field(
+        None,
+        ge=-180.0,
+        le=180.0,
+        description="Updated longitude (must stay within Philippine bounds)"
+    )
+
+    @root_validator(skip_on_failure=True)
+    def validate_coordinate_pair(cls, values):
+        lat = values.get("latitude")
+        lng = values.get("longitude")
+
+        if (lat is None) ^ (lng is None):
+            raise ValueError("Both latitude and longitude are required when adjusting coordinates.")
+
+        if lat is not None and lng is not None:
+            if not (PH_LAT_RANGE[0] <= lat <= PH_LAT_RANGE[1]) or not (PH_LNG_RANGE[0] <= lng <= PH_LNG_RANGE[1]):
+                raise ValueError("Updated coordinates must remain within the Philippines (4°-21°N, 116°-127°E).")
+
+        return values
 
 
 class ReportTriageActionResponse(BaseModel):
@@ -703,6 +730,17 @@ async def validate_citizen_report(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Report has already been validated"
             )
+
+        coordinate_updates: Dict[str, Any] = {}
+        if request_body.latitude is not None and request_body.longitude is not None:
+            coordinate_updates = {
+                "latitude": request_body.latitude,
+                "longitude": request_body.longitude,
+                "location": f"POINT({request_body.longitude} {request_body.latitude})"
+            }
+            report['latitude'] = request_body.latitude
+            report['longitude'] = request_body.longitude
+            report['location'] = coordinate_updates["location"]
         
         # 3. Update citizen_reports table with optional coordinate corrections
         update_data = {
@@ -711,6 +749,9 @@ async def validate_citizen_report(
             "validated_at": datetime.utcnow().isoformat(),
             "validation_notes": request_body.notes
         }
+
+        if coordinate_updates:
+            update_data.update(coordinate_updates)
         
         # If admin provides corrected coordinates, update the report
         if request_body.latitude is not None and request_body.longitude is not None:
@@ -741,12 +782,16 @@ async def validate_citizen_report(
         updated_report = update_response.data[0]
         
         # 4. Create hazard record for validated report
+        final_latitude = report.get('latitude')
+        final_longitude = report.get('longitude')
+        final_location_geom = report.get('location')
+
         hazard_data = {
             "hazard_type": report['hazard_type'],
             "location_name": report['location_name'],
-            "latitude": updated_report.get('latitude') or report.get('latitude'),
-            "longitude": updated_report.get('longitude') or report.get('longitude'),
-            "location": updated_report.get('location') or report.get('location'),  # PostGIS geometry
+            "latitude": final_latitude,
+            "longitude": final_longitude,
+            "location": final_location_geom,  # PostGIS geometry
             "severity": "moderate",  # Default severity for citizen reports
             "confidence_score": min(report.get('confidence_score', 0.3) + 0.4, 1.0),  # Boost confidence after validation
             "source_type": "citizen_report",
@@ -775,7 +820,9 @@ async def validate_citizen_report(
                 details={
                     "hazard_type": report['hazard_type'],
                     "location": report['location_name'],
-                    "notes": request_body.notes
+                    "notes": request_body.notes,
+                    "coordinates_adjusted": bool(coordinate_updates),
+                    **({"new_coordinates": coordinate_updates} if coordinate_updates else {})
                 }
             )
         except Exception as log_error:
