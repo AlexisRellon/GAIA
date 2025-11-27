@@ -320,7 +320,7 @@ const CitizenReportForm: React.FC = () => {
                 value={formData.locationName}
                 onChange={(e) => handleInputChange('locationName', e.target.value)}
                 maxLength={locationNameMax}
-                placeholder="e.g., Barangay San Jose, Manila"
+                placeholder="e.g., Manggahan, General Trias"
                 className={`w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                   errors.locationName ? 'border-red-500' : 'border-gray-300'
                 }`}
