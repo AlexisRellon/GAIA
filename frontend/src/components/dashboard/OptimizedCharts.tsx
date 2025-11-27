@@ -62,6 +62,29 @@ interface DistributionData {
   count: number;
 }
 
+/**
+ * Pie chart label entry with additional recharts properties
+ * This interface extends the data structure with the percent field
+ * that recharts adds during label rendering
+ */
+interface PieChartLabelEntry extends DistributionData {
+  percent: number;
+}
+
+/**
+ * Type guard to validate that an entry has the expected pie chart label properties
+ */
+function isPieChartLabelEntry(entry: unknown): entry is PieChartLabelEntry {
+  return (
+    typeof entry === 'object' &&
+    entry !== null &&
+    'hazard_type' in entry &&
+    'percent' in entry &&
+    typeof (entry as PieChartLabelEntry).hazard_type === 'string' &&
+    typeof (entry as PieChartLabelEntry).percent === 'number'
+  );
+}
+
 interface RegionData {
   region: string;
   count: number;
@@ -163,9 +186,12 @@ export const OptimizedPieChart = memo<OptimizedPieChartProps>(
             cx="50%"
             cy="50%"
             labelLine={false}
-            label={({ hazard_type, percent }) =>
-              `${hazard_type}: ${((percent as number) * 100).toFixed(0)}%`
-            }
+            label={(entry) => {
+              if (!isPieChartLabelEntry(entry)) {
+                return '';
+              }
+              return `${entry.hazard_type}: ${(entry.percent * 100).toFixed(0)}%`;
+            }}
             outerRadius={80}
             fill="#8884d8"
             dataKey="count"
