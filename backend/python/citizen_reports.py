@@ -153,9 +153,13 @@ def get_coordinates_from_nominatim(location_string: str) -> Optional[Dict[str, f
         
         # Extract the lat (latitude) and lon (longitude) values from this selected object
         # JSONv2 format uses 'lat' and 'lon' as string values
+        # Explicitly check for presence of 'lat' and 'lon'
+        if 'lat' not in best_result or 'lon' not in best_result:
+            logger.error(f"Missing lat/lon in geocoding response for {location_string}")
+            return None
         try:
-            lat = float(best_result.get('lat', 0))
-            lon = float(best_result.get('lon', 0))
+            lat = float(best_result['lat'])
+            lon = float(best_result['lon'])
         except (ValueError, TypeError) as e:
             logger.error(f"Error converting lat/lon to float for {location_string}: {str(e)}")
             return None
