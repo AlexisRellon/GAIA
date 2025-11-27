@@ -33,9 +33,9 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from backend.python.lib.supabase_client import supabase
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut
-import time
+
+# Import shared geocoding utility (sync version for batch processing scripts)
+from backend.python.utils.geocoding import get_centroid_from_geocoding
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,10 +45,6 @@ logger = logging.getLogger(__name__)
 
 # Path to PSGC CSV
 PSGC_CSV_PATH = project_root / 'backend' / 'python' / 'models' / 'PhilippineStandardGeographicCode_Q4_2024.csv'
-
-# Geocoder for fallback centroid calculation
-geocoder = Nominatim(user_agent="gaia_psgc_loader", timeout=10)
-_last_geocode_time = 0
 
 
 def parse_population(pop_str: str) -> Optional[int]:
@@ -60,47 +56,6 @@ def parse_population(pop_str: str) -> Optional[int]:
         return int(pop_str) if pop_str else None
     except:
         return None
-
-
-def get_centroid_from_geocoding(name: str, hierarchy: Dict) -> Optional[Dict]:
-    """
-    Get centroid coordinates using geocoding as fallback.
-    
-    Returns:
-        Dict with 'latitude' and 'longitude', or None
-    """
-    global _last_geocode_time
-    
-    try:
-        # Build hierarchical query
-        query_parts = []
-        if hierarchy.get('barangay'):
-            query_parts.append(hierarchy['barangay'])
-        if hierarchy.get('municipality'):
-            query_parts.append(hierarchy['municipality'])
-        elif hierarchy.get('province'):
-            query_parts.append(hierarchy['province'])
-        query_parts.append('Philippines')
-        query = ', '.join(query_parts)
-        
-        # Rate limiting
-        current_time = time.time()
-        time_since_last = current_time - _last_geocode_time
-        if time_since_last < 1.0:
-            time.sleep(1.0 - time_since_last)
-        
-        location = geocoder.geocode(query, exactly_one=True, language='en')
-        _last_geocode_time = time.time()
-        
-        if location:
-            return {
-                'latitude': location.latitude,
-                'longitude': location.longitude
-            }
-    except Exception as e:
-        logger.debug(f"Geocoding failed for {name}: {str(e)}")
-    
-    return None
 
 
 def load_psgc_data():

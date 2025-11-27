@@ -742,7 +742,7 @@ async def validate_citizen_report(
             report['longitude'] = request_body.longitude
             report['location'] = coordinate_updates["location"]
         
-        # 3. Update citizen_reports table
+        # 3. Update citizen_reports table with optional coordinate corrections
         update_data = {
             "status": "verified",
             "validated_by": current_user.user_id,
@@ -752,6 +752,20 @@ async def validate_citizen_report(
 
         if coordinate_updates:
             update_data.update(coordinate_updates)
+        
+        # If admin provides corrected coordinates, update the report
+        if request_body.latitude is not None and request_body.longitude is not None:
+            # Validate Philippine boundaries (4-21°N, 116-127°E)
+            if 4 <= request_body.latitude <= 21 and 116 <= request_body.longitude <= 127:
+                update_data["latitude"] = request_body.latitude
+                update_data["longitude"] = request_body.longitude
+                update_data["location"] = f"POINT({request_body.longitude} {request_body.latitude})"
+                logger.info(f"Admin corrected coordinates for report {tracking_id}")
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Corrected coordinates are outside Philippine boundaries"
+                )
         
         update_response = supabase.schema("gaia").from_("citizen_reports") \
             .update(update_data) \
@@ -763,6 +777,9 @@ async def validate_citizen_report(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update report status"
             )
+        
+        # Use updated coordinates from the update response if they were corrected
+        updated_report = update_response.data[0]
         
         # 4. Create hazard record for validated report
         final_latitude = report.get('latitude')
