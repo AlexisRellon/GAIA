@@ -121,8 +121,11 @@ def get_centroid_from_geocoding(name: str, hierarchy: Dict) -> Optional[Dict]:
             
             # Extract coordinates from JSONv2 format
             # JSONv2 uses 'lat' and 'lon' as strings
-            lat = float(best_result.get('lat', 0))
-            lon = float(best_result.get('lon', 0))
+            if 'lat' not in best_result or 'lon' not in best_result:
+                logger.debug(f"Missing lat/lon in geocoding response for {query}")
+                return None
+            lat = float(best_result['lat'])
+            lon = float(best_result['lon'])
             
             # Validate coordinates are within Philippine bounds
             if 4 <= lat <= 21 and 116 <= lon <= 127:
