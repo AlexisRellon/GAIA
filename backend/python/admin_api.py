@@ -654,6 +654,8 @@ async def get_triage_queue(
 class ReportTriageActionRequest(BaseModel):
     """Request body for validating or rejecting a citizen report"""
     notes: Optional[str] = Field(None, max_length=500, description="Optional validation/rejection notes")
+    latitude: Optional[float] = Field(None, ge=-90, le=90, description="Optional corrected latitude coordinate")
+    longitude: Optional[float] = Field(None, ge=-180, le=180, description="Optional corrected longitude coordinate")
 
 
 class ReportTriageActionResponse(BaseModel):
@@ -702,13 +704,27 @@ async def validate_citizen_report(
                 detail="Report has already been validated"
             )
         
-        # 3. Update citizen_reports table
+        # 3. Update citizen_reports table with optional coordinate corrections
         update_data = {
             "status": "verified",
             "validated_by": current_user.user_id,
             "validated_at": datetime.utcnow().isoformat(),
             "validation_notes": request_body.notes
         }
+        
+        # If admin provides corrected coordinates, update the report
+        if request_body.latitude is not None and request_body.longitude is not None:
+            # Validate Philippine boundaries (4-21°N, 116-127°E)
+            if 4 <= request_body.latitude <= 21 and 116 <= request_body.longitude <= 127:
+                update_data["latitude"] = request_body.latitude
+                update_data["longitude"] = request_body.longitude
+                update_data["location"] = f"POINT({request_body.longitude} {request_body.latitude})"
+                logger.info(f"Admin corrected coordinates for report {tracking_id}")
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Corrected coordinates are outside Philippine boundaries"
+                )
         
         update_response = supabase.schema("gaia").from_("citizen_reports") \
             .update(update_data) \
@@ -721,13 +737,16 @@ async def validate_citizen_report(
                 detail="Failed to update report status"
             )
         
+        # Use updated coordinates from the update response if they were corrected
+        updated_report = update_response.data[0]
+        
         # 4. Create hazard record for validated report
         hazard_data = {
             "hazard_type": report['hazard_type'],
             "location_name": report['location_name'],
-            "latitude": report.get('latitude'),
-            "longitude": report.get('longitude'),
-            "location": report.get('location'),  # PostGIS geometry
+            "latitude": updated_report.get('latitude') or report.get('latitude'),
+            "longitude": updated_report.get('longitude') or report.get('longitude'),
+            "location": updated_report.get('location') or report.get('location'),  # PostGIS geometry
             "severity": "moderate",  # Default severity for citizen reports
             "confidence_score": min(report.get('confidence_score', 0.3) + 0.4, 1.0),  # Boost confidence after validation
             "source_type": "citizen_report",
