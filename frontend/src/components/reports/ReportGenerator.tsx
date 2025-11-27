@@ -63,7 +63,7 @@ interface ReportGeneratorProps {
   /**
    * Ref to map container element for screenshot
    */
-  mapContainerRef: React.RefObject<HTMLElement>;
+  mapContainerRef: React.RefObject<HTMLElement | null>;
   
   /**
    * Optional custom trigger button
