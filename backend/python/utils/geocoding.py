@@ -151,6 +151,7 @@ async def get_coordinates_from_nominatim_async(location_string: str) -> Optional
     try:
         # Rate limiting: Wait 1 second between requests (Nominatim requirement)
         # Use thread lock to coordinate with sync version
+        sleep_time = 0.0
         with _nominatim_lock:
             current_time = time.time()
             time_since_last = current_time - _last_nominatim_call_time
@@ -158,7 +159,7 @@ async def get_coordinates_from_nominatim_async(location_string: str) -> Optional
                 sleep_time = 1.0 - time_since_last
         
         # Perform the async sleep outside the lock
-        if time_since_last < 1.0:
+        if sleep_time > 0:
             await asyncio.sleep(sleep_time)
         
         # Make async HTTP request
@@ -238,7 +239,6 @@ def get_coordinates_from_nominatim_sync(location_string: str) -> Optional[Dict[s
             time_since_last = current_time - _last_nominatim_call_time
             if time_since_last < 1.0:
                 time.sleep(1.0 - time_since_last)
-            _last_nominatim_call_time = time.time()
         
         # Make synchronous HTTP request
         response = requests.get(

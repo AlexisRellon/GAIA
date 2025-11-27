@@ -270,9 +270,6 @@ async def submit_citizen_report(
             except Exception as e:
                 logger.error(f"Error during Nominatim coordinate extraction: {e}", exc_info=True)
                 # Continue without coordinates if extraction fails
-            except Exception as e:
-                logger.error(f"Error during Nominatim coordinate extraction: {e}", exc_info=True)
-                # Continue without coordinates if extraction fails
         
     except Exception as e:
         logger.error(f"Error during AI processing: {e}", exc_info=True)
