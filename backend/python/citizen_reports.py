@@ -9,8 +9,10 @@ import logging
 import sys
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 import httpx
+import requests
+import time
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, status, Request
 from pydantic import BaseModel, Field, validator
 
@@ -60,6 +62,135 @@ class ReportTrackingResponse(BaseModel):
     verified_at: Optional[datetime] = None
     confidence_score: float = Field(..., description="AI confidence score (0.0-1.0)")
     notes: Optional[str] = None
+
+
+# =============================================================================
+# NOMINATIM API UTILITY
+# =============================================================================
+
+# Global variable for rate limiting Nominatim API calls
+_last_nominatim_call_time = 0
+
+def get_coordinates_from_nominatim(location_string: str) -> Optional[Dict[str, float]]:
+    """
+    Get coordinates from OpenStreetMap Nominatim API for accurate map pinning.
+    
+    This function implements the complete Nominatim geocoding process:
+    1. Identifies Input: Extracts location name/address string from report data
+    2. Constructs Request: Creates HTTP GET request to Nominatim API search endpoint
+    3. Executes and Handles: Executes request and handles errors (network, no results, rate limiting)
+    4. Parses Response: Parses JSONv2 response and extracts lat/lon from first result
+    5. Updates Pinning: Returns verified coordinates for map pinning
+    
+    Args:
+        location_string: Location name or address string from report (e.g., "Biclatan, General Trias")
+        
+    Returns:
+        Dict with 'latitude' and 'longitude' keys, or None if geocoding fails
+        
+    Example:
+        >>> coords = get_coordinates_from_nominatim("Biclatan, General Trias")
+        >>> # Returns: {'latitude': 14.3456, 'longitude': 120.7890}
+    """
+    global _last_nominatim_call_time
+    
+    # Step 1: Identify Input - Validate location string is present and non-empty
+    if not location_string or not location_string.strip():
+        logger.debug("Empty location string provided for geocoding")
+        return None
+    
+    # Clean and prepare location string
+    location_string = location_string.strip()
+    
+    # Add "Philippines" if not present for better geographic precision
+    query_string = f"{location_string}, Philippines" if "Philippines" not in location_string else location_string
+    
+    try:
+        # Rate limiting: Wait 1 second between requests (Nominatim requirement)
+        current_time = time.time()
+        time_since_last = current_time - _last_nominatim_call_time
+        if time_since_last < 1.0:
+            time.sleep(1.0 - time_since_last)
+        
+        # Step 2: Construct Request
+        # Base URL: https://nominatim.openstreetmap.org/search
+        base_url = "https://nominatim.openstreetmap.org/search"
+        
+        # Query parameter q must contain the extracted, URL-encoded location string
+        # Parameter format must be set to jsonv2
+        # Example: https://nominatim.openstreetmap.org/search?q={URL_ENCODED_LOCATION}&format=jsonv2
+        params = {
+            'q': query_string,  # requests library will handle URL encoding automatically
+            'format': 'jsonv2',  # Required: use JSONv2 format
+            'limit': 1,  # Get only the best match
+            'addressdetails': 1,  # Include detailed address information
+            'countrycodes': 'ph'  # Constrain to Philippines for better accuracy
+        }
+        
+        # HTTP headers required by Nominatim usage policy
+        headers = {
+            'User-Agent': 'gaia_hazard_detection/1.0'
+        }
+        
+        # Step 3: Execute and Handle
+        # Execute HTTP GET request using Python requests library
+        response = requests.get(base_url, params=params, headers=headers, timeout=10)
+        response.raise_for_status()  # Raises exception for HTTP errors
+        
+        _last_nominatim_call_time = time.time()
+        
+        # Step 4: Parse Response
+        # The API returns a JSON array of potential locations
+        results = response.json()
+        
+        # Check if the array is non-empty
+        if not results or len(results) == 0:
+            logger.debug(f"No geocoding results found for: {location_string}")
+            return None
+        
+        # Select the first element (index 0) of the array, as it is typically the most relevant result
+        best_result = results[0]
+        
+        # Extract the lat (latitude) and lon (longitude) values from this selected object
+        # JSONv2 format uses 'lat' and 'lon' as string values
+        try:
+            lat = float(best_result.get('lat', 0))
+            lon = float(best_result.get('lon', 0))
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error converting lat/lon to float for {location_string}: {str(e)}")
+            return None
+        
+        # Validate coordinates are within Philippine bounds (4-21°N, 116-127°E)
+        if not (4 <= lat <= 21 and 116 <= lon <= 127):
+            logger.warning(f"Geocoded coordinates outside Philippine bounds: {lat}, {lon}")
+            return None
+        
+        # Step 5: Update Pinning - Return verified coordinates for map pinning
+        logger.info(f"Successfully geocoded location using Nominatim: {location_string}")
+        return {
+            'latitude': lat,
+            'longitude': lon
+        }
+            
+    except requests.exceptions.Timeout:
+        # Handle network failure: timeout
+        logger.warning(f"Geocoding timeout for: {location_string}")
+        return None
+    
+    except requests.exceptions.RequestException as e:
+        # Handle network failure: request errors
+        logger.error(f"Geocoding service error for {location_string}: {str(e)}")
+        return None
+    
+    except (ValueError, KeyError) as e:
+        # Handle parsing errors
+        logger.error(f"Error parsing geocoding response for {location_string}: {str(e)}")
+        return None
+    
+    except Exception as e:
+        # Handle any other unexpected errors
+        logger.error(f"Unexpected geocoding error for {location_string}: {str(e)}")
+        return None
 
 
 # =============================================================================
@@ -236,65 +367,42 @@ async def submit_citizen_report(
         else:
             logger.info(f"AI did not detect a clear hazard type (confidence too low)")
         
-        # GeoNER: Extract coordinates if not provided by user
+        # Coordinate Extraction: Use Nominatim API for accurate map pinning
+        # This replaces the previous GeoNER-based coordinate extraction process
         if latitude is None or longitude is None:
-            logger.info(f"Extracting coordinates using GeoNER from location and description...")
+            logger.info(f"Extracting coordinates using Nominatim API from location name: {location_name}")
             try:
-                # First, try extracting locations from the combined text
-                locations = geo_ner.extract_locations(combined_text)
-                
-                # Find the best location match (prefer locations with coordinates)
-                best_location = None
-                for loc in locations:
-                    if 'latitude' in loc and 'longitude' in loc:
-                        # Validate coordinates are within Philippine boundaries
-                        lat = loc['latitude']
-                        lng = loc['longitude']
-                        if 4 <= lat <= 21 and 116 <= lng <= 127:
-                            best_location = loc
-                            # Prefer pattern-matched locations (higher confidence)
-                            if loc.get('source') == 'pattern':
-                                break
-                
-                # If no location with coordinates found, try geocoding the location_name directly
-                if not best_location and location_name:
-                    logger.info(f"Attempting to geocode location_name directly: {location_name}")
-                    # Use GeoNER's internal geocoding (it's the only way to geocode a single location)
-                    geo_ner.load_model()  # Ensure model is loaded
-                    coords = geo_ner._geocode_location(f"{location_name}, Philippines")
+                # Step 1: Identify Input - Extract location string from report data
+                # The location_name field contains the location string (e.g., "Biclatan, General Trias")
+                if location_name and location_name.strip():
+                    # Step 2-5: Use Nominatim API client to get coordinates
+                    # This function handles:
+                    # - Constructing the HTTP GET request
+                    # - Executing the request with error handling
+                    # - Parsing the JSONv2 response
+                    # - Extracting lat/lon from the first result
+                    coords = get_coordinates_from_nominatim(location_name)
+                    
                     if coords and 'latitude' in coords and 'longitude' in coords:
-                        lat = coords['latitude']
-                        lng = coords['longitude']
-                        if 4 <= lat <= 21 and 116 <= lng <= 127:
-                            best_location = {
-                                'location_name': location_name,
-                                'latitude': lat,
-                                'longitude': lng,
-                                'confidence': 0.8,
-                                'source': 'geocoded'
-                            }
-                
-                if best_location:
-                    extracted_latitude = best_location['latitude']
-                    extracted_longitude = best_location['longitude']
-                    coordinates_source = "ai_extracted"
-                    # Do NOT log latitude/longitude or any sensitive coordinates in logs.
-                    source = best_location.get('source')
-                    confidence = best_location.get('confidence', 'N/A')
-                    logger.info(
-                        "AI successfully extracted coordinates from location/description."
-                    )
+                        extracted_latitude = coords['latitude']
+                        extracted_longitude = coords['longitude']
+                        coordinates_source = "nominatim_geocoded"
+                        logger.info(
+                            "Successfully extracted coordinates using Nominatim API for map pinning."
+                        )
+                    else:
+                        logger.warning(f"Could not extract coordinates from location name: {location_name}")
                 else:
-                    logger.warning(f"Could not extract coordinates from location and description")
+                    logger.warning("Location name is empty, cannot geocode")
             except Exception as e:
-                logger.error(f"Error during GeoNER coordinate extraction: {e}", exc_info=True)
+                logger.error(f"Error during Nominatim coordinate extraction: {e}", exc_info=True)
                 # Continue without coordinates if extraction fails
         
     except Exception as e:
         logger.error(f"Error during AI processing: {e}", exc_info=True)
         # Don't fail the submission if AI processing fails - continue with user-provided data
     
-    # 3. Use AI-extracted coordinates if user didn't provide them
+    # 3. Use Nominatim-extracted coordinates if user didn't provide them
     final_latitude = latitude if latitude is not None else extracted_latitude
     final_longitude = longitude if longitude is not None else extracted_longitude
     
@@ -302,8 +410,8 @@ async def submit_citizen_report(
     if final_latitude is not None and final_longitude is not None:
         if not (4 <= final_latitude <= 21 and 116 <= final_longitude <= 127):
             logger.warning("Coordinates outside Philippine boundaries submitted.")
-            # Reset to None if outside boundaries
-            if coordinates_source == "ai_extracted":
+            # Reset to None if outside boundaries (for Nominatim or other extracted coordinates)
+            if coordinates_source in ["nominatim_geocoded", "ai_extracted"]:
                 final_latitude = None
                 final_longitude = None
                 coordinates_source = None

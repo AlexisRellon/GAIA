@@ -132,7 +132,7 @@ export const adminApi = {
   // Report Triage
   reports: {
     triage: (params?: {
-      status?: string;
+      status_filter?: string;
       hazard_type?: string;
       min_confidence?: number;
       max_confidence?: number;
@@ -140,7 +140,7 @@ export const adminApi = {
       offset?: number;
     }) => {
       const queryParams = new URLSearchParams();
-      if (params?.status) queryParams.append('status', params.status);
+      if (params?.status_filter) queryParams.append('status_filter', params.status_filter);
       if (params?.hazard_type) queryParams.append('hazard_type', params.hazard_type);
       if (params?.min_confidence) queryParams.append('min_confidence', params.min_confidence.toString());
       if (params?.max_confidence) queryParams.append('max_confidence', params.max_confidence.toString());
@@ -151,14 +151,31 @@ export const adminApi = {
       return apiRequest(`/api/v1/admin/reports/triage${queryString ? `?${queryString}` : ''}`);
     },
 
-    validate: (trackingId: string, notes?: string) => apiRequest(`/api/v1/admin/reports/${trackingId}/validate`, {
-      method: 'POST',
-      body: JSON.stringify({ notes: notes || null }),
-    }),
+    validate: (
+      trackingId: string,
+      payload?: { notes?: string | null; latitude?: number; longitude?: number }
+    ) => {
+      const body: Record<string, unknown> = {};
+      if (payload?.notes !== undefined) body.notes = payload.notes;
+      if (payload?.latitude !== undefined) body.latitude = payload.latitude;
+      if (payload?.longitude !== undefined) body.longitude = payload.longitude;
 
-    reject: (trackingId: string, notes?: string) => apiRequest(`/api/v1/admin/reports/${trackingId}/reject`, {
-      method: 'POST',
-      body: JSON.stringify({ notes: notes || null }),
-    }),
+      return apiRequest(`/api/v1/admin/reports/${trackingId}/validate`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    reject: (trackingId: string, payload?: { notes?: string | null }) => {
+      const body: Record<string, unknown> = {};
+      if (payload?.notes !== undefined) {
+        body.notes = payload.notes;
+      }
+
+      return apiRequest(`/api/v1/admin/reports/${trackingId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
   },
 };

@@ -575,11 +575,7 @@ const ReportTriage: React.FC = () => {
                         <span className="text-sm font-mono">
                           {selectedReport.latitude.toFixed(4)}, {selectedReport.longitude.toFixed(4)}
                         </span>
-                        {selectedReport.image_metadata?.ai_processing?.coordinates_source === 'ai_extracted' && (
-                          <span className="text-xs text-blue-600 mt-0.5">
-                            Coordinates extracted from location and description
-                          </span>
-                        )}
+
                         {selectedReport.image_metadata?.ai_processing?.coordinates_source === 'user' && (
                           <span className="text-xs text-gray-500 mt-0.5">
                             Coordinates provided by user

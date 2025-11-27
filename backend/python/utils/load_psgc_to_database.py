@@ -36,6 +36,7 @@ from backend.python.lib.supabase_client import supabase
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 import time
+import requests
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,7 +65,8 @@ def parse_population(pop_str: str) -> Optional[int]:
 
 def get_centroid_from_geocoding(name: str, hierarchy: Dict) -> Optional[Dict]:
     """
-    Get centroid coordinates using geocoding as fallback.
+    Get centroid coordinates using Nominatim API directly with JSONv2 format.
+    Uses the same structure as the example: Biclatan, General Trias
     
     Returns:
         Dict with 'latitude' and 'longitude', or None
@@ -72,7 +74,7 @@ def get_centroid_from_geocoding(name: str, hierarchy: Dict) -> Optional[Dict]:
     global _last_geocode_time
     
     try:
-        # Build hierarchical query
+        # Build hierarchical query (e.g., "Biclatan, General Trias, Philippines")
         query_parts = []
         if hierarchy.get('barangay'):
             query_parts.append(hierarchy['barangay'])
@@ -83,24 +85,67 @@ def get_centroid_from_geocoding(name: str, hierarchy: Dict) -> Optional[Dict]:
         query_parts.append('Philippines')
         query = ', '.join(query_parts)
         
-        # Rate limiting
+        # Rate limiting: Wait 1 second between requests (Nominatim requirement)
         current_time = time.time()
         time_since_last = current_time - _last_geocode_time
         if time_since_last < 1.0:
             time.sleep(1.0 - time_since_last)
         
-        location = geocoder.geocode(query, exactly_one=True, language='en')
+        # Build Nominatim API URL with JSONv2 format
+        # Example: https://nominatim.openstreetmap.org/search?q=Biclatan%2C+General+Trias&format=jsonv2
+        base_url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            'q': query,
+            'format': 'jsonv2',
+            'limit': 1,  # Get only the best match
+            'addressdetails': 1,  # Include detailed address information
+            'countrycodes': 'ph'  # Constrain to Philippines
+        }
+        
+        # Make HTTP request to Nominatim API
+        headers = {
+            'User-Agent': 'gaia_psgc_loader/1.0'  # Required by Nominatim usage policy
+        }
+        
+        response = requests.get(base_url, params=params, headers=headers, timeout=10)
+        response.raise_for_status()
+        
         _last_geocode_time = time.time()
         
-        if location:
-            return {
-                'latitude': location.latitude,
-                'longitude': location.longitude
-            }
-    except Exception as e:
+        # Parse JSON response
+        results = response.json()
+        
+        if results and len(results) > 0:
+            # Get the best result (first result is typically the best match)
+            best_result = results[0]
+            
+            # Extract coordinates from JSONv2 format
+            # JSONv2 uses 'lat' and 'lon' as strings
+            lat = float(best_result.get('lat', 0))
+            lon = float(best_result.get('lon', 0))
+            
+            # Validate coordinates are within Philippine bounds
+            if 4 <= lat <= 21 and 116 <= lon <= 127:
+                return {
+                    'latitude': lat,
+                    'longitude': lon
+                }
+            else:
+                logger.debug(f"Geocoded coordinates outside Philippine bounds: {lat}, {lon}")
+                return None
+        else:
+            logger.debug(f"No geocoding result for: {query}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
         logger.debug(f"Geocoding failed for {name}: {str(e)}")
-    
-    return None
+        return None
+    except (ValueError, KeyError) as e:
+        logger.debug(f"Error parsing geocoding response for {name}: {str(e)}")
+        return None
+    except Exception as e:
+        logger.debug(f"Unexpected geocoding error for {name}: {str(e)}")
+        return None
 
 
 def load_psgc_data():
