@@ -55,6 +55,8 @@ export function useRssSchedule() {
     staleTime: 30 * 1000, // 30s
     gcTime: 60 * 1000, // 60s
     refetchOnWindowFocus: false,
+    refetchInterval: 10 * 1000,
+    refetchIntervalInBackground: true,
   });
 
   const mutation = useMutation({

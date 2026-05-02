@@ -122,7 +122,6 @@ export function RSSAutoProcessProvider({ children }: { children: React.ReactNode
   const [isProcessing, setIsProcessing] = useState(false);
   const [nextRunTime, setNextRunTimeState] = useState<Date | null>(() => loadNextRunTimeFromStorage());
   const [countdown, setCountdown] = useState<string>('');
-  const [backendSyncDone, setBackendSyncDone] = useState(false);
   const { schedule, setSchedule, isUpdating } = useRssSchedule();
   
   // Refs for intervals
@@ -276,30 +275,26 @@ export function RSSAutoProcessProvider({ children }: { children: React.ReactNode
     setCountdown('');
   }, []);
 
-  // Align frontend timer with backend schedule when schedule is loaded/refetched
+  // Align frontend timer with backend schedule whenever the query refetches.
   useEffect(() => {
-    // Treat any change to schedule (including null) as a valid server response
-    if (!backendSyncDone && schedule !== undefined) {
+    if (schedule !== undefined) {
       if (typeof schedule === 'string' && schedule !== '') {
         const next = new Date(schedule);
         if (!isNaN(next.getTime())) {
           setNextRunTime(next);
         }
-        setBackendSyncDone(true);
       } else {
-        // Server has no schedule (paused or not set). Fall back to a local
-        // timer only if there is still a valid cached value; otherwise seed a
-        // fresh client-local countdown so the UI remains usable offline.
+        // If the server has no schedule yet, preserve the current local
+        // countdown rather than jumping the timer around on every refetch.
         const localStorageTime = nextRunTimeRef.current;
         if (localStorageTime && localStorageTime.getTime() > Date.now()) {
           setNextRunTime(localStorageTime);
-        } else {
+        } else if (!nextRunTimeRef.current) {
           scheduleNextRun();
         }
-        setBackendSyncDone(true);
       }
     }
-  }, [schedule, backendSyncDone, scheduleNextRun, setNextRunTime]);
+  }, [schedule, scheduleNextRun, setNextRunTime]);
   /**
    * Toggle auto-processing on/off
    */
@@ -369,7 +364,7 @@ export function RSSAutoProcessProvider({ children }: { children: React.ReactNode
         countdownIntervalRef.current = null;
       }
     };
-  }, [isEnabled, stopAutoProcessing, scheduleNextRun, updateCountdown, setSchedule, backendSyncDone, setNextRunTime]);
+  }, [isEnabled, stopAutoProcessing, scheduleNextRun, updateCountdown, setSchedule, setNextRunTime]);
 
   // Update countdown when nextRunTime changes
   useEffect(() => {

@@ -105,6 +105,7 @@ import {
   useUpdateRSSFeed,
   useDeleteRSSFeed,
   useTestRSSFeed,
+  useCurrentProcessingJob,
 } from '../../../hooks/useRSS';
 import { useRSSAutoProcess } from '../../../contexts/RSSAutoProcessContext';
 import { RSSFeed, RSSFeedCreate, RSSFeedUpdate } from '../../../types/rss';
@@ -353,16 +354,18 @@ export function RSSFeedManager() {
   const updateMutation = useUpdateRSSFeed();
   const deleteMutation = useDeleteRSSFeed();
   const testMutation = useTestRSSFeed();
+  const { data: currentJob } = useCurrentProcessingJob();
 
   // Auto-processing from context (persists across views)
   const { 
     isEnabled: isAutoProcessEnabled, 
-    isProcessing, 
+    isProcessing: isLocalProcessing,
     countdown, 
     toggle: toggleAutoProcessing,
     processNow,
     isScheduleUpdating
   } = useRSSAutoProcess();
+  const isProcessing = isLocalProcessing || !!currentJob?.has_running_job;
 
   // Dialog states
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -623,6 +626,12 @@ export function RSSFeedManager() {
               <span className="text-muted-foreground">Auto-process paused</span>
             )}
           </div>
+
+          {currentJob?.has_running_job && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300">
+              System processing{currentJob.progress ? ` (${currentJob.progress.processed}/${currentJob.progress.total})` : ''}
+            </div>
+          )}
 
           <Button
             variant="outline"
