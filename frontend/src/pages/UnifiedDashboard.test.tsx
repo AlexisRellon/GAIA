@@ -41,7 +41,6 @@ vi.mock('../components/admin/ReportTriage', () => ({ default: () => <div>triage<
 vi.mock('../components/admin/ActivityMonitor', () => ({ default: () => <div>activity</div> }));
 vi.mock('../components/admin/RSSFeedsView', () => ({ default: () => <div>rss</div> }));
 vi.mock('../components/dashboard/StatusAnalyticsView', () => ({ default: () => <div>status-analytics</div> }));
-vi.mock('../components/admin/AdminOnboarding', () => ({ default: () => null }));
 vi.mock('../components/ErrorBoundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));

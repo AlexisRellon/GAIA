@@ -54,6 +54,21 @@ const fetchSystemStatus = async (): Promise<SystemStatusResponse> => {
   return response.json();
 };
 
+/** Recharts default tooltip uses a white panel while inheriting theme label color — invisible in dark mode. */
+const serviceHealthChartTooltip = {
+  contentStyle: {
+    backgroundColor: 'hsl(var(--popover))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: 'var(--radius)',
+    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+  },
+  labelStyle: {
+    color: 'hsl(var(--popover-foreground))',
+    fontWeight: 600,
+    marginBottom: 4,
+  },
+};
+
 export default function StatusAnalyticsView() {
   const [days, setDays] = useState<number>(30);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
@@ -336,7 +351,7 @@ export default function StatusAnalyticsView() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="date" />
                   <YAxis domain={[0, 100]} />
-                  <Tooltip />
+                  <Tooltip {...serviceHealthChartTooltip} />
                   <Legend />
                   <Line type="monotone" dataKey="uptime_percent" name="Uptime %" stroke="#16a34a" dot={false} />
                 </LineChart>
@@ -361,7 +376,7 @@ export default function StatusAnalyticsView() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="date" />
                   <YAxis />
-                  <Tooltip />
+                  <Tooltip {...serviceHealthChartTooltip} />
                   <Legend />
                   <Line type="monotone" dataKey="avg_response_ms" name="Avg ms" stroke="#2563eb" dot={false} />
                 </LineChart>

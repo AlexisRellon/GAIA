@@ -822,7 +822,7 @@ async def set_rss_schedule(
 
         # Validate authorization: token or master_admin role required
         token_valid = bool(internal_token) and bool(incoming_token) and secrets.compare_digest(incoming_token, internal_token)
-        is_system = current_user and getattr(current_user, 'email', None) == 'system@gaia.local'
+        is_system = current_user and getattr(current_user, 'email', None) == 'system@agaila.local'
         is_master_admin = bool(current_user) and getattr(current_user, 'role', None) == UserRole.MASTER_ADMIN
         
         if internal_token:
@@ -882,7 +882,7 @@ async def set_rss_schedule(
         # Always write an audit entry; token-based requests use a synthetic system principal.
         audit_user = current_user or UserContext(
             user_id=None,
-            email='system@gaia.local',
+            email='system@agaila.local',
             role=UserRole.MASTER_ADMIN,
             status=UserStatus.ACTIVE,
         )
