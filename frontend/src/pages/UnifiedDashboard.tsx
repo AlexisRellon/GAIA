@@ -59,7 +59,6 @@ import ReportTriage from '../components/admin/ReportTriage';
 import ActivityMonitor from '../components/admin/ActivityMonitor';
 import RSSFeedsView from '../components/admin/RSSFeedsView';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import AdminOnboarding from '../components/admin/AdminOnboarding';
 import { ThemeToggle } from '../components/ThemeToggle';
 import DashboardShellSkeleton from '../components/dashboard/DashboardShellSkeleton';
 
@@ -338,9 +337,6 @@ export default function UnifiedDashboard() {
           <main className="p-3 sm:p-4 md:p-6">
             {renderViewContent()}
           </main>
-
-          {/* Onboarding */}
-          <AdminOnboarding />
         </SidebarInset>
         </div>
       </SidebarProvider>
