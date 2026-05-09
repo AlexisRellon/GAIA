@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { adminApi } from '../../lib/api';
+import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 
 interface TriageReport {
@@ -214,7 +215,7 @@ const ReportPhoto: React.FC<{ imageUrl: string; index: number }> = ({ imageUrl, 
       <img
         src={imageUrl}
         alt={`Hazard photo ${index + 1}`}
-        className="w-full h-auto max-h-64 object-contain"
+        className="max-h-32 w-full object-contain sm:max-h-36"
         onError={() => setImageError(true)}
       />
       <a
@@ -371,24 +372,29 @@ const ReportTriage: React.FC = () => {
 
   const columns = [
     columnHelper.accessor('tracking_id', {
-      header: 'Tracking ID',
-      cell: (info) => (
-        <span className="font-mono text-sm font-medium">{info.getValue()}</span>
-      ),
+      header: 'ID',
+      cell: (info) => {
+        const id = info.getValue();
+        return (
+          <span className="font-mono text-[11px] font-medium block truncate" title={id}>
+            {id}
+          </span>
+        );
+      },
     }),
     columnHelper.accessor('hazard_type', {
-      header: 'Hazard Type',
+      header: 'Hazard',
       cell: (info) => {
         const hazardType = info.getValue() || 'other';
         const config = getHazardIcon(hazardType);
         return (
           <Badge 
             variant="secondary" 
-            className="capitalize flex items-center gap-1.5"
+            className="capitalize inline-flex items-center gap-1 max-w-full truncate px-1.5 py-0 text-[11px] font-normal"
             style={{ backgroundColor: config.bgColor, color: config.color }}
           >
-            <HazardIcon hazardType={hazardType} size={14} useHazardColor />
-            {config.label || 'Unclassified'}
+            <HazardIcon hazardType={hazardType} size={12} useHazardColor className="shrink-0" />
+            <span className="truncate">{config.label || 'Unclassified'}</span>
           </Badge>
         );
       },
@@ -399,9 +405,9 @@ const ReportTriage: React.FC = () => {
         const meta = getStatusMeta(info.getValue());
         const Icon = meta.icon;
         return (
-          <Badge variant="outline" className={`flex w-fit items-center gap-1.5 border ${meta.className}`}>
-            <Icon className="h-3.5 w-3.5" />
-            {meta.label}
+          <Badge variant="outline" className={`inline-flex w-fit max-w-full items-center gap-1 border px-1.5 py-0 text-[11px] ${meta.className}`}>
+            <Icon className="h-3 w-3 shrink-0" />
+            <span className="truncate">{meta.label}</span>
           </Badge>
         );
       },
@@ -409,65 +415,39 @@ const ReportTriage: React.FC = () => {
     columnHelper.accessor('location_name', {
       header: 'Location',
       cell: (info) => (
-        <div className="flex flex-col max-w-xs">
-          <span className="text-sm font-medium truncate">{info.getValue() || 'Unknown'}</span>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-xs font-medium break-words leading-snug">{info.getValue() || 'Unknown'}</span>
           {info.row.original.latitude !== null &&
             info.row.original.latitude !== undefined &&
             info.row.original.longitude !== null &&
             info.row.original.longitude !== undefined && (
-            <span className="text-xs text-muted-foreground font-mono">
-              {info.row.original.latitude.toFixed(4)}, {info.row.original.longitude.toFixed(4)}
+            <span className="text-[10px] leading-tight text-muted-foreground font-mono">
+              {info.row.original.latitude.toFixed(4)}
+              ,{info.row.original.longitude.toFixed(4)}
             </span>
           )}
         </div>
       ),
     }),
-    columnHelper.display({
-      id: 'reporter',
-      header: 'Reporter',
-      cell: ({ row }) => {
-        const report = row.original;
-        const hasReporterInfo = report.name || report.contact_number;
-        
-        if (!hasReporterInfo) {
-          return <span className="text-muted-foreground text-sm">-</span>;
-        }
-        
-        return (
-          <div className="flex flex-col gap-1 max-w-xs">
-            {report.name && (
-              <div className="flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium truncate">{report.name}</span>
-              </div>
-            )}
-            {report.contact_number && (
-              <div className="flex items-center gap-1.5">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground font-mono truncate">{report.contact_number}</span>
-              </div>
-            )}
-          </div>
-        );
-      },
-    }),
     columnHelper.accessor('description', {
-      header: 'Description',
+      header: 'Details',
       cell: (info) => (
-        <span className="text-sm line-clamp-2 max-w-md">{info.getValue()}</span>
+        <div className="min-w-0 overflow-hidden">
+          <span className="block text-xs line-clamp-2 break-words leading-snug">{info.getValue()}</span>
+        </div>
       ),
     }),
     columnHelper.accessor('confidence_score', {
-      header: 'Confidence',
+      header: 'Conf.',
       cell: (info) => {
         const score = info.getValue();
-        if (score === null) return <span className="text-muted-foreground">-</span>;
+        if (score === null) return <span className="text-muted-foreground text-xs">-</span>;
 
         const percentage = Math.round(score * 100);
         const variant = percentage >= 70 ? 'default' : percentage >= 50 ? 'secondary' : 'destructive';
 
         return (
-          <Badge variant={variant}>
+          <Badge variant={variant} className="px-1.5 py-0 text-[11px] tabular-nums">
             {percentage}%
           </Badge>
         );
@@ -475,7 +455,7 @@ const ReportTriage: React.FC = () => {
     }),
     columnHelper.display({
       id: 'photo',
-      header: 'Photo',
+      header: 'Img',
       cell: ({ row }) => {
         const report = row.original;
         // Handle both image_urls (array) and image_url (string) formats
@@ -483,15 +463,13 @@ const ReportTriage: React.FC = () => {
         const hasPhoto = imageUrls.length > 0 && imageUrls[0] && imageUrls[0] !== null;
 
         if (!hasPhoto) {
-          return <span className="text-muted-foreground text-sm">-</span>;
+          return <span className="text-muted-foreground text-xs">-</span>;
         }
 
         return (
-          <div className="flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-blue-600" />
-            <span className="text-sm text-blue-600 font-medium">
-              {imageUrls.length} photo{imageUrls.length !== 1 ? 's' : ''}
-            </span>
+          <div className="flex items-center justify-center gap-0.5 text-blue-600" title={`${imageUrls.length} photo(s)`}>
+            <ImageIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="text-[11px] font-medium tabular-nums">{imageUrls.length}</span>
           </div>
         );
       },
@@ -499,8 +477,8 @@ const ReportTriage: React.FC = () => {
     columnHelper.accessor('submitted_at', {
       header: 'Submitted',
       cell: (info) => (
-        <span className="text-sm text-muted-foreground whitespace-nowrap">
-          {format(new Date(info.getValue()), 'MMM dd, HH:mm')}
+        <span className="text-[11px] text-muted-foreground whitespace-nowrap tabular-nums">
+          {format(new Date(info.getValue()), 'MMM d HH:mm')}
         </span>
       ),
     }),
@@ -513,31 +491,33 @@ const ReportTriage: React.FC = () => {
 
         if (isProcessed) {
           return (
-            <span className="text-xs text-muted-foreground italic">
-              Already processed
-            </span>
+            <div className="flex w-full min-w-0 justify-end">
+              <span className="text-[10px] text-muted-foreground italic whitespace-nowrap">Done</span>
+            </div>
           );
         }
 
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex w-full min-w-0 items-center justify-end gap-0.5">
             <Button
+              type="button"
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={() => handleAction(report, 'validate')}
-              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+              className="h-7 w-7 shrink-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+              aria-label={`Approve report ${report.tracking_id}`}
             >
-              <CheckCircle className="h-4 w-4 mr-1" />
-              Approve
+              <CheckCircle className="h-3.5 w-3.5" />
             </Button>
             <Button
+              type="button"
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={() => handleAction(report, 'reject')}
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="h-7 w-7 shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+              aria-label={`Reject report ${report.tracking_id}`}
             >
-              <XCircle className="h-4 w-4 mr-1" />
-              Reject
+              <XCircle className="h-3.5 w-3.5" />
             </Button>
           </div>
         );
@@ -723,36 +703,6 @@ const ReportTriage: React.FC = () => {
           </div>
         </div>
 
-        {/* Pagination */}
-        <div className="flex flex-wrap items-center justify-between gap-2 my-4">
-          <div className="text-sm text-muted-foreground">
-            Showing {reports.length === 0 ? 0 : table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
-            {Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, reports.length)} of{' '}
-            {reports.length} reports
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
-              >
-              Previous
-            </Button>
-            <span className="text-sm">
-              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
-              >
-              Next
-            </Button>
-          </div>
-        </div>
-
         {/* Error Alert */}
         {error && (
           <Alert variant="destructive" className="mb-4">
@@ -760,22 +710,42 @@ const ReportTriage: React.FC = () => {
           </Alert>
         )}
 
-        {/* Table */}
-        <div className="border rounded-md overflow-x-auto">
-          <Table>
+        {/* Table — fixed layout + compact cells keep rows within typical dashboard widths */}
+        <div className="border rounded-md">
+          <Table className="table-fixed">
+            <colgroup>
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '31%' }} />
+              <col style={{ width: '6%' }} />
+              <col style={{ width: '4%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '8%', minWidth: 88 }} />
+            </colgroup>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id} className="font-semibold">
+                    <TableHead
+                      key={header.id}
+                      className={cn(
+                        'h-9 px-2 py-1.5 text-xs font-semibold',
+                        header.column.id === 'actions' && 'text-right'
+                      )}
+                    >
                       {header.isPlaceholder ? null : (
                         <div
-                          className={header.column.getCanSort() ? 'cursor-pointer select-none' : ''}
+                          className={cn(
+                            header.column.getCanSort() && 'cursor-pointer select-none',
+                            header.column.id === 'actions' && 'flex w-full min-w-0 justify-end'
+                          )}
                           onClick={header.column.getToggleSortingHandler()}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
                           {header.column.getIsSorted() ? (
-                            <span className="ml-1">{header.column.getIsSorted() === 'asc' ? '↑' : '↓'}</span>
+                            <span className="ml-0.5">{header.column.getIsSorted() === 'asc' ? '↑' : '↓'}</span>
                           ) : null}
                         </div>
                       )}
@@ -793,7 +763,7 @@ const ReportTriage: React.FC = () => {
                 </TableRow>
               ) : table.getRowModel().rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground text-sm">
                     {statusFilter === 'duplicate'
                       ? 'No duplicate reports. Citizen reports are not currently flagged as duplicates by the system.'
                       : `No ${getStatusMeta(statusFilter).label.toLowerCase()} reports match the current filters.`}
@@ -803,7 +773,13 @@ const ReportTriage: React.FC = () => {
                 table.getRowModel().rows.map((row) => (
                   <TableRow key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          'min-w-0 px-2 py-1.5 text-xs',
+                          cell.column.id === 'actions' ? 'align-middle' : 'align-top'
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}
@@ -846,12 +822,18 @@ const ReportTriage: React.FC = () => {
 
         {/* Action Confirmation Dialog */}
         <Dialog open={isActionDialogOpen} onOpenChange={setIsActionDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
+          <DialogContent
+            className={cn(
+              'min-h-0 gap-2 overflow-x-hidden overflow-y-auto p-3 sm:max-w-2xl sm:gap-2 sm:p-4',
+              /* Hide scrollbar track while keeping wheel/touch scroll for tall content */
+              '[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
+            )}
+          >
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="text-base">
                 {actionType === 'validate' ? 'Approve Report' : 'Reject Report'}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-xs leading-snug">
                 {actionType === 'validate'
                   ? 'Approve this report as verified and add it to the hazard map.'
                   : 'Reject this report and mark it as invalid.'}
@@ -859,39 +841,64 @@ const ReportTriage: React.FC = () => {
             </DialogHeader>
 
             {selectedReport && (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Tracking ID:</span>
-                    <span className="font-mono text-sm">{selectedReport.tracking_id}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Hazard Type:</span>
-                    <Badge 
-                      variant="secondary" 
-                      className="flex items-center gap-1.5"
-                      style={{ 
-                        backgroundColor: getHazardIcon(selectedReport.hazard_type || 'other').bgColor, 
-                        color: getHazardIcon(selectedReport.hazard_type || 'other').color 
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <span className="font-medium text-muted-foreground">Tracking</span>
+                    <span className="font-mono text-xs sm:text-sm">{selectedReport.tracking_id}</span>
+                    <span className="hidden text-muted-foreground sm:inline" aria-hidden>
+                      ·
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className="flex shrink-0 items-center gap-1 text-xs"
+                      style={{
+                        backgroundColor: getHazardIcon(selectedReport.hazard_type || 'other').bgColor,
+                        color: getHazardIcon(selectedReport.hazard_type || 'other').color,
                       }}
                     >
-                      <HazardIcon hazardType={selectedReport.hazard_type || 'other'} size={14} useHazardColor />
+                      <HazardIcon hazardType={selectedReport.hazard_type || 'other'} size={12} useHazardColor />
                       {getHazardIcon(selectedReport.hazard_type || 'other').label || 'Unclassified'}
                     </Badge>
                   </div>
                   {(selectedReport.name || selectedReport.contact_number) && (
-                    <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-md border border-gray-200">
-                      <span className="text-sm font-medium">Reporter Information:</span>
-                      {selectedReport.name && (
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{selectedReport.name}</span>
+                    <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted p-2 text-foreground">
+                      <span className="text-xs font-medium">Reporter information</span>
+                      {selectedReport.name?.trim() && (
+                        <div className="flex min-w-0 items-start gap-1.5">
+                          <User className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                          {/^ENC:/i.test(selectedReport.name.trim()) || selectedReport.name.length > 100 ? (
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <p className="text-[11px] leading-tight text-muted-foreground">
+                                Encrypted at rest — scroll to review.
+                              </p>
+                              <p className="max-h-12 overflow-y-auto break-all rounded border border-border bg-background p-1.5 text-[11px] font-mono leading-snug [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                                {selectedReport.name}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="min-w-0 flex-1 break-words text-xs">{selectedReport.name}</span>
+                          )}
                         </div>
                       )}
-                      {selectedReport.contact_number && (
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm font-mono">{selectedReport.contact_number}</span>
+                      {selectedReport.contact_number?.trim() && (
+                        <div className="flex min-w-0 items-start gap-1.5">
+                          <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                          {/^ENC:/i.test(selectedReport.contact_number.trim()) ||
+                          selectedReport.contact_number.length > 100 ? (
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <p className="text-[11px] leading-tight text-muted-foreground">
+                                Encrypted at rest — scroll to review.
+                              </p>
+                              <p className="max-h-12 overflow-y-auto break-all rounded border border-border bg-background p-1.5 text-[11px] font-mono leading-snug [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                                {selectedReport.contact_number}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="min-w-0 flex-1 break-all font-mono text-xs">
+                              {selectedReport.contact_number}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -900,15 +907,15 @@ const ReportTriage: React.FC = () => {
                     selectedReport.latitude !== undefined &&
                     selectedReport.longitude !== null &&
                     selectedReport.longitude !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex flex-col">
-                        <span className="text-sm font-mono">
+                    <div className="flex items-start gap-1.5">
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <div className="flex min-w-0 flex-col">
+                        <span className="font-mono text-xs">
                           {selectedReport.latitude.toFixed(4)}, {selectedReport.longitude.toFixed(4)}
                         </span>
 
                         {selectedReport.image_metadata?.ai_processing?.coordinates_source === 'user' && (
-                          <span className="text-xs text-gray-500 mt-0.5">
+                          <span className="text-[11px] text-muted-foreground">
                             Coordinates provided by user
                           </span>
                         )}
@@ -919,14 +926,16 @@ const ReportTriage: React.FC = () => {
                     selectedReport.latitude === undefined ||
                     selectedReport.longitude === null ||
                     selectedReport.longitude === undefined) && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5 shrink-0" />
                       <span>No coordinates available</span>
                     </div>
                   )}
-                  <div className="space-y-1">
-                    <span className="text-sm font-medium">Description:</span>
-                    <p className="text-sm text-muted-foreground">{selectedReport.description}</p>
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-medium">Description</span>
+                    <p className="line-clamp-4 text-xs leading-snug text-muted-foreground">
+                      {selectedReport.description}
+                    </p>
                   </div>
                 </div>
 
@@ -938,9 +947,9 @@ const ReportTriage: React.FC = () => {
 
                   if (validImageUrls.length === 0) {
                     return (
-                      <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <ImageIcon className="h-4 w-4" />
+                      <div className="rounded border border-border bg-muted px-2 py-1.5">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <ImageIcon className="h-3.5 w-3.5 shrink-0" />
                           <span>No photo provided</span>
                         </div>
                       </div>
@@ -948,14 +957,14 @@ const ReportTriage: React.FC = () => {
                   }
 
                   return (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <ImageIcon className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium">Photo Evidence ({validImageUrls.length})</span>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <ImageIcon className="h-3.5 w-3.5 text-blue-600" />
+                        <span className="text-xs font-medium">Photo Evidence ({validImageUrls.length})</span>
                       </div>
-                      <div className="grid grid-cols-1 gap-3">
+                      <div className="grid grid-cols-1 gap-2">
                         {validImageUrls.map((imageUrl, index) => (
-                          <div key={index} className="relative border rounded-lg overflow-hidden bg-gray-50">
+                          <div key={index} className="relative overflow-hidden rounded-lg border border-border bg-muted">
                             <ReportPhoto imageUrl={imageUrl} index={index} />
                           </div>
                         ))}
@@ -965,11 +974,11 @@ const ReportTriage: React.FC = () => {
                 })()}
 
                 {actionType === 'validate' && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">Adjust location on map</p>
-                        <p className="text-xs text-muted-foreground">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium">Adjust location on map</p>
+                        <p className="text-[11px] leading-snug text-muted-foreground">
                           Drag the pin or click on the map to correct inaccurate coordinates before validation.
                         </p>
                       </div>
@@ -978,6 +987,7 @@ const ReportTriage: React.FC = () => {
                           type="button"
                           size="sm"
                           variant="outline"
+                          className="h-8 shrink-0 text-xs"
                           onClick={resetToReportedCoordinates}
                         >
                           Reset to reported pin
@@ -986,7 +996,7 @@ const ReportTriage: React.FC = () => {
                     </div>
 
                     {isClient ? (
-                      <div className="border rounded-lg overflow-hidden" style={{ height: 320 }}>
+                      <div className="overflow-hidden rounded-lg border" style={{ height: 220 }}>
                         <MapContainer
                           key={selectedReport.tracking_id}
                           center={mapCenter}
@@ -1021,19 +1031,19 @@ const ReportTriage: React.FC = () => {
                         </MapContainer>
                       </div>
                     ) : (
-                      <div className="border rounded-lg p-4 text-sm text-muted-foreground">
+                      <div className="rounded-lg border p-2 text-xs text-muted-foreground">
                         Map preview unavailable in this environment.
                       </div>
                     )}
 
                     {coordinateError && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{coordinateError}</AlertDescription>
+                      <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        <AlertDescription className="text-xs">{coordinateError}</AlertDescription>
                       </Alert>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                       {editedCoordinates ? (
                         <>
                           <span className="font-medium text-foreground">
@@ -1056,8 +1066,8 @@ const ReportTriage: React.FC = () => {
                 )}
 
                 {actionType === 'reject' && (
-                  <div className="space-y-2">
-                    <label htmlFor="rejection-reason" className="text-sm font-medium">
+                  <div className="space-y-1.5">
+                    <label htmlFor="rejection-reason" className="text-xs font-medium">
                       Reason for rejection <span className="text-red-500">*</span>
                     </label>
                     <textarea
@@ -1066,27 +1076,50 @@ const ReportTriage: React.FC = () => {
                       onChange={(e) => setRejectionReason(e.target.value)}
                       placeholder="Explain why this report is being rejected..."
                       maxLength={500}
-                      rows={3}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      rows={2}
+                      className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     />
-                    <p className="text-xs text-muted-foreground text-right">
+                    <p className="text-[11px] text-muted-foreground text-right">
                       {rejectionReason.length}/500
                     </p>
                   </div>
                 )}
 
-                <Alert className={actionType === 'validate' ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}>
-                  <AlertCircle className={actionType === 'validate' ? 'h-4 w-4 text-green-600' : 'h-4 w-4 text-red-600'} />
-                  <AlertDescription className={actionType === 'validate' ? 'text-green-800' : 'text-red-800'}>
+                <div
+                  role="alert"
+                  className={cn(
+                    'flex items-start gap-2 rounded-md border px-2 py-1.5 text-[11px] leading-snug',
+                    actionType === 'validate'
+                      ? 'border-green-600/80 bg-green-50 dark:border-green-700 dark:bg-green-950/50'
+                      : 'border-red-600 bg-red-50 dark:border-red-800 dark:bg-red-950/50'
+                  )}
+                >
+                  <AlertCircle
+                    className={cn(
+                      'mt-0.5 h-3 w-3 shrink-0',
+                      actionType === 'validate'
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    )}
+                    aria-hidden
+                  />
+                  <p
+                    className={cn(
+                      'min-w-0 flex-1',
+                      actionType === 'validate'
+                        ? 'text-green-900 dark:text-green-100'
+                        : 'text-red-900 dark:text-red-100'
+                    )}
+                  >
                     {actionType === 'validate'
                       ? 'This action will mark the report as validated and make it visible on the public hazard map.'
                       : 'This action will reject the report and it will not appear on the hazard map.'}
-                  </AlertDescription>
-                </Alert>
+                  </p>
+                </div>
               </div>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:gap-2">
               <Button
                 type="button"
                 variant="outline"

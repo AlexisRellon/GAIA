@@ -13,7 +13,6 @@ import { createCustomClusterIcon } from '../components/map/clusterIcon';
 import { getHazardMarkerIcon } from '../components/map/hazardMarkerIcon';
 import { HeatmapLayer, useHeatmapSettings } from '../components/map/HeatmapLayer';
 import { HazardInfoPanel } from '../components/map/HazardInfoPanel';
-import { MapOnboarding } from '../components/map/MapOnboarding';
 import { FilterPanel } from '../components/filters/FilterPanel';
 import { BoundaryLayer } from '../components/map/BoundaryLayer';
 import { ReportGenerator } from '../components/reports/ReportGenerator';
@@ -1537,56 +1536,6 @@ const PublicMap: React.FC = () => {
           </div>
         </div>
       </footer>
-
-      {/* Onboarding Tutorial */}
-      <MapOnboarding
-        autoStart
-        steps={[
-          {
-            id: 'map',
-            selector: '#public-map-container',
-            title: 'Interactive Live Map',
-            description: 'Pan and zoom to explore active hazards. The map updates continuously as new reports are validated.',
-            placement: 'bottom',
-            padding: 8,
-          },
-          {
-            id: 'zoom',
-            selector: '.leaflet-control-zoom',
-            title: 'Zoom Controls',
-            description: 'Use + and − to zoom. You can also use your mouse wheel or pinch gestures.',
-            placement: 'right',
-          },
-          {
-            id: 'layers',
-            selector: '.leaflet-control-layers',
-            title: 'Base Map Layers',
-            description: 'Switch between OpenStreetMap, Satellite, and Topographic views to suit your analysis.',
-            placement: 'right',
-          },
-          {
-            id: 'cluster',
-            selector: '[data-tour="cluster-toggle"]',
-            title: 'Marker Clustering',
-            description: 'Group nearby hazards for clarity. Toggle off to see individual markers at all zoom levels.',
-            placement: 'left',
-          },
-          {
-            id: 'heatmap',
-            selector: '[data-tour="heatmap-toggle"]',
-            title: 'Heatmap Overlay',
-            description: 'Visualize hazard density. The heatmap auto-disables when you zoom in for detailed inspection.',
-            placement: 'left',
-          },
-          {
-            id: 'realtime',
-            selector: '[data-realtime-footer="true"]',
-            title: 'Real-Time Updates',
-            description: 'The map refreshes every 30s. See the latest update time here and total active hazards shown.',
-            placement: 'top',
-          },
-        ]}
-      />
     </div>
   );
 };

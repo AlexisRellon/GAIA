@@ -108,7 +108,7 @@ def system_heartbeat_task(self):
             'resource_type': 'system',
             'resource_id': 'heartbeat',
             'user_id': None,
-            'user_email': 'system@gaia.local',
+            'user_email': 'system@agaila.local',
             'user_role': 'system',
             'ip_address': None,
             'user_agent': 'celery-beat',
@@ -230,7 +230,7 @@ def process_rss_feeds_task(self):
                 logger.info("No existing job record found - creating new job for auto-processing")
                 job_data = {
                     'started_by': '00000000-0000-0000-0000-000000000000',  # System user UUID
-                    'started_by_email': 'system@gaia.local',
+                    'started_by_email': 'system@agaila.local',
                     'status': 'running',
                     'total_feeds': 0,  # Will be updated when feeds are fetched
                     'processed_feeds': 0,
