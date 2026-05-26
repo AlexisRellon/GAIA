@@ -2441,6 +2441,10 @@ and societal standards. Here are key ethical considerations to keep in mind:
        GDPR (General Data Protection Regulation) or HIPAA (Health Insurance
        Portability and Accountability Act) is essential when handling sensitive
        data.
+     - **Privacy Policy Disclosure** : The system provides a public privacy policy
+         explaining what personal data is collected in citizen reports, how it is used,
+         and how users can request access, correction, or deletion under applicable
+         data protection laws (e.g., RA 10173 in the Philippines).
 **2. Informed Consent**
     - **Participants’ Knowledge** : When involving human subjects in your
        research (e.g., surveys, testing), it is important to obtain their informed

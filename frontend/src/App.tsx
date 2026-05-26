@@ -28,6 +28,7 @@ const ReportConfirmation = React.lazy(() => import('./pages/ReportConfirmation')
 const ReportTracking   = React.lazy(() => import('./pages/ReportTracking'));
 const StatusPage       = React.lazy(() => import('./pages/StatusPage'));
 const HazardInfoPage   = React.lazy(() => import('./pages/HazardInfoPage'));
+const PrivacyPolicy    = React.lazy(() => import('./pages/PrivacyPolicy'));
 
 /**
  * Component that applies document title based on route
@@ -64,6 +65,7 @@ const AppContent = () => {
             <Route path="/track" element={<ReportTracking />} />
             <Route path="/status" element={<StatusPage />} />
             <Route path="/hazard-info" element={<HazardInfoPage />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/update-password" element={<UpdatePassword />} />
