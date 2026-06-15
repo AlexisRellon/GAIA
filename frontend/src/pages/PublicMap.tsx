@@ -13,6 +13,7 @@ import { createCustomClusterIcon } from '../components/map/clusterIcon';
 import { getHazardMarkerIcon } from '../components/map/hazardMarkerIcon';
 import { HeatmapLayer, useHeatmapSettings } from '../components/map/HeatmapLayer';
 import { HazardInfoPanel } from '../components/map/HazardInfoPanel';
+import { DamageReportSidebar } from '../components/map/DamageReportSidebar';
 import { FilterPanel } from '../components/filters/FilterPanel';
 import { BoundaryLayer } from '../components/map/BoundaryLayer';
 import { ReportGenerator } from '../components/reports/ReportGenerator';
@@ -931,18 +932,33 @@ const PublicMap: React.FC = () => {
           </div>
         </aside>
 
-        {/* Hazard Info Panel - Slide-in details panel (GV-02) */}
-        <HazardInfoPanel
-          hazard={selectedHazard}
-          isOpen={selectedHazard !== null}
-          onClose={() => setSelectedHazard(null)}
-          onZoomTo={(lat, lon) => {
-            if (mapInstanceRef.current) {
-              mapInstanceRef.current.flyTo([lat, lon], 16, { duration: 1.5 });
-            }
-            setSelectedHazard(null);
-          }}
-        />
+        {/* Hazard Info Panel / Damage Report Sidebar - Slide-in details panel (GV-02) */}
+        {/* Citizen reports use the UNDP DamageReportSidebar; others use the standard HazardInfoPanel */}
+        {selectedHazard?.source_type === 'citizen_report' ? (
+          <DamageReportSidebar
+            report={selectedHazard}
+            isOpen={selectedHazard !== null}
+            onClose={() => setSelectedHazard(null)}
+            onZoomTo={(lat, lon) => {
+              if (mapInstanceRef.current) {
+                mapInstanceRef.current.flyTo([lat, lon], 16, { duration: 1.5 });
+              }
+              setSelectedHazard(null);
+            }}
+          />
+        ) : (
+          <HazardInfoPanel
+            hazard={selectedHazard}
+            isOpen={selectedHazard !== null}
+            onClose={() => setSelectedHazard(null)}
+            onZoomTo={(lat, lon) => {
+              if (mapInstanceRef.current) {
+                mapInstanceRef.current.flyTo([lat, lon], 16, { duration: 1.5 });
+              }
+              setSelectedHazard(null);
+            }}
+          />
+        )}
 
         {/* Open filters — floating control (close via header X when sidebar is open) */}
         {!isSidebarOpen && (

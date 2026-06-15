@@ -65,6 +65,12 @@ interface TriageReport {
   image_url?: string | null; // Backend may return this as well
   name?: string | null; // Reporter's name
   contact_number?: string | null; // Reporter's contact number
+  infrastructure_types?: string[] | null;
+  infrastructure_other_text?: string | null;
+  infrastructure_details?: string | null;
+  debris_status?: string | null;
+  damage_severity?: string | null;
+  crisis_categories?: Record<string, string[]> | null;
   image_metadata?: {
     ai_processing?: {
       ai_hazard_type?: string | null;
@@ -903,6 +909,38 @@ const ReportTriage: React.FC = () => {
                       )}
                     </div>
                   )}
+                  <div className="space-y-2 rounded-md border border-border bg-muted p-2">
+                    <span className="text-xs font-medium">Submitted Form Details</span>
+
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Type of Infrastructure</span>
+                      <p className="text-xs leading-snug text-foreground">
+                        {selectedReport.infrastructure_types?.length
+                          ? selectedReport.infrastructure_types.join(', ')
+                          : 'Not provided'}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Infrastructure Details</span>
+                      <p className="text-xs leading-snug text-foreground">
+                        {selectedReport.infrastructure_details || 'Not provided'}
+                      </p>
+                      {selectedReport.infrastructure_other_text?.trim() && (
+                        <p className="text-xs leading-snug text-foreground">
+                          <span className="font-medium">Other:</span> {selectedReport.infrastructure_other_text}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Debris Assessment</span>
+                      <p className="text-xs leading-snug text-foreground">
+                        {selectedReport.debris_status || 'Not provided'}
+                        {selectedReport.damage_severity ? ` · ${selectedReport.damage_severity}` : ''}
+                      </p>
+                    </div>
+                  </div>
                   {selectedReport.latitude !== null &&
                     selectedReport.latitude !== undefined &&
                     selectedReport.longitude !== null &&
