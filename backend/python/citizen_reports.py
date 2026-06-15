@@ -8,6 +8,7 @@ import os
 import logging
 import sys
 import uuid
+import json
 from datetime import datetime
 from typing import Optional, Dict
 import httpx
@@ -168,11 +169,18 @@ async def submit_citizen_report(
     latitude: float = Form(..., ge=-90, le=90, description="Latitude coordinate (required, from map picker/GPS)"),
     longitude: float = Form(..., ge=-180, le=180, description="Longitude coordinate (required, from map picker/GPS)"),
     contact_method: Optional[str] = Form(None, description="Optional contact method"),
-    image: Optional[UploadFile] = File(None, description="Optional hazard photo"),
-    image_metadata: Optional[dict] = Form(None, description="Metadata of the uploaded image")
+    image: UploadFile = File(..., description="Damage assessment photo (required for UNDP reports)"),
+    image_metadata: Optional[dict] = Form(None, description="Metadata of the uploaded image"),
+    # UNDP-mandated fields
+    infrastructure_types: str = Form(..., description="JSON array of affected infrastructure types"),
+    infrastructure_details: str = Form(..., min_length=1, max_length=500, description="Name and details of affected infrastructure"),
+    infrastructure_other_text: Optional[str] = Form(None, max_length=200, description="Custom infrastructure type when 'other' is selected"),
+    crisis_categories: Optional[str] = Form(None, description="JSON object of supplementary crisis factors (tech/human-made)"),
+    debris_status: str = Form(..., description="Debris assessment: yes, no, or unsure"),
+    damage_severity: str = Form(..., description="Damage severity: destroyed, severe, moderate, minor, or no_visible_damage"),
 ):
     """
-    Submit a citizen hazard report (CR-01, CR-03, CR-04)
+    Submit a citizen hazard report (CR-01, CR-03, CR-04) with UNDP damage assessment fields.
     
     - **captcha_token**: Cloudflare Turnstile token for bot prevention
     - **hazard_type**: Type of hazard (flood, typhoon, etc.)
@@ -182,7 +190,13 @@ async def submit_citizen_report(
     - **contact_phone**: Optional phone for SMS notifications (stored encrypted for single-use SMS delivery)
     - **latitude/longitude**: GPS coordinates (required, from map picker or GPS)
     - **contact_method**: Optional contact information
-    - **image**: Optional photo of the hazard
+    - **image**: Damage assessment photo (required)
+    - **infrastructure_types**: JSON array of infrastructure types affected (required)
+    - **infrastructure_details**: Free text describing the affected infrastructure (required)
+    - **infrastructure_other_text**: Custom text when 'other' infrastructure is selected
+    - **crisis_categories**: JSON object of supplementary crisis factors (optional)
+    - **debris_status**: Debris assessment - yes/no/unsure (required)
+    - **damage_severity**: Severity level - destroyed/severe/moderate/minor/no_visible_damage (required)
     
     Location is pinned on the map (required). location_name is derived via reverse geocoding.
     
@@ -221,6 +235,58 @@ async def submit_citizen_report(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Please provide a valid Philippine phone number (e.g., 09123456789, +63 912 345 6789)"
+        )
+    
+    # Validate UNDP fields
+    VALID_INFRASTRUCTURE_TYPES = [
+        'residential', 'commercial', 'government_building', 'utility_infrastructure',
+        'transport_communication', 'community_infrastructure', 'public_spaces_recreation', 'other',
+    ]
+    VALID_DEBRIS_STATUSES = ['yes', 'no', 'unsure']
+    VALID_DAMAGE_SEVERITIES = ['destroyed', 'severe', 'moderate', 'minor', 'no_visible_damage']
+    
+    # Parse infrastructure_types from JSON string
+    try:
+        parsed_infra_types = json.loads(infrastructure_types)
+        if not isinstance(parsed_infra_types, list) or len(parsed_infra_types) == 0:
+            raise ValueError("Must contain at least one infrastructure type")
+        for it in parsed_infra_types:
+            if it not in VALID_INFRASTRUCTURE_TYPES:
+                raise ValueError(f"Invalid infrastructure type: {it}")
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="infrastructure_types must be a valid JSON array"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid infrastructure_types: {e}"
+        )
+    
+    # Parse crisis_categories from JSON string (optional)
+    parsed_crisis_categories = None
+    if crisis_categories:
+        try:
+            parsed_crisis_categories = json.loads(crisis_categories)
+            if not isinstance(parsed_crisis_categories, dict):
+                raise ValueError("Must be a JSON object")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Invalid crisis_categories (non-fatal, ignoring): {e}")
+            parsed_crisis_categories = None
+    
+    # Validate debris_status
+    if debris_status not in VALID_DEBRIS_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"debris_status must be one of: {', '.join(VALID_DEBRIS_STATUSES)}"
+        )
+    
+    # Validate damage_severity
+    if damage_severity not in VALID_DAMAGE_SEVERITIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"damage_severity must be one of: {', '.join(VALID_DAMAGE_SEVERITIES)}"
         )
     
     # Cooldown: prevent same IP from submitting again within SUBMISSION_COOLDOWN_SECONDS
@@ -304,7 +370,7 @@ async def submit_citizen_report(
     # 5. Generate unique tracking ID
     tracking_id = f"CR{datetime.utcnow().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
     
-    # 6. Handle image upload (if provided)
+    # 6. Handle image upload (required for UNDP damage assessment)
     image_url = None
     image_metadata = None
     
@@ -413,7 +479,14 @@ async def submit_citizen_report(
             # "recaptcha_score": recaptcha_result.get("score", 0.0),  # TEMPORARILY DISABLED
             "captcha_token": "<TOKEN PLACEHOLDER>",  # Edit This when re-enabling CAPTCHA
             "submitted_at": datetime.utcnow().isoformat(),
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
+            # UNDP-mandated fields
+            "infrastructure_types": parsed_infra_types,
+            "infrastructure_details": infrastructure_details.strip(),
+            "infrastructure_other_text": infrastructure_other_text.strip() if infrastructure_other_text else None,
+            "crisis_categories": parsed_crisis_categories,
+            "debris_status": debris_status,
+            "damage_severity": damage_severity,
         }
         
         # Add coordinates if available (from user or AI extraction)
