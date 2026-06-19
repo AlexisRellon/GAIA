@@ -23,7 +23,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import DOMPurify from 'dompurify';
 import { useNavigate, Link } from 'react-router-dom';
 import {
-  AlertCircle, Send, Image as ImageIcon, ArrowLeft, ChevronRight, ChevronLeft, Check,
+  AlertCircle, Send, Image as ImageIcon, ArrowLeft, WifiOff, ChevronRight, ChevronLeft, Check,
   // Infrastructure icons
   Home, Building2, Landmark, Zap, Route, School, Trees, ClipboardList,
   // Supplementary crisis icons (tech/human-made only; natural hazards use HazardType)
@@ -39,6 +39,11 @@ import { API_BASE_URL } from '../lib/api';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { isValidPhilippinePhoneNumber } from '../utils/phoneValidation';
 import { z } from 'zod';
+// PWA-01: Offline queue + online status
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { enqueueReport, fileToDataUrl } from '../lib/offlineQueue';
+import { requestBackgroundSync } from '../serviceWorkerRegistration';
+import { toast } from 'sonner';
 import {
   INFRASTRUCTURE_TYPES,
   INFRASTRUCTURE_TYPE_CONFIG,
@@ -189,6 +194,11 @@ const STEPS = [
 
 const CitizenReportForm: React.FC = () => {
   const navigate = useNavigate();
+  // PWA-01: Track online/offline status for offline queue routing
+  const { isOnline } = useOnlineStatus();
+  // const turnstileRef = useRef<TurnstileInstance | null>(null); // TEMPORARILY DISABLED
+  // const [turnstileToken, setTurnstileToken] = useState<string | null>(null); // TEMPORARILY DISABLED
+  
   const [currentStep, setCurrentStep] = useState(1);
 
   // Form state
@@ -347,6 +357,10 @@ const CitizenReportForm: React.FC = () => {
     return true;
   };
 
+  const validateForm = (): boolean => {
+    return validateStep(1) && validateStep(2) && validateStep(3);
+  };
+
   // ============================================================================
   // HANDLERS
   // ============================================================================
@@ -417,13 +431,99 @@ const CitizenReportForm: React.FC = () => {
     // Check honeypot
     if (formData.website) return;
 
-    // Validate final step
-    if (!validateStep(3)) return;
+    // Validate form
+    if (!validateForm()) {
+      return;
+    }
 
+    // Guard (TypeScript can't infer validation guarantees these exist)
+    if (formData.latitude == null || formData.longitude == null) {
+      setErrors(prev => ({ ...prev, location: 'Location is required' }));
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // PWA-01: Offline path — save to IndexedDB queue and register Background Sync
+    // -------------------------------------------------------------------------
+    if (!isOnline) {
+      try {
+        const sanitizedName = DOMPurify.sanitize(formData.name.trim());
+        const sanitizedDescription = DOMPurify.sanitize(formData.description.trim());
+        // Convert File → base64 data URL so the Service Worker can reconstruct
+        // the multipart/form-data upload without needing the File prototype.
+        let imageDataUrl: string | undefined;
+        let imageFileName: string | undefined;
+        if (formData.image) {
+          imageDataUrl  = await fileToDataUrl(formData.image);
+          imageFileName = formData.image.name;
+        }
+
+        await enqueueReport({
+          hazardType: formData.hazardType,
+          description: sanitizedDescription,
+          name: sanitizedName,
+          contactNumber: formData.contactNumber.trim(),
+          latitude: formData.latitude,
+          longitude: formData.longitude,
+          infrastructureTypes: formData.infrastructureTypes,
+          infrastructureOtherText: DOMPurify.sanitize(formData.infrastructureOtherText.trim()),
+          infrastructureDetails: DOMPurify.sanitize(formData.infrastructureDetails.trim()),
+          crisisCategories: formData.crisisCategories,
+          debrisStatus: formData.debrisStatus,
+          damageSeverity: formData.damageSeverity,
+          // Image serialized as base64 — safe across the IDB ↔ SW context boundary
+          imageDataUrl,
+          imageFileName,
+          // NOTE: apiBaseUrl intentionally omitted — the SW derives it from
+          // self.location.hostname at sync time so the production URL
+          // (https://agaila.me) never appears in IndexedDB.
+        });
+        await requestBackgroundSync('agaila-report-sync');
+        toast.success(
+          'You\'re offline — your report has been saved and will be submitted automatically when you reconnect.',
+          { duration: 6000 }
+        );
+        // Reset form after successful queue
+        setFormData({
+          hazardType: '',
+          description: '',
+          name: '',
+          contactNumber: '',
+          latitude: undefined,
+          longitude: undefined,
+          image: undefined,
+          imageMetadata: undefined,
+          website: '',
+          infrastructureTypes: [],
+          infrastructureOtherText: '',
+          infrastructureDetails: '',
+          crisisCategories: {
+            technological_hazards: [],
+            human_made_crises: [],
+          },
+          debrisStatus: '',
+          damageSeverity: '',
+        });
+        setCurrentStep(1); // Good UX practice to reset the wizard step
+      } catch (err) {
+        console.error('[AGAILA] Failed to queue offline report:', err);
+        setErrors(prev => ({
+          ...prev,
+          submit: 'Failed to save your report for offline submission. Please try again.',
+        }));
+      }
+      return;
+    }
+
+    // -------------------------------------------------------------------------
+    // Online path
+    // -------------------------------------------------------------------------
     setIsSubmitting(true);
     setErrors({});
 
     try {
+      // Backend handles image upload to Supabase Storage
+      // Submit form to backend using FormData (backend expects multipart/form-data)
       if (formData.latitude == null || formData.longitude == null) {
         setErrors(prev => ({ ...prev, location: 'Location is required' }));
         setIsSubmitting(false);
@@ -1050,6 +1150,16 @@ const CitizenReportForm: React.FC = () => {
                 <p className="text-sm text-destructive flex items-center gap-2">
                   <AlertCircle size={16} aria-hidden /> {errors.submit}
                 </p>
+              </div>
+            )}
+
+            {/* PWA-01: Offline indicator on the submit button area */}
+            {!isOnline && (
+              <div className="flex items-center gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-sm">
+                <WifiOff size={15} aria-hidden />
+                <span>
+                  <strong>You&apos;re offline.</strong> Your report will be saved locally and submitted automatically when you reconnect.
+                </span>
               </div>
             )}
 

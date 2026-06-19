@@ -46,6 +46,11 @@ export function MapContainer({ boundaryGeoJSON }: MapContainerProps) {
         className="map-tiles--minimal"
         // Improve performance with subdomains
         subdomains={['a', 'b', 'c']}
+        // PWA-01: Required for Service Worker Cache API interception of tile responses.
+        // Without crossOrigin, OSM tiles are opaque responses that cannot be stored.
+        crossOrigin="anonymous"
+        // PWA-01: Shown when a tile fails to load offline and is not in the cache.
+        errorTileUrl="/offline-tile.png"
       />
 
       {/* Boundary Layer (optional) - Shows Philippine administrative divisions */}

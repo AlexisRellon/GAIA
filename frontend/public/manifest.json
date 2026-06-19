@@ -1,7 +1,7 @@
 {
     "short_name": "AGAILA",
 	"name": "AGAILA: Geospatial AI-driven Assessment",
-	"description": "Philippine Environmental Hazard Detection System",
+	"description": "Philippine Environmental Hazard Detection System — Real-time hazard mapping with offline support",
     "icons": [
 		{
 			"src": "assets/img/launcher-icon-0-75x.png",
@@ -41,7 +41,8 @@
 		}
     ],
     "display": "standalone",
-	"start_url": ".",
-	"theme_color": "#096dd9",
-	"background_color": "#ffffff"
+	"start_url": "/map",
+	"theme_color": "#0A2A4D",
+	"background_color": "#F0F4F8",
+	"orientation": "portrait-primary"
 }

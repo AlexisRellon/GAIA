@@ -17,7 +17,7 @@
 import { useEffect, useState } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet.heat';
+import '../../lib/leaflet-heat';
 
 // Extend Leaflet's HeatLayer type
 declare module 'leaflet' {
