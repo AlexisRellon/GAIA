@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0A2A4D" />
+    <title>AGAILA — You're Offline</title>
+    <link rel="icon" href="/assets/img/favicon.ico" />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --navy: #0A2A4D;
+        --blue: #005A9C;
+        --orange: #FF7A00;
+        --bg: #F0F4F8;
+        --text: #334155;
+        --muted: #64748b;
+        --border: #e2e8f0;
+      }
+
+      html, body {
+        height: 100%;
+        font-family: 'Lato', 'Inter', system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 2rem;
+        text-align: center;
+        gap: 1.5rem;
+      }
+
+      .logo {
+        height: 64px;
+        width: auto;
+      }
+
+      .icon-wrap {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+      }
+
+      .icon-wrap svg {
+        width: 40px;
+        height: 40px;
+        color: var(--muted);
+        stroke: var(--muted);
+      }
+
+      h1 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: var(--navy);
+        letter-spacing: -0.02em;
+      }
+
+      p {
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.6;
+        max-width: 400px;
+      }
+
+      .card {
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        padding: 2rem 2.5rem;
+        box-shadow: 0 4px 24px rgba(10, 42, 77, 0.08);
+        max-width: 480px;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        align-items: center;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+        border-radius: 9999px;
+        padding: 0.25rem 0.85rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+
+      .badge-dot {
+        width: 7px;
+        height: 7px;
+        background: #f59e0b;
+        border-radius: 50%;
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(0.85); }
+      }
+
+      button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--navy);
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.65rem 1.5rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+        font-family: inherit;
+      }
+
+      button:hover { background: var(--blue); }
+
+      .tip {
+        font-size: 0.8rem;
+        color: var(--muted);
+        border-top: 1px solid var(--border);
+        padding-top: 1rem;
+        margin-top: 0.25rem;
+        width: 100%;
+        text-align: center;
+      }
+
+      .tip strong { color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <img src="/assets/img/AGAILA.svg" alt="AGAILA" class="logo" onerror="this.style.display='none'" />
+
+      <div class="card">
+        <div class="badge">
+          <span class="badge-dot"></span>
+          No Internet Connection
+        </div>
+
+        <div class="icon-wrap">
+          <!-- Wifi Off icon -->
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+            <path d="M10.71 5.05A16 16 0 0 1 22.56 9"></path>
+            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+          </svg>
+        </div>
+
+        <div>
+          <h1>You're Offline</h1>
+        </div>
+
+        <p>
+          The map and previously viewed areas are still available using cached data.
+          Some features may be limited until your connection is restored.
+        </p>
+
+        <button onclick="window.location.reload()">
+          <!-- Rotate icon -->
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          Try Again
+        </button>
+
+        <p class="tip">
+          <strong>Available offline:</strong>
+          <a href="/" style="color:#005A9C">Home</a>,
+          <a href="/map" style="color:#005A9C">Hazard Map</a>, and
+          <a href="/report" style="color:#005A9C">Report a Hazard</a>.
+          Citizen reports submitted offline will sync automatically when you reconnect.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

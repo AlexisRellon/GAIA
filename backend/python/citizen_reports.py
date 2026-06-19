@@ -47,6 +47,24 @@ router = APIRouter(prefix="/citizen-reports", tags=["Citizen Reports"])
 # Supabase client imported from centralized configuration
 logger.info("✓ Supabase client initialized for citizen reports")
 
+
+def detect_image_mime(content: bytes) -> Optional[str]:
+    """
+    Detect the actual image MIME type from file content (magic bytes),
+    rather than trusting the client-supplied Content-Type header/filename.
+    Returns None if the content does not match a known image signature.
+    """
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if content.startswith(b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a"):
+        return "image/png"
+    if content.startswith(b"GIF87a") or content.startswith(b"GIF89a"):
+        return "image/gif"
+    if len(content) >= 12 and content[0:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 # =============================================================================
 # PYDANTIC MODELS
 # =============================================================================
@@ -370,86 +388,103 @@ async def submit_citizen_report(
     # 5. Generate unique tracking ID
     tracking_id = f"CR{datetime.utcnow().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
     
-    # 6. Handle image upload (required for UNDP damage assessment)
+    # 6. Handle image upload via compress-image Edge Function (required for UNDP damage assessment)
     image_url = None
     image_metadata = None
-    
+
     if image and image.filename:
         try:
-            # Security: Validate file type and extension
-            # Note: JFIF files are identified as image/jpeg (JFIF is a JPEG variant)
-            # Removed non-IANA 'image/jfif' MIME type; JPEG/JFIF files use 'image/jpeg'
-            # HEIC/HEIF disabled in production due to known parser vulnerabilities
             ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'jfif'}
             ALLOWED_MIME_TYPES = {'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'}
-            
-            # Validate MIME type
+
             if image.content_type and image.content_type not in ALLOWED_MIME_TYPES:
                 raise ValueError(f"Invalid file type: {image.content_type}. Only images are allowed.")
-            
-            # Sanitize and validate file extension
+
             original_filename = image.filename.lower()
             file_extension = original_filename.split('.')[-1] if '.' in original_filename else 'jpg'
-            
-            # Security: Whitelist file extensions to prevent executable uploads
+
             if file_extension not in ALLOWED_EXTENSIONS:
                 raise ValueError(f"Invalid file extension: {file_extension}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
-            
-            # Security: Generate safe filename - use tracking_id (server-generated) + validated extension
-            # This prevents path traversal attacks since tracking_id is server-controlled
-            unique_filename = f"citizen-reports/{tracking_id}.{file_extension}"
-            
-            # Security: Validate filename doesn't contain path traversal attempts
-            if '..' in unique_filename or '/' not in unique_filename or unique_filename.startswith('/'):
-                raise ValueError("Invalid filename format detected")
-            
-            # Read image content
-            image_content = await image.read()
-            
-            # Security: Validate file size (5MB limit)
+
+            # Server-controlled path prevents path traversal; edge function normalises extension to .jpg
+            storage_path = f"citizen-reports/{tracking_id}.{file_extension}"
+
             MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+            # Cap the read at MAX_FILE_SIZE + 1 so oversized uploads are rejected
+            # before being fully buffered into memory.
+            image_content = await image.read(MAX_FILE_SIZE + 1)
             if len(image_content) > MAX_FILE_SIZE:
-                raise ValueError(f"File size exceeds {MAX_FILE_SIZE / (1024*1024)}MB limit")
-            
-            # Upload to Supabase Storage
-            storage_response = supabase.storage.from_("citizen-report-images").upload(
-                path=unique_filename,
-                file=image_content,
-                file_options={"content-type": image.content_type or "image/jpeg"}
+                raise ValueError(f"File size exceeds {MAX_FILE_SIZE / (1024*1024):.0f}MB limit")
+
+            # Verify actual file content via magic bytes instead of trusting the
+            # client-supplied content_type/filename extension (MIME spoofing).
+            detected_mime = detect_image_mime(image_content)
+            if detected_mime is None or detected_mime not in ALLOWED_MIME_TYPES:
+                raise ValueError("Invalid file type: file content does not match an allowed image format.")
+
+            # Delegate compression + upload to the Supabase Edge Function.
+            # The function resizes to ≤1920px and re-encodes as JPEG at 80% quality,
+            # then stores the result directly in the citizen-report-images bucket.
+            from backend.python.lib.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+            edge_fn_url = f"{SUPABASE_URL}/functions/v1/compress-image"
+
+            # Use a server-controlled filename (not the client-supplied image.filename,
+            # which may leak PII) when forwarding the file to the Edge Function.
+            safe_filename = os.path.basename(storage_path)
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                edge_response = await client.post(
+                    edge_fn_url,
+                    files={"image": (safe_filename, image_content, detected_mime)},
+                    data={"path": storage_path},
+                    headers={"Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"},
+                )
+
+            if edge_response.status_code != 200:
+                raise RuntimeError(
+                    f"compress-image edge function returned {edge_response.status_code}: {edge_response.text}"
+                )
+
+            edge_result = edge_response.json()
+            image_url = edge_result["url"]
+            final_path = edge_result["path"]
+
+            logger.info(
+                f"Image compressed and uploaded: {final_path} | "
+                f"original={edge_result.get('original_size', 0)}B | "
+                f"compressed={edge_result.get('compressed_size', 0)}B | "
+                f"saved={edge_result.get('compression_ratio', 0)}%"
             )
-            
-            # Get public URL - manually construct with proper URL encoding for security
-            # Format: {SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}
-            from backend.python.lib.supabase_client import SUPABASE_URL
-            from urllib.parse import quote
-            
-            # Security: URL encode the path to prevent injection attacks
-            # The bucket name is hardcoded, and path is server-controlled, so this is safe
-            encoded_path = quote(unique_filename, safe='/')  # Keep '/' for path structure
-            image_url = f"{SUPABASE_URL}/storage/v1/object/public/citizen-report-images/{encoded_path}"
-            
-            # Verify the URL was generated correctly
-            logger.info(f"Image uploaded successfully: {unique_filename}")
-            logger.debug(f"Image public URL: {image_url}")
-            
+
             image_metadata = {
-                "filename": image.filename,  # Store original for reference
-                "content_type": image.content_type,
-                "size": len(image_content),
-                "stored_path": unique_filename  # Store server-controlled path
+                "filename": os.path.basename(final_path),
+                "content_type": "image/jpeg" if edge_result.get("was_compressed") else detected_mime,
+                "size": edge_result.get("compressed_size", len(image_content)),
+                "original_size": edge_result.get("original_size", len(image_content)),
+                "compression_ratio": edge_result.get("compression_ratio", 0),
+                "stored_path": final_path,
             }
-            
+
         except ValueError as e:
-            # Security: Don't expose internal errors, log them instead
             logger.error(f"Image validation failed: {e}")
             image_url = None
             image_metadata = {"error": "Invalid image file"}
+            image_upload_error = str(e)
         except Exception as e:
             logger.error(f"Image upload failed: {e}")
-            # Don't fail the entire request if image upload fails
             image_url = None
             image_metadata = {"error": "Upload failed"}
-    
+            image_upload_error = "Image upload failed. Please try again."
+
+    # The damage photo is required (see `image` Form field above); never allow
+    # the report to be inserted without a successfully stored image.
+    if image_url is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=image_upload_error if 'image_upload_error' in locals() else "Damage assessment photo is required."
+        )
+
     # 7. Insert report into database with UNVERIFIED status and AI-enhanced confidence (CR-04)
     try:
         # Calculate confidence score: base 30% + AI confidence boost (if AI detected hazard)

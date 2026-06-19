@@ -13,6 +13,10 @@ import { queryClient } from './lib/queryClient';
 import { storageCache } from './lib/storageCache';
 import { useRealtimeNotifications } from './hooks/useRealtimeNotifications';
 import { useDocumentTitle } from './hooks/useDocumentTitle';
+// PWA-01: Global offline status toast notifications
+import { OfflineToast } from './components/OfflineToast';
+// PWA-01: Catches ChunkLoadErrors from React.lazy() when offline
+import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import LandingPage from './pages/LandingPage';
 import DashboardShellSkeleton from './components/dashboard/DashboardShellSkeleton';
 
@@ -55,9 +59,18 @@ const AppContent = () => {
     >
       <DocumentTitleManager />
       <SkipLink />
+      {/* PWA-01: Global offline status toasts — driven via sonner Toaster */}
+      <OfflineToast />
       <main id="main-content" className="min-h-screen bg-background">
-        <React.Suspense fallback={<DashboardShellSkeleton />}>
-          <Routes>
+        {/*
+          PWA-01: ChunkErrorBoundary wraps Suspense to catch ChunkLoadErrors.
+          React Router navigates client-side without going through the SW,
+          so lazy chunk fetches can fail while offline. The boundary intercepts
+          these and shows "Page Not Available Offline" instead of crashing.
+        */}
+        <ChunkErrorBoundary>
+          <React.Suspense fallback={<DashboardShellSkeleton />}>
+            <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/map" element={<PublicMap />} />
             <Route path="/report" element={<CitizenReportForm />} />
@@ -98,8 +111,9 @@ const AppContent = () => {
                 </div>
               </div>
             } />
-          </Routes>
-        </React.Suspense>
+            </Routes>
+          </React.Suspense>
+        </ChunkErrorBoundary>
         <Toaster />
         </main>
       </Router>
