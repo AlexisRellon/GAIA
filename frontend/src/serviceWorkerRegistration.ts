@@ -13,16 +13,25 @@ import { Workbox } from 'workbox-window';
 let wb: Workbox | null = null;
 
 /**
+ * Background Sync API types (not yet part of the standard TS lib).
+ */
+interface SyncManager {
+  register(tag: string): Promise<void>;
+}
+
+interface ServiceWorkerRegistrationWithSync extends ServiceWorkerRegistration {
+  sync: SyncManager;
+}
+
+/**
  * Register the AGAILA Service Worker.
  * Only runs in production and in browsers that support Service Workers.
  */
 export function registerSW(): void {
-  // NOTE: Guard disabled temporarily for local SW testing.
-  // Re-enable for production to avoid development noise.
-  // if (process.env.NODE_ENV !== 'production') {
-  //   console.info('[AGAILA SW] Service Worker skipped in development mode.');
-  //   return;
-  // }
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[AGAILA SW] Service Worker skipped in development mode.');
+    return;
+  }
 
   if (!('serviceWorker' in navigator)) {
     console.warn('[AGAILA SW] Service Workers are not supported in this browser.');
@@ -83,7 +92,7 @@ export async function requestBackgroundSync(tag = 'agaila-report-sync'): Promise
     const registration = await navigator.serviceWorker.ready;
     if ('sync' in registration) {
       // Background Sync API is supported
-      await (registration as ServiceWorkerRegistration & { sync: { register: (tag: string) => Promise<void> } }).sync.register(tag);
+      await (registration as ServiceWorkerRegistrationWithSync).sync.register(tag);
       console.info('[AGAILA SW] Background Sync registered:', tag);
     } else {
       // Fallback: attempt immediate submission (browser may be online)

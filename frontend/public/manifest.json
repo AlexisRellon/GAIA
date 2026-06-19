@@ -44,5 +44,5 @@
 	"start_url": "/map",
 	"theme_color": "#0A2A4D",
 	"background_color": "#F0F4F8",
-	"orientation": "portrait-primary"
+	"orientation": "any"
 }

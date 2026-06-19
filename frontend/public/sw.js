@@ -38,6 +38,14 @@ const CACHE_STATIC  = 'agaila-static-assets-v2.1';
 // ---------------------------------------------------------------------------
 const OFFLINE_ALLOWED_PATHS = ['/', '/map', '/report', '/hazard-info'];
 
+// Explicit OSM tile host allowlist (avoid suffix-based host checks)
+const OSM_TILE_HOSTS = new Set([
+  'tile.openstreetmap.org',
+  'a.tile.openstreetmap.org',
+  'b.tile.openstreetmap.org',
+  'c.tile.openstreetmap.org',
+]);
+
 function isOfflineAllowed(pathname) {
   return OFFLINE_ALLOWED_PATHS.some(
     (p) => pathname === p || pathname.startsWith(p + '/')
@@ -108,7 +116,7 @@ self.addEventListener('fetch', (event) => {
 
   // 2. OSM map tiles — StaleWhileRevalidate
   if (
-    url.hostname.endsWith('tile.openstreetmap.org') &&
+    OSM_TILE_HOSTS.has(url.hostname) &&
     url.pathname.match(/\/\d+\/\d+\/\d+\.png$/)
   ) {
     event.respondWith(
@@ -396,13 +404,20 @@ async function flushOfflineReports() {
           });
         }
       } else {
-        // Server returned a non-2xx — log and skip this report without retrying
-        // (retrying a 4xx will never succeed; a 5xx will be retried next sync cycle
-        // because we re-throw below only for network-level failures).
+        // Server returned a non-2xx — log the response body for diagnostics.
         const text = await response.text().catch(() => response.status.toString());
         console.warn(
           `[AGAILA SW] Server rejected report ${report.id} (${response.status}):`, text
         );
+
+        if (response.status >= 400 && response.status < 500) {
+          // Permanently invalid request (bad data, validation failure, etc.) —
+          // retrying will never succeed, so drop it from the queue.
+          await deleteFromStore(db, report.id);
+        } else if (response.status >= 500 && response.status < 600) {
+          // Transient server error — keep it pending and retry on next sync.
+          throw new Error(`Server error ${response.status} for report ${report.id}`);
+        }
       }
     } catch (err) {
       console.warn('[AGAILA SW] Network error — report still pending:', report.id);

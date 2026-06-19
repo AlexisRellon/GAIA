@@ -64,42 +64,10 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
 
     if (hasError && isOfflineChunkError) {
       return (
-        <div
-          style={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '2rem',
-            background: '#F0F4F8',
-            fontFamily: 'inherit',
-          }}
-        >
-          <div
-            style={{
-              background: 'white',
-              border: '1px solid #e2e8f0',
-              borderRadius: '1rem',
-              padding: '2.5rem',
-              maxWidth: '440px',
-              width: '100%',
-              textAlign: 'center',
-              boxShadow: '0 4px 24px rgba(10,42,77,0.08)',
-            }}
-          >
+        <div className="min-h-screen flex items-center justify-center p-8 bg-background font-sans">
+          <div className="bg-white border border-slate-200 rounded-2xl p-10 max-w-[440px] w-full text-center shadow-[0_4px_24px_rgba(10,42,77,0.08)]">
             {/* Wifi Off icon */}
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: '50%',
-                background: '#f1f5f9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 1.25rem',
-              }}
-            >
+            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-5">
               <svg
                 width="32"
                 height="32"
@@ -120,24 +88,17 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
               </svg>
             </div>
 
-            <h2
-              style={{
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                color: '#0A2A4D',
-                marginBottom: '0.5rem',
-              }}
-            >
+            <h2 className="text-xl font-bold text-primary mb-2">
               Page Not Available Offline
             </h2>
 
-            <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+            <p className="text-slate-500 text-[0.9rem] leading-relaxed mb-6">
               This page requires an internet connection.
               The following pages are available offline:
             </p>
 
             {/* Available pages */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+            <div className="flex flex-col gap-2 mb-6">
               {[
                 { href: '/', label: '🏠 Home' },
                 { href: '/map', label: '🗺️ Hazard Map' },
@@ -146,17 +107,7 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
                 <a
                   key={href}
                   href={href}
-                  style={{
-                    display: 'block',
-                    padding: '0.6rem 1rem',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '0.5rem',
-                    color: '#005A9C',
-                    textDecoration: 'none',
-                    fontSize: '0.875rem',
-                    fontWeight: 500,
-                  }}
+                  className="block px-4 py-[0.6rem] bg-slate-50 border border-slate-200 rounded-lg text-secondary no-underline text-sm font-medium"
                 >
                   {label}
                 </a>
@@ -165,17 +116,7 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
 
             <button
               onClick={this.handleRetry}
-              style={{
-                background: '#0A2A4D',
-                color: 'white',
-                border: 'none',
-                borderRadius: '0.5rem',
-                padding: '0.6rem 1.5rem',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
+              className="bg-primary text-white border-none rounded-lg px-6 py-[0.6rem] text-sm font-semibold cursor-pointer font-sans"
             >
               Try Again
             </button>

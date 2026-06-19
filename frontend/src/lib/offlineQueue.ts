@@ -93,11 +93,22 @@ export async function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+/**
+ * crypto.randomUUID() requires a secure context (HTTPS or localhost) and is
+ * undefined otherwise — fall back to a non-cryptographic id in that case.
+ */
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export async function enqueueReport(
   report: Omit<OfflineReport, 'id' | 'queuedAt'>
 ): Promise<string> {
   const db = await getDB();
-  const id = crypto.randomUUID();
+  const id = generateId();
   const entry: OfflineReport = {
     ...report,
     id,

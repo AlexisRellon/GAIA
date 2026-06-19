@@ -446,6 +446,7 @@ const CitizenReportForm: React.FC = () => {
     // PWA-01: Offline path — save to IndexedDB queue and register Background Sync
     // -------------------------------------------------------------------------
     if (!isOnline) {
+      setIsSubmitting(true);
       try {
         const sanitizedName = DOMPurify.sanitize(formData.name.trim());
         const sanitizedDescription = DOMPurify.sanitize(formData.description.trim());
@@ -505,12 +506,14 @@ const CitizenReportForm: React.FC = () => {
           damageSeverity: '',
         });
         setCurrentStep(1); // Good UX practice to reset the wizard step
+        setIsSubmitting(false);
       } catch (err) {
         console.error('[AGAILA] Failed to queue offline report:', err);
         setErrors(prev => ({
           ...prev,
           submit: 'Failed to save your report for offline submission. Please try again.',
         }));
+        setIsSubmitting(false);
       }
       return;
     }
