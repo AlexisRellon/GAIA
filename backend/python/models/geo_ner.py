@@ -263,6 +263,15 @@ class GeoNER:
             # Deduplicate locations
             locations = self._deduplicate_locations(locations)
             
+            # Sort locations by coordinate presence (has coords first), specificity (most specific first), and confidence (highest first)
+            def sort_key(loc: Dict):
+                has_coords = 0 if (loc.get('latitude') is not None and loc.get('longitude') is not None) else 1
+                spec_score = self._get_location_specificity_score(loc)
+                confidence = loc.get('confidence', 0.0)
+                return (has_coords, spec_score, -confidence)
+                
+            locations.sort(key=sort_key)
+            
             logger.info(f"Extracted {len(locations)} unique locations from text")
             return locations
             
@@ -399,6 +408,65 @@ class GeoNER:
             return 'barangay'
         else:
             return 'location'
+            
+    def _get_location_specificity_score(self, loc: Dict) -> int:
+        """
+        Get specificity score for a location. Lower score means more specific.
+        1: street
+        2: barangay
+        3: city / municipality / town
+        4: landmark / volcano / lake / mountain / river
+        5: province
+        6: general 'location' (default fallback)
+        7: region
+        8: country / island group / extremely broad area
+        """
+        name_lower = loc['location_name'].lower().strip()
+        loc_type = loc.get('location_type', '').lower()
+        
+        # 8. Country / Broadest
+        if name_lower in ['philippines', 'phil', 'ph']:
+            return 8
+            
+        # 7. Island groups / Regions
+        island_groups = ['luzon', 'visayas', 'mindanao']
+        if name_lower in island_groups:
+            return 7
+        if loc_type == 'region' or any(r.lower() == name_lower for r in self.PHILIPPINE_REGIONS):
+            return 7
+        if 'region' in name_lower:
+            return 7
+            
+        # 5. Provinces
+        if loc_type == 'province' or any(p.lower() == name_lower for p in self.PHILIPPINE_PROVINCES):
+            return 5
+        if loc.get('province') and name_lower == loc.get('province', '').lower():
+            return 5
+            
+        # 1. Street
+        if loc_type == 'street':
+            return 1
+            
+        # 2. Barangay
+        if loc_type == 'barangay':
+            return 2
+            
+        # 3. City / Municipality / Town
+        if loc_type == 'city' or any(c.lower() == name_lower for c in self.PHILIPPINE_CITIES):
+            return 3
+            
+        # If geocoded, we can check if it resolved to a city
+        city = loc.get('city')
+        if city and name_lower == city.lower():
+            return 3
+            
+        # 4. Landmark / Volcano / Lake / etc.
+        if loc_type in ['landmark', 'volcano', 'lake', 'mountain', 'river']:
+            return 4
+            
+        # 6. General 'location' (default fallback)
+        return 6
+
     
     def _geocode_location(self, location_name: str, retry_count: int = 0) -> Optional[Dict]:
         """
