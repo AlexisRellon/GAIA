@@ -194,6 +194,7 @@ async def submit_citizen_report(
     infrastructure_details: str = Form(..., min_length=1, max_length=500, description="Name and details of affected infrastructure"),
     infrastructure_other_text: Optional[str] = Form(None, max_length=200, description="Custom infrastructure type when 'other' is selected"),
     crisis_categories: Optional[str] = Form(None, description="JSON object of supplementary crisis factors (tech/human-made)"),
+    community_assessment: Optional[str] = Form(None, description="JSON object of community impact assessment responses"),
     debris_status: str = Form(..., description="Debris assessment: yes, no, or unsure"),
     damage_severity: str = Form(..., description="Damage severity: destroyed, severe, moderate, minor, or no_visible_damage"),
 ):
@@ -292,6 +293,17 @@ async def submit_citizen_report(
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Invalid crisis_categories (non-fatal, ignoring): {e}")
             parsed_crisis_categories = None
+
+    # Parse community_assessment from JSON string (optional)
+    parsed_community_assessment = None
+    if community_assessment:
+        try:
+            parsed_community_assessment = json.loads(community_assessment)
+            if not isinstance(parsed_community_assessment, dict):
+                raise ValueError("Must be a JSON object")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Invalid community_assessment (non-fatal, ignoring): {e}")
+            parsed_community_assessment = None
     
     # Validate debris_status
     if debris_status not in VALID_DEBRIS_STATUSES:
@@ -495,8 +507,6 @@ async def submit_citizen_report(
         else:
             confidence_score = base_confidence
         
-        # Build report data - only include location if coordinates are provided
-        # Note: image_url column is TEXT[] array, so we need to pass an array
         report_data = {
             "tracking_id": tracking_id,
             "hazard_type": hazard_type,
@@ -506,7 +516,8 @@ async def submit_citizen_report(
             "contact_number": contact_number,  # Will be encrypted below
             "contact_phone": contact_phone,  # Will be encrypted below (optional single-use SMS delivery)
             "contact_method": contact_method,  # Will be encrypted below
-            "image_url": [image_url] if image_url else None,  # Convert string to array for TEXT[] column
+            # Stored as TEXT[] in gaia.citizen_reports (admin triage reads image_url or image_urls)
+            "image_url": [image_url],
             "image_metadata": image_metadata,
             "source": "citizen_unverified",
             "confidence_score": confidence_score,
@@ -520,6 +531,7 @@ async def submit_citizen_report(
             "infrastructure_details": infrastructure_details.strip(),
             "infrastructure_other_text": infrastructure_other_text.strip() if infrastructure_other_text else None,
             "crisis_categories": parsed_crisis_categories,
+            "community_assessment": parsed_community_assessment,
             "debris_status": debris_status,
             "damage_severity": damage_severity,
         }

@@ -486,6 +486,9 @@ function buildFormData(report) {
   if (report.crisisCategories) {
     fd.append('crisis_categories', JSON.stringify(report.crisisCategories));
   }
+  if (report.communityAssessment) {
+    fd.append('community_assessment', JSON.stringify(report.communityAssessment));
+  }
   if (report.debrisStatus) {
     fd.append('debris_status', report.debrisStatus);
   }

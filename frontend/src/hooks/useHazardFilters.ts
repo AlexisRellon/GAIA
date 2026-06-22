@@ -19,6 +19,9 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import type { Hazard } from '../types/hazard';
+
+export type { Hazard };
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -38,20 +41,6 @@ export interface FilterState {
   customDateRange?: CustomDateRange;
   sourceTypes: SourceType[];
   severities: string[];
-}
-
-export interface Hazard {
-  id: string;
-  hazard_type: string;
-  severity: string;
-  location_name: string;
-  latitude: number;
-  longitude: number;
-  confidence_score: number;
-  source_type: string;
-  validated: boolean;
-  created_at: string;
-  source_content?: string;
 }
 
 // ============================================================================
@@ -103,7 +92,7 @@ export interface ApplyFiltersOptions {
  */
 function getDateRange(timeWindow: TimeWindow, customRange?: CustomDateRange): { start: Date; end: Date } | null {
   const now = new Date();
-  
+
   switch (timeWindow) {
     case '24h':
       return {
@@ -150,19 +139,19 @@ function mapSourceToType(source: string, validated: boolean): SourceType {
  */
 function parseFiltersFromURL(searchParams: URLSearchParams): Partial<FilterState> {
   const filters: Partial<FilterState> = {};
-  
+
   // Parse hazard types
   const types = searchParams.get('types');
   if (types) {
     filters.hazardTypes = types.split(',').filter(t => ALL_HAZARD_TYPES.includes(t));
   }
-  
+
   // Parse time window
   const time = searchParams.get('time');
   if (time && ['all', '24h', '7d', '30d', 'custom'].includes(time)) {
     filters.timeWindow = time as TimeWindow;
   }
-  
+
   // Parse custom date range
   if (time === 'custom') {
     const start = searchParams.get('start');
@@ -174,21 +163,21 @@ function parseFiltersFromURL(searchParams: URLSearchParams): Partial<FilterState
       };
     }
   }
-  
+
   // Parse source types
   const sources = searchParams.get('source');
   if (sources) {
-    filters.sourceTypes = sources.split(',').filter(s => 
+    filters.sourceTypes = sources.split(',').filter(s =>
       ['rss_feed', 'citizen_verified', 'citizen_unverified'].includes(s)
     ) as SourceType[];
   }
-  
+
   // Parse severities
   const severities = searchParams.get('severity');
   if (severities) {
     filters.severities = severities.split(',').filter(s => ALL_SEVERITIES.includes(s));
   }
-  
+
   return filters;
 }
 
@@ -202,17 +191,17 @@ function parseFiltersFromURL(searchParams: URLSearchParams): Partial<FilterState
  */
 function serializeFiltersToURL(filters: FilterState): URLSearchParams {
   const params = new URLSearchParams();
-  
+
   // Add hazard types (all hazard types omitted from URL for consistency)
   if (filters.hazardTypes.length > 0 && filters.hazardTypes.length < ALL_HAZARD_TYPES.length) {
     params.set('types', filters.hazardTypes.join(','));
   }
-  
+
   // Add time window
   if (filters.timeWindow !== 'all') {
     params.set('time', filters.timeWindow);
   }
-  
+
   // Add custom date range
   if (filters.timeWindow === 'custom' && filters.customDateRange) {
     // Use local date formatting to avoid timezone conversion issues
@@ -225,17 +214,17 @@ function serializeFiltersToURL(filters: FilterState): URLSearchParams {
     params.set('start', formatLocalDate(filters.customDateRange.start));
     params.set('end', formatLocalDate(filters.customDateRange.end));
   }
-  
+
   // Add source types (all 3 sources omitted from URL - equivalent to no filter)
   if (filters.sourceTypes.length > 0 && filters.sourceTypes.length < 3) {
     params.set('source', filters.sourceTypes.join(','));
   }
-  
+
   // Add severities (all severity levels omitted from URL for consistency)
   if (filters.severities.length > 0 && filters.severities.length < ALL_SEVERITIES.length) {
     params.set('severity', filters.severities.join(','));
   }
-  
+
   return params;
 }
 
@@ -247,7 +236,7 @@ function loadFiltersFromStorage(): Partial<FilterState> {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      
+
       // Reconstruct Date objects for custom range
       if (parsed.customDateRange) {
         parsed.customDateRange = {
@@ -255,13 +244,13 @@ function loadFiltersFromStorage(): Partial<FilterState> {
           end: new Date(parsed.customDateRange.end),
         };
       }
-      
+
       return parsed;
     }
   } catch (err) {
     console.error('Failed to load filters from localStorage:', err);
   }
-  
+
   return {};
 }
 
@@ -370,7 +359,7 @@ export function useHazardFilters() {
    *   but not hazard type—use so each type badge can show counts for the active filter slice.
    */
   const applyFilters = useCallback(
-    (hazards: Hazard[], options?: ApplyFiltersOptions): Hazard[] => {
+    <T extends Hazard>(hazards: T[], options?: ApplyFiltersOptions): T[] => {
       const skipTypes = Boolean(options?.skipHazardTypes);
       return hazards.filter(hazard => {
         if (
@@ -423,12 +412,12 @@ export function useHazardFilters() {
    */
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    
+
     if (filters.hazardTypes.length > 0) count++;
     if (filters.severities.length > 0) count++;
     if (filters.timeWindow !== 'all') count++;
     if (filters.sourceTypes.length > 0) count++;
-    
+
     return count;
   }, [filters]);
 

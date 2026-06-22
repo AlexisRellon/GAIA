@@ -7,6 +7,14 @@
  * Module: GV-02 (Geospatial Visualization)
  */
 
+import type {
+  CommunityAssessment,
+  CrisisSelections,
+  DamageSeverity,
+  DebrisStatus,
+  InfrastructureType,
+} from './undpTypes';
+
 // ============================================================================
 // Core Hazard Types
 // ============================================================================
@@ -39,6 +47,16 @@ export interface Hazard {
   detected_at?: string;
   created_at: string;
   updated_at?: string;
+
+  // UNDP damage assessment fields
+  infrastructure_types?: InfrastructureType[];
+  infrastructure_details?: string;
+  infrastructure_other_text?: string;
+  crisis_categories?: CrisisSelections;
+  community_assessment?: CommunityAssessment;
+  debris_status?: DebrisStatus;
+  damage_severity?: DamageSeverity;
+  image_urls?: string[];
 }
 
 /**

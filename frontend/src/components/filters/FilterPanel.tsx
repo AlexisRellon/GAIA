@@ -51,8 +51,8 @@ export interface FilterPanelProps {
 // COMPONENT
 // ============================================================================
 
-export function FilterPanel({ 
-  hazards, 
+export function FilterPanel({
+  hazards,
   className = '',
   onExpandChange,
 }: FilterPanelProps) {
@@ -131,14 +131,14 @@ export function FilterPanel({
 
         <div className="flex items-center gap-2">
           {activeFilterCount > 0 && (
-            <Badge 
+            <Badge
               className="bg-secondary text-secondary-foreground text-xs font-semibold dark:bg-secondary dark:text-white"
               aria-label={`${activeFilterCount} active filter${activeFilterCount !== 1 ? 's' : ''}`}
             >
               {activeFilterCount}
             </Badge>
           )}
-          
+
           {!isDefault && (
             <button
               onClick={resetFilters}
@@ -213,10 +213,10 @@ export function FilterPanel({
                 {filters.timeWindow === 'custom'
                   ? 'Custom dates'
                   : filters.timeWindow === '24h'
-                  ? 'Last 24h'
-                  : filters.timeWindow === '7d'
-                  ? 'Last 7d'
-                  : 'Last 30d'}
+                    ? 'Last 24h'
+                    : filters.timeWindow === '7d'
+                      ? 'Last 7d'
+                      : 'Last 30d'}
                 <button
                   aria-label="Remove time filter"
                   onClick={() => updateFilters({ timeWindow: 'all', customDateRange: undefined })}
@@ -237,23 +237,23 @@ export function FilterPanel({
                 {source === 'rss_feed'
                   ? 'News Feed'
                   : source === 'citizen_verified'
-                  ? 'Verified'
-                  : 'Unverified'}
-              <button
-                aria-label={`Remove ${source === 'rss_feed'
-                  ? 'News Feed'
-                  : source === 'citizen_verified'
-                  ? 'Verified'
-                  : 'Unverified'} filter`}
-                onClick={() =>
-                  updateFilters({
-                    sourceTypes: filters.sourceTypes.filter((s) => s !== source),
-                  })
-                }
-                className="ml-1.5 inline-flex hover:bg-secondary/30 rounded-full p-0.5 transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <FontAwesomeIcon icon={faTimes} className="text-xs" aria-hidden="true" />
-              </button>
+                    ? 'Verified'
+                    : 'Unverified'}
+                <button
+                  aria-label={`Remove ${source === 'rss_feed'
+                    ? 'News Feed'
+                    : source === 'citizen_verified'
+                      ? 'Verified'
+                      : 'Unverified'} filter`}
+                  onClick={() =>
+                    updateFilters({
+                      sourceTypes: filters.sourceTypes.filter((s) => s !== source),
+                    })
+                  }
+                  className="ml-1.5 inline-flex hover:bg-secondary/30 rounded-full p-0.5 transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <FontAwesomeIcon icon={faTimes} className="text-xs" aria-hidden="true" />
+                </button>
               </Badge>
             </li>
           ))}
