@@ -28,6 +28,9 @@ import {
   Home, Building2, Landmark, Zap, Route, School, Trees, ClipboardList,
   // Supplementary crisis icons (tech/human-made only)
   Factory, Bomb, FlaskConical, ShieldAlert, Swords, Megaphone,
+  // Community assessment icons
+  Droplets, Heart, HandHelping, Banknote, Stethoscope, Tent,
+  Briefcase, ShowerHead, Wrench, Users, FileText, Activity,
   type LucideIcon,
 } from 'lucide-react';
 import { Card } from '../ui/card';
@@ -67,6 +70,42 @@ const Icon: React.FC<{ name: string; size?: number; className?: string; style?: 
 }) => {
   const Comp = ICON_MAP[name] || AlertTriangle;
   return <Comp size={size} className={className} style={style} aria-hidden="true" />;
+};
+
+// ============================================================================
+// PRESSING NEEDS — icon + color mapping for badge rendering
+// ============================================================================
+
+const PRESSING_NEEDS_DISPLAY: Record<string, { icon: LucideIcon; color: string; bgColor: string }> = {
+  food_water:              { icon: Droplets,    color: '#0284c7', bgColor: 'rgba(2, 132, 199, 0.12)' },
+  cash_financial:          { icon: Banknote,    color: '#059669', bgColor: 'rgba(5, 150, 105, 0.12)' },
+  healthcare_medicines:    { icon: Stethoscope, color: '#dc2626', bgColor: 'rgba(220, 38, 38, 0.12)' },
+  shelter_housing:         { icon: Tent,        color: '#7c3aed', bgColor: 'rgba(124, 58, 237, 0.12)' },
+  livelihoods_income:      { icon: Briefcase,   color: '#ca8a04', bgColor: 'rgba(202, 138, 4, 0.12)' },
+  wash:                    { icon: ShowerHead,  color: '#0891b2', bgColor: 'rgba(8, 145, 178, 0.12)' },
+  basic_services:          { icon: Wrench,      color: '#ea580c', bgColor: 'rgba(234, 88, 12, 0.12)' },
+  protection_psychosocial: { icon: Heart,       color: '#e11d48', bgColor: 'rgba(225, 29, 72, 0.12)' },
+  local_authority_support: { icon: Users,       color: '#6366f1', bgColor: 'rgba(99, 102, 241, 0.12)' },
+  other:                   { icon: FileText,    color: '#6b7280', bgColor: 'rgba(107, 114, 128, 0.12)' },
+};
+
+// Electricity status severity color mapping (green → red scale)
+const ELECTRICITY_STATUS_DISPLAY: Record<string, { color: string; bgColor: string; barWidth: string }> = {
+  no_damage:             { color: '#16a34a', bgColor: 'rgba(22, 163, 74, 0.12)',  barWidth: '100%' },
+  minor_damage:          { color: '#ca8a04', bgColor: 'rgba(202, 138, 4, 0.12)',  barWidth: '75%' },
+  moderate_damage:       { color: '#ea580c', bgColor: 'rgba(234, 88, 12, 0.12)',  barWidth: '50%' },
+  severe_damage:         { color: '#dc2626', bgColor: 'rgba(220, 38, 38, 0.12)',  barWidth: '25%' },
+  completely_destroyed:  { color: '#7f1d1d', bgColor: 'rgba(127, 29, 29, 0.15)',  barWidth: '5%' },
+  unknown:               { color: '#6b7280', bgColor: 'rgba(107, 114, 128, 0.12)', barWidth: '0%' },
+};
+
+// Health services severity color mapping
+const HEALTH_STATUS_DISPLAY: Record<string, { color: string; bgColor: string; barWidth: string }> = {
+  fully_functional:      { color: '#16a34a', bgColor: 'rgba(22, 163, 74, 0.12)',  barWidth: '100%' },
+  partially_functional:  { color: '#ca8a04', bgColor: 'rgba(202, 138, 4, 0.12)',  barWidth: '66%' },
+  largely_disrupted:     { color: '#ea580c', bgColor: 'rgba(234, 88, 12, 0.12)',  barWidth: '33%' },
+  not_functioning:       { color: '#dc2626', bgColor: 'rgba(220, 38, 38, 0.12)',  barWidth: '5%' },
+  unknown:               { color: '#6b7280', bgColor: 'rgba(107, 114, 128, 0.12)', barWidth: '0%' },
 };
 
 // ============================================================================
@@ -242,10 +281,6 @@ export function DamageReportSidebar({
                   Damage Report
                 </span>
               )}
-              <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-                <Clock size={12} aria-hidden />
-                <time>{formattedTime}</time>
-              </div>
             </div>
             <button
               onClick={handleClose}
@@ -344,20 +379,20 @@ export function DamageReportSidebar({
                       <div>
                         <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Type</p>
                         <div className="flex flex-wrap gap-1.5">
-                        {report.infrastructure_types.map((type) => {
-                          const cfg = INFRASTRUCTURE_TYPE_CONFIG[type];
-                          if (!cfg) return null;
-                          return (
-                            <span
-                              key={type}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium"
-                              style={{ backgroundColor: cfg.bgColor, color: cfg.color }}
-                            >
-                              <Icon name={cfg.iconName} size={12} style={{ color: cfg.color }} />
-                              {cfg.label}
-                            </span>
-                          );
-                        })}
+                          {report.infrastructure_types.map((type) => {
+                            const cfg = INFRASTRUCTURE_TYPE_CONFIG[type];
+                            if (!cfg) return null;
+                            return (
+                              <span
+                                key={type}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium"
+                                style={{ backgroundColor: cfg.bgColor, color: cfg.color }}
+                              >
+                                <Icon name={cfg.iconName} size={12} style={{ color: cfg.color }} />
+                                {cfg.label}
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -406,44 +441,122 @@ export function DamageReportSidebar({
                   </div>
                 )}
 
-                {/* ---- Community Assessment ---- */}
+                    {/* ============================================================
+                    COMMUNITY ASSESSMENT — showcases all community impact input
+                    ============================================================ */}
                 {report.community_assessment && (
-                  <Card className="border-border bg-muted/30 dark:bg-muted/15 p-4 space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Community Assessment</p>
-                    
-                    {report.community_assessment.electricityInfrastructure && (
-                      <div>
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Electricity</p>
-                        <p className="text-sm text-foreground">
-                          {ELECTRICITY_INFRASTRUCTURE_OPTIONS.find(o => o.value === report.community_assessment?.electricityInfrastructure)?.label || report.community_assessment.electricityInfrastructure}
-                        </p>
+                  <Card
+                    className="border-border bg-muted/30 dark:bg-muted/15 p-0 overflow-hidden"
+                    style={{ borderLeft: '3px solid #ea580c' }}
+                  >
+                    {/* Section header */}
+                    <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+                      <div
+                        className="flex items-center justify-center w-6 h-6 rounded-md"
+                        style={{ backgroundColor: 'rgba(234, 88, 12, 0.15)' }}
+                      >
+                        <Activity size={14} style={{ color: '#ea580c' }} aria-hidden />
                       </div>
-                    )}
-                    
-                    {report.community_assessment.healthServicesRating && (
-                      <div>
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Health Services</p>
-                        <p className="text-sm text-foreground">
-                          {HEALTH_SERVICES_OPTIONS.find(o => o.value === report.community_assessment?.healthServicesRating)?.label || report.community_assessment.healthServicesRating}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {report.community_assessment.pressingNeeds && report.community_assessment.pressingNeeds.length > 0 && (
-                      <div>
-                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Pressing Needs</p>
-                        <ul className="list-disc pl-4 mt-1 text-sm text-foreground space-y-1">
-                          {report.community_assessment.pressingNeeds.map(need => (
-                            <li key={need}>
-                              {need === 'other' 
-                                ? `Other: ${report.community_assessment?.pressingNeedsOther}` 
-                                : (PRESSING_NEEDS_OPTIONS.find(o => o.value === need)?.label || need)
-                              }
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                      <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#ea580c' }}>
+                        Community Assessment
+                      </p>
+                    </div>
+
+                    <div className="px-4 pb-4 space-y-4">
+                      {/* ---- Most Pressing Needs (featured) ---- */}
+                      {report.community_assessment.pressingNeeds && report.community_assessment.pressingNeeds.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-2.5">
+                            <HandHelping size={13} className="text-muted-foreground" aria-hidden />
+                            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                              Most Pressing Needs
+                            </p>
+                            <span
+                              className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold"
+                              style={{ backgroundColor: 'rgba(234, 88, 12, 0.15)', color: '#ea580c' }}
+                            >
+                              {report.community_assessment.pressingNeeds.length}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {report.community_assessment.pressingNeeds.map(need => {
+                              const display = PRESSING_NEEDS_DISPLAY[need];
+                              const label = need === 'other'
+                                ? `Other: ${report.community_assessment?.pressingNeedsOther || 'Unspecified'}`
+                                : (PRESSING_NEEDS_OPTIONS.find(o => o.value === need)?.label || need);
+                              const NeedIcon = display?.icon || FileText;
+                              const color = display?.color || '#6b7280';
+                              const bgColor = display?.bgColor || 'rgba(107, 114, 128, 0.12)';
+
+                              return (
+                                <span
+                                  key={need}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border"
+                                  style={{
+                                    borderColor: `${color}30`,
+                                    color: color,
+                                    backgroundColor: bgColor,
+                                  }}
+                                >
+                                  <NeedIcon size={13} style={{ color }} aria-hidden />
+                                  {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ---- Electricity Infrastructure status ---- */}
+                      {report.community_assessment.electricityInfrastructure && (() => {
+                        const eStatus = ELECTRICITY_STATUS_DISPLAY[report.community_assessment!.electricityInfrastructure] || ELECTRICITY_STATUS_DISPLAY.unknown;
+                        const eLabel = ELECTRICITY_INFRASTRUCTURE_OPTIONS.find(
+                          o => o.value === report.community_assessment!.electricityInfrastructure
+                        )?.label || report.community_assessment!.electricityInfrastructure;
+                        return (
+                          <div className="rounded-lg p-3" style={{ backgroundColor: eStatus.bgColor }}>
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <Zap size={13} style={{ color: eStatus.color }} aria-hidden />
+                              <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: eStatus.color }}>
+                                Electricity Infrastructure
+                              </p>
+                            </div>
+                            <p className="text-sm font-medium text-foreground mb-2">{eLabel}</p>
+                            <div className="w-full h-1.5 rounded-full bg-muted/60 dark:bg-muted/40 overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{ width: eStatus.barWidth, backgroundColor: eStatus.color, transition: 'width 0.6s cubic-bezier(0.22, 1, 0.36, 1)' }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* ---- Health Services status ---- */}
+                      {report.community_assessment.healthServicesRating && (() => {
+                        const hStatus = HEALTH_STATUS_DISPLAY[report.community_assessment!.healthServicesRating] || HEALTH_STATUS_DISPLAY.unknown;
+                        const hLabel = HEALTH_SERVICES_OPTIONS.find(
+                          o => o.value === report.community_assessment!.healthServicesRating
+                        )?.label || report.community_assessment!.healthServicesRating;
+                        return (
+                          <div className="rounded-lg p-3" style={{ backgroundColor: hStatus.bgColor }}>
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <Stethoscope size={13} style={{ color: hStatus.color }} aria-hidden />
+                              <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: hStatus.color }}>
+                                Health Services
+                              </p>
+                            </div>
+                            <p className="text-sm font-medium text-foreground mb-2">{hLabel}</p>
+                            <div className="w-full h-1.5 rounded-full bg-muted/60 dark:bg-muted/40 overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{ width: hStatus.barWidth, backgroundColor: hStatus.color, transition: 'width 0.6s cubic-bezier(0.22, 1, 0.36, 1)' }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </Card>
                 )}
 
@@ -460,9 +573,15 @@ export function DamageReportSidebar({
                 </div>
 
                 {/* ---- Reporter Attribution ---- */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
-                  <User size={14} aria-hidden />
-                  <span>Reported by: <span className="font-medium text-foreground">Anonymous Citizen Reporter</span></span>
+                <div className="flex items-start gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
+                  <User size={14} className="mt-0.5 shrink-0" aria-hidden />
+                  <div>
+                    <span>Reported by: <span className="font-medium text-foreground">Anonymous Citizen Reporter</span></span>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Clock size={12} aria-hidden />
+                      <time>{formattedTime}</time>
+                    </div>
+                  </div>
                 </div>
               </div>
             </>
