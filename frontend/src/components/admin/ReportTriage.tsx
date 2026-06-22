@@ -65,6 +65,12 @@ interface TriageReport {
   image_url?: string | null; // Backend may return this as well
   name?: string | null; // Reporter's name
   contact_number?: string | null; // Reporter's contact number
+  infrastructure_types?: string[] | null;
+  infrastructure_other_text?: string | null;
+  infrastructure_details?: string | null;
+  debris_status?: string | null;
+  damage_severity?: string | null;
+  crisis_categories?: Record<string, string[]> | null;
   image_metadata?: {
     ai_processing?: {
       ai_hazard_type?: string | null;
@@ -198,10 +204,10 @@ const ReportPhoto: React.FC<{ imageUrl: string; index: number }> = ({ imageUrl, 
       <div className="p-4 text-center text-sm text-muted-foreground">
         <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
         <p>Image failed to load</p>
-        <a 
-          href={imageUrl} 
-          target="_blank" 
-          rel="noopener noreferrer" 
+        <a
+          href={imageUrl}
+          target="_blank"
+          rel="noopener noreferrer"
           className="text-blue-600 hover:underline mt-1 block"
         >
           Open in new tab
@@ -251,11 +257,11 @@ const ReportTriage: React.FC = () => {
   const [rejectionReason, setRejectionReason] = useState('');
 
   // Fetch reports with React Query
-  const { 
-    data: rawReports, 
-    isLoading, 
-    error: queryError, 
-    refetch 
+  const {
+    data: rawReports,
+    isLoading,
+    error: queryError,
+    refetch
   } = useQuery({
     queryKey: ['admin', 'reports', 'triage', { statusFilter, hazardTypeFilter, minConfidence, maxConfidence }],
     queryFn: async () => {
@@ -388,8 +394,8 @@ const ReportTriage: React.FC = () => {
         const hazardType = info.getValue() || 'other';
         const config = getHazardIcon(hazardType);
         return (
-          <Badge 
-            variant="secondary" 
+          <Badge
+            variant="secondary"
             className="capitalize inline-flex items-center gap-1 max-w-full truncate px-1.5 py-0 text-[11px] font-normal"
             style={{ backgroundColor: config.bgColor, color: config.color }}
           >
@@ -421,11 +427,11 @@ const ReportTriage: React.FC = () => {
             info.row.original.latitude !== undefined &&
             info.row.original.longitude !== null &&
             info.row.original.longitude !== undefined && (
-            <span className="text-[10px] leading-tight text-muted-foreground font-mono">
-              {info.row.original.latitude.toFixed(4)}
-              ,{info.row.original.longitude.toFixed(4)}
-            </span>
-          )}
+              <span className="text-[10px] leading-tight text-muted-foreground font-mono">
+                {info.row.original.latitude.toFixed(4)}
+                ,{info.row.original.longitude.toFixed(4)}
+              </span>
+            )}
         </div>
       ),
     }),
@@ -568,20 +574,20 @@ const ReportTriage: React.FC = () => {
     // eslint-disable-next-line no-console
     console.log(`[ReportTriage] Starting ${actionType} for report:`, selectedReport.tracking_id);
     setIsProcessing(true);
-    
+
     try {
       // Call backend validate/reject endpoint
       // eslint-disable-next-line no-console
       console.log(`[ReportTriage] Calling adminApi.reports.${actionType}...`);
-      
+
       if (actionType === 'validate') {
         const payload: { latitude?: number; longitude?: number } = {};
-        
+
         if (editedCoordinates && coordinatesChanged) {
           payload.latitude = Number(editedCoordinates.lat.toFixed(6));
           payload.longitude = Number(editedCoordinates.lng.toFixed(6));
         }
-        
+
         const result = await adminApi.reports.validate(
           selectedReport.tracking_id,
           Object.keys(payload).length ? payload : undefined
@@ -595,11 +601,11 @@ const ReportTriage: React.FC = () => {
         // eslint-disable-next-line no-console
         console.log('[ReportTriage] Reject result:', result);
       }
-      
+
       // eslint-disable-next-line no-console
       console.log('[ReportTriage] Refetching reports...');
       await refetch();
-      
+
       const trackingId = selectedReport.tracking_id;
       setIsActionDialogOpen(false);
       setSelectedReport(null);
@@ -673,7 +679,7 @@ const ReportTriage: React.FC = () => {
             <Select
               value={minConfidence?.toString() || 'none'}
               onValueChange={(value) => setMinConfidence(value === 'none' ? undefined : parseFloat(value))}
-              >
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Min confidence" />
               </SelectTrigger>
@@ -689,7 +695,7 @@ const ReportTriage: React.FC = () => {
             <Select
               value={maxConfidence?.toString() || 'none'}
               onValueChange={(value) => setMaxConfidence(value === 'none' ? undefined : parseFloat(value))}
-              >
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Max confidence" />
               </SelectTrigger>
@@ -885,7 +891,7 @@ const ReportTriage: React.FC = () => {
                         <div className="flex min-w-0 items-start gap-1.5">
                           <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
                           {/^ENC:/i.test(selectedReport.contact_number.trim()) ||
-                          selectedReport.contact_number.length > 100 ? (
+                            selectedReport.contact_number.length > 100 ? (
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <p className="text-[11px] leading-tight text-muted-foreground">
                                 Encrypted at rest — scroll to review.
@@ -903,34 +909,66 @@ const ReportTriage: React.FC = () => {
                       )}
                     </div>
                   )}
+                  <div className="space-y-2 rounded-md border border-border bg-muted p-2">
+                    <span className="text-xs font-medium">Submitted Form Details</span>
+
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Type of Infrastructure</span>
+                      <p className="text-xs leading-snug text-foreground">
+                        {selectedReport.infrastructure_types?.length
+                          ? selectedReport.infrastructure_types.join(', ')
+                          : 'Not provided'}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Infrastructure Details</span>
+                      <p className="text-xs leading-snug text-foreground">
+                        {selectedReport.infrastructure_details || 'Not provided'}
+                      </p>
+                      {selectedReport.infrastructure_other_text?.trim() && (
+                        <p className="text-xs leading-snug text-foreground">
+                          <span className="font-medium">Other:</span> {selectedReport.infrastructure_other_text}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Debris Assessment</span>
+                      <p className="text-xs leading-snug text-foreground">
+                        {selectedReport.debris_status || 'Not provided'}
+                        {selectedReport.damage_severity ? ` · ${selectedReport.damage_severity}` : ''}
+                      </p>
+                    </div>
+                  </div>
                   {selectedReport.latitude !== null &&
                     selectedReport.latitude !== undefined &&
                     selectedReport.longitude !== null &&
                     selectedReport.longitude !== undefined && (
-                    <div className="flex items-start gap-1.5">
-                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <div className="flex min-w-0 flex-col">
-                        <span className="font-mono text-xs">
-                          {selectedReport.latitude.toFixed(4)}, {selectedReport.longitude.toFixed(4)}
-                        </span>
-
-                        {selectedReport.image_metadata?.ai_processing?.coordinates_source === 'user' && (
-                          <span className="text-[11px] text-muted-foreground">
-                            Coordinates provided by user
+                      <div className="flex items-start gap-1.5">
+                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <div className="flex min-w-0 flex-col">
+                          <span className="font-mono text-xs">
+                            {selectedReport.latitude.toFixed(4)}, {selectedReport.longitude.toFixed(4)}
                           </span>
-                        )}
+
+                          {selectedReport.image_metadata?.ai_processing?.coordinates_source === 'user' && (
+                            <span className="text-[11px] text-muted-foreground">
+                              Coordinates provided by user
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                   {(selectedReport.latitude === null ||
                     selectedReport.latitude === undefined ||
                     selectedReport.longitude === null ||
                     selectedReport.longitude === undefined) && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span>No coordinates available</span>
-                    </div>
-                  )}
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 shrink-0" />
+                        <span>No coordinates available</span>
+                      </div>
+                    )}
                   <div className="space-y-0.5">
                     <span className="text-xs font-medium">Description</span>
                     <p className="line-clamp-4 text-xs leading-snug text-muted-foreground">
@@ -1013,17 +1051,17 @@ const ReportTriage: React.FC = () => {
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                           />
                           <MapAutoResize />
-                  <MapClickHandler onLocationSelect={(lat, lng) => handleCoordinateChange(lat, lng)} />
+                          <MapClickHandler onLocationSelect={(lat, lng) => handleCoordinateChange(lat, lng)} />
                           {editedCoordinates && (
                             <Marker
                               position={[editedCoordinates.lat, editedCoordinates.lng]}
                               icon={markerIcon}
                               draggable
                               eventHandlers={{
-                        dragend: (event) => {
-                          const marker = event.target as L.Marker;
+                                dragend: (event) => {
+                                  const marker = event.target as L.Marker;
                                   const markerPosition = marker.getLatLng();
-                          handleCoordinateChange(markerPosition.lat, markerPosition.lng, marker);
+                                  handleCoordinateChange(markerPosition.lat, markerPosition.lng, marker);
                                 },
                               }}
                             />

@@ -27,7 +27,7 @@ export async function apiRequest<T = any>(
 ): Promise<T> {
   // Get current session token
   const { data: { session } } = await supabase.auth.getSession();
-  
+
   if (!session) {
     throw new Error('No active session. Please log in.');
   }
@@ -70,7 +70,7 @@ export const adminApi = {
       if (params?.organization) queryParams.append('organization', params.organization);
       if (params?.limit) queryParams.append('limit', params.limit.toString());
       if (params?.offset) queryParams.append('offset', params.offset.toString());
-      
+
       const queryString = queryParams.toString();
       return apiRequest(`/api/v1/admin/users${queryString ? `?${queryString}` : ''}`);
     },
@@ -133,7 +133,7 @@ export const adminApi = {
       if (params?.success !== undefined) queryParams.append('success', params.success.toString());
       if (params?.limit) queryParams.append('limit', params.limit.toString());
       if (params?.offset) queryParams.append('offset', params.offset.toString());
-      
+
       const queryString = queryParams.toString();
       return apiRequest(`/api/v1/admin/audit-logs${queryString ? `?${queryString}` : ''}`);
     },
@@ -142,7 +142,7 @@ export const adminApi = {
   // System Configuration
   config: {
     list: () => apiRequest('/api/v1/admin/system-config'),
-    
+
     update: (key: string, value: string) => apiRequest(`/api/v1/admin/system-config/${key}`, {
       method: 'PATCH',
       body: JSON.stringify({ config_value: value }),
@@ -166,7 +166,7 @@ export const adminApi = {
       if (params?.max_confidence) queryParams.append('max_confidence', params.max_confidence.toString());
       if (params?.limit) queryParams.append('limit', params.limit.toString());
       if (params?.offset) queryParams.append('offset', params.offset.toString());
-      
+
       const queryString = queryParams.toString();
       return apiRequest(`/api/v1/admin/reports/triage${queryString ? `?${queryString}` : ''}`);
     },

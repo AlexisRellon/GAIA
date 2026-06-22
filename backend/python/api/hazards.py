@@ -71,10 +71,20 @@ class HazardResponse(BaseModel):
     created_at: str
     validated_at: Optional[str] = None
     validated_by: Optional[str] = None
+    # UNDP damage assessment fields (populated for citizen_report source_type)
+    infrastructure_types: Optional[List[str]] = None
+    infrastructure_details: Optional[str] = None
+    infrastructure_other_text: Optional[str] = None
+    crisis_categories: Optional[Dict[str, Any]] = None
+    community_assessment: Optional[Dict[str, Any]] = None
+    debris_status: Optional[str] = None
+    damage_severity: Optional[str] = None
+    image_urls: Optional[List[str]] = None
     
     class Config:
-        # Allow extra fields from database
+        # Allow extra fields from database (e.g. location geometry, is_duplicate, etc.)
         extra = "ignore"
+
 
 
 class HazardFilters(BaseModel):

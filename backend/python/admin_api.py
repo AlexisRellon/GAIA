@@ -1017,20 +1017,51 @@ async def validate_citizen_report(
         final_longitude = report.get('longitude')
         final_location_geom = report.get('location')
 
+        # Map damage_severity to hazard severity level
+        # The user-selected damage_severity is the authoritative source
+        damage_sev = report.get('damage_severity', 'moderate')
+        DAMAGE_TO_SEVERITY = {
+            'destroyed': 'critical',
+            'severe': 'severe',
+            'moderate': 'moderate',
+            'minor': 'minor',
+            'no_visible_damage': 'minor',
+        }
+        mapped_severity = DAMAGE_TO_SEVERITY.get(damage_sev, 'moderate')
+
+        # Build image_urls from citizen_reports image_url column
+        # citizen_reports stores as TEXT[] in image_url; hazards expects image_urls (TEXT[])
+        raw_image = report.get('image_url') or report.get('image_urls')
+        if isinstance(raw_image, list):
+            image_urls = raw_image
+        elif isinstance(raw_image, str):
+            image_urls = [raw_image]
+        else:
+            image_urls = []
+
         hazard_data = {
             "hazard_type": report['hazard_type'],
             "location_name": report['location_name'],
             "latitude": final_latitude,
             "longitude": final_longitude,
             "location": final_location_geom,  # PostGIS geometry
-            "severity": "moderate",  # Default severity for citizen reports
+            "severity": mapped_severity,  # Derived from user-selected damage_severity
             "confidence_score": min(report.get('confidence_score', 0.3) + 0.4, 1.0),  # Boost confidence after validation
             "source_type": "citizen_report",
             "source_content": report['description'],
             "validated": True,
             "validated_by": current_user.user_id,
             "validated_at": datetime.utcnow().isoformat(),
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
+            # UNDP damage assessment fields (copied from citizen report)
+            "infrastructure_types": report.get('infrastructure_types'),
+            "infrastructure_details": report.get('infrastructure_details'),
+            "infrastructure_other_text": report.get('infrastructure_other_text'),
+            "crisis_categories": report.get('crisis_categories'),
+            "community_assessment": report.get('community_assessment'),
+            "debris_status": report.get('debris_status'),
+            "damage_severity": damage_sev,
+            "image_urls": image_urls,
         }
         
         hazard_response = supabase.schema("gaia").from_("hazards") \

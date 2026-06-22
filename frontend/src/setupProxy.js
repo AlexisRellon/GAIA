@@ -14,7 +14,9 @@ module.exports = function (app) {
     res.setHeader("X-Content-Type-Options", "nosniff");
 
     // Fix: Content Security Policy (CSP) Header Not Set (CWE-693)
-    // Allow same origin, Google Fonts, Leaflet CDN, and Supabase
+    // Allow same origin, Google Fonts, Leaflet CDN, and Supabase.
+    // PWA-01: connect-src includes OSM tile servers so the Service Worker's
+    // fetch() calls can cache tiles (SW fetch uses connect-src, not img-src).
     res.setHeader(
       "Content-Security-Policy",
       "default-src 'self'; " +
@@ -22,7 +24,17 @@ module.exports = function (app) {
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; " +
         "font-src 'self' https://fonts.gstatic.com; " +
         "img-src 'self' data: https: blob:; " +
-        "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.mapbox.com ws://localhost:* http://localhost:* https://nominatim.openstreetmap.org; " +
+        "connect-src 'self' " +
+          "https://*.supabase.co wss://*.supabase.co " +
+          "https://api.mapbox.com " +
+          "ws://localhost:* http://localhost:* " +
+          "https://nominatim.openstreetmap.org " +
+          "https://a.tile.openstreetmap.org " +
+          "https://b.tile.openstreetmap.org " +
+          "https://c.tile.openstreetmap.org " +
+          "https://fonts.googleapis.com " +
+          "https://fonts.gstatic.com " +
+          "https://unpkg.com; " +
         "frame-ancestors 'self'; " +
         "base-uri 'self'; " +
         "form-action 'self';"
@@ -33,12 +45,7 @@ module.exports = function (app) {
     res.setHeader("Referrer-Policy", "no-referrer-when-downgrade");
 
     // Fix: Server Leaks Information via "X-Powered-By" (CWE-200)
-    // Remove X-Powered-By header if it exists
     res.removeHeader("X-Powered-By");
-
-    // Fix: Cross-Domain Misconfiguration (CWE-264)
-    // CORS is handled by backend API, not frontend
-    // Remove any default CORS headers that might be set
 
     next();
   });

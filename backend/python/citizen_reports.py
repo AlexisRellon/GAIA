@@ -8,6 +8,7 @@ import os
 import logging
 import sys
 import uuid
+import json
 from datetime import datetime
 from typing import Optional, Dict
 import httpx
@@ -45,6 +46,24 @@ router = APIRouter(prefix="/citizen-reports", tags=["Citizen Reports"])
 
 # Supabase client imported from centralized configuration
 logger.info("✓ Supabase client initialized for citizen reports")
+
+
+def detect_image_mime(content: bytes) -> Optional[str]:
+    """
+    Detect the actual image MIME type from file content (magic bytes),
+    rather than trusting the client-supplied Content-Type header/filename.
+    Returns None if the content does not match a known image signature.
+    """
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if content.startswith(b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a"):
+        return "image/png"
+    if content.startswith(b"GIF87a") or content.startswith(b"GIF89a"):
+        return "image/gif"
+    if len(content) >= 12 and content[0:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
 
 # =============================================================================
 # PYDANTIC MODELS
@@ -168,11 +187,19 @@ async def submit_citizen_report(
     latitude: float = Form(..., ge=-90, le=90, description="Latitude coordinate (required, from map picker/GPS)"),
     longitude: float = Form(..., ge=-180, le=180, description="Longitude coordinate (required, from map picker/GPS)"),
     contact_method: Optional[str] = Form(None, description="Optional contact method"),
-    image: Optional[UploadFile] = File(None, description="Optional hazard photo"),
-    image_metadata: Optional[dict] = Form(None, description="Metadata of the uploaded image")
+    image: UploadFile = File(..., description="Damage assessment photo (required for UNDP reports)"),
+    image_metadata: Optional[dict] = Form(None, description="Metadata of the uploaded image"),
+    # UNDP-mandated fields
+    infrastructure_types: str = Form(..., description="JSON array of affected infrastructure types"),
+    infrastructure_details: str = Form(..., min_length=1, max_length=500, description="Name and details of affected infrastructure"),
+    infrastructure_other_text: Optional[str] = Form(None, max_length=200, description="Custom infrastructure type when 'other' is selected"),
+    crisis_categories: Optional[str] = Form(None, description="JSON object of supplementary crisis factors (tech/human-made)"),
+    community_assessment: Optional[str] = Form(None, description="JSON object of community impact assessment responses"),
+    debris_status: str = Form(..., description="Debris assessment: yes, no, or unsure"),
+    damage_severity: str = Form(..., description="Damage severity: destroyed, severe, moderate, minor, or no_visible_damage"),
 ):
     """
-    Submit a citizen hazard report (CR-01, CR-03, CR-04)
+    Submit a citizen hazard report (CR-01, CR-03, CR-04) with UNDP damage assessment fields.
     
     - **captcha_token**: Cloudflare Turnstile token for bot prevention
     - **hazard_type**: Type of hazard (flood, typhoon, etc.)
@@ -182,7 +209,13 @@ async def submit_citizen_report(
     - **contact_phone**: Optional phone for SMS notifications (stored encrypted for single-use SMS delivery)
     - **latitude/longitude**: GPS coordinates (required, from map picker or GPS)
     - **contact_method**: Optional contact information
-    - **image**: Optional photo of the hazard
+    - **image**: Damage assessment photo (required)
+    - **infrastructure_types**: JSON array of infrastructure types affected (required)
+    - **infrastructure_details**: Free text describing the affected infrastructure (required)
+    - **infrastructure_other_text**: Custom text when 'other' infrastructure is selected
+    - **crisis_categories**: JSON object of supplementary crisis factors (optional)
+    - **debris_status**: Debris assessment - yes/no/unsure (required)
+    - **damage_severity**: Severity level - destroyed/severe/moderate/minor/no_visible_damage (required)
     
     Location is pinned on the map (required). location_name is derived via reverse geocoding.
     
@@ -221,6 +254,69 @@ async def submit_citizen_report(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Please provide a valid Philippine phone number (e.g., 09123456789, +63 912 345 6789)"
+        )
+    
+    # Validate UNDP fields
+    VALID_INFRASTRUCTURE_TYPES = [
+        'residential', 'commercial', 'government_building', 'utility_infrastructure',
+        'transport_communication', 'community_infrastructure', 'public_spaces_recreation', 'other',
+    ]
+    VALID_DEBRIS_STATUSES = ['yes', 'no', 'unsure']
+    VALID_DAMAGE_SEVERITIES = ['destroyed', 'severe', 'moderate', 'minor', 'no_visible_damage']
+    
+    # Parse infrastructure_types from JSON string
+    try:
+        parsed_infra_types = json.loads(infrastructure_types)
+        if not isinstance(parsed_infra_types, list) or len(parsed_infra_types) == 0:
+            raise ValueError("Must contain at least one infrastructure type")
+        for it in parsed_infra_types:
+            if it not in VALID_INFRASTRUCTURE_TYPES:
+                raise ValueError(f"Invalid infrastructure type: {it}")
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="infrastructure_types must be a valid JSON array"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid infrastructure_types: {e}"
+        )
+    
+    # Parse crisis_categories from JSON string (optional)
+    parsed_crisis_categories = None
+    if crisis_categories:
+        try:
+            parsed_crisis_categories = json.loads(crisis_categories)
+            if not isinstance(parsed_crisis_categories, dict):
+                raise ValueError("Must be a JSON object")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Invalid crisis_categories (non-fatal, ignoring): {e}")
+            parsed_crisis_categories = None
+
+    # Parse community_assessment from JSON string (optional)
+    parsed_community_assessment = None
+    if community_assessment:
+        try:
+            parsed_community_assessment = json.loads(community_assessment)
+            if not isinstance(parsed_community_assessment, dict):
+                raise ValueError("Must be a JSON object")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Invalid community_assessment (non-fatal, ignoring): {e}")
+            parsed_community_assessment = None
+    
+    # Validate debris_status
+    if debris_status not in VALID_DEBRIS_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"debris_status must be one of: {', '.join(VALID_DEBRIS_STATUSES)}"
+        )
+    
+    # Validate damage_severity
+    if damage_severity not in VALID_DAMAGE_SEVERITIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"damage_severity must be one of: {', '.join(VALID_DAMAGE_SEVERITIES)}"
         )
     
     # Cooldown: prevent same IP from submitting again within SUBMISSION_COOLDOWN_SECONDS
@@ -304,86 +400,103 @@ async def submit_citizen_report(
     # 5. Generate unique tracking ID
     tracking_id = f"CR{datetime.utcnow().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
     
-    # 6. Handle image upload (if provided)
+    # 6. Handle image upload via compress-image Edge Function (required for UNDP damage assessment)
     image_url = None
     image_metadata = None
-    
+
     if image and image.filename:
         try:
-            # Security: Validate file type and extension
-            # Note: JFIF files are identified as image/jpeg (JFIF is a JPEG variant)
-            # Removed non-IANA 'image/jfif' MIME type; JPEG/JFIF files use 'image/jpeg'
-            # HEIC/HEIF disabled in production due to known parser vulnerabilities
             ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'jfif'}
             ALLOWED_MIME_TYPES = {'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'}
-            
-            # Validate MIME type
+
             if image.content_type and image.content_type not in ALLOWED_MIME_TYPES:
                 raise ValueError(f"Invalid file type: {image.content_type}. Only images are allowed.")
-            
-            # Sanitize and validate file extension
+
             original_filename = image.filename.lower()
             file_extension = original_filename.split('.')[-1] if '.' in original_filename else 'jpg'
-            
-            # Security: Whitelist file extensions to prevent executable uploads
+
             if file_extension not in ALLOWED_EXTENSIONS:
                 raise ValueError(f"Invalid file extension: {file_extension}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
-            
-            # Security: Generate safe filename - use tracking_id (server-generated) + validated extension
-            # This prevents path traversal attacks since tracking_id is server-controlled
-            unique_filename = f"citizen-reports/{tracking_id}.{file_extension}"
-            
-            # Security: Validate filename doesn't contain path traversal attempts
-            if '..' in unique_filename or '/' not in unique_filename or unique_filename.startswith('/'):
-                raise ValueError("Invalid filename format detected")
-            
-            # Read image content
-            image_content = await image.read()
-            
-            # Security: Validate file size (5MB limit)
+
+            # Server-controlled path prevents path traversal; edge function normalises extension to .jpg
+            storage_path = f"citizen-reports/{tracking_id}.{file_extension}"
+
             MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+            # Cap the read at MAX_FILE_SIZE + 1 so oversized uploads are rejected
+            # before being fully buffered into memory.
+            image_content = await image.read(MAX_FILE_SIZE + 1)
             if len(image_content) > MAX_FILE_SIZE:
-                raise ValueError(f"File size exceeds {MAX_FILE_SIZE / (1024*1024)}MB limit")
-            
-            # Upload to Supabase Storage
-            storage_response = supabase.storage.from_("citizen-report-images").upload(
-                path=unique_filename,
-                file=image_content,
-                file_options={"content-type": image.content_type or "image/jpeg"}
+                raise ValueError(f"File size exceeds {MAX_FILE_SIZE / (1024*1024):.0f}MB limit")
+
+            # Verify actual file content via magic bytes instead of trusting the
+            # client-supplied content_type/filename extension (MIME spoofing).
+            detected_mime = detect_image_mime(image_content)
+            if detected_mime is None or detected_mime not in ALLOWED_MIME_TYPES:
+                raise ValueError("Invalid file type: file content does not match an allowed image format.")
+
+            # Delegate compression + upload to the Supabase Edge Function.
+            # The function resizes to ≤1920px and re-encodes as JPEG at 80% quality,
+            # then stores the result directly in the citizen-report-images bucket.
+            from backend.python.lib.supabase_client import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+            edge_fn_url = f"{SUPABASE_URL}/functions/v1/compress-image"
+
+            # Use a server-controlled filename (not the client-supplied image.filename,
+            # which may leak PII) when forwarding the file to the Edge Function.
+            safe_filename = os.path.basename(storage_path)
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                edge_response = await client.post(
+                    edge_fn_url,
+                    files={"image": (safe_filename, image_content, detected_mime)},
+                    data={"path": storage_path},
+                    headers={"Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"},
+                )
+
+            if edge_response.status_code != 200:
+                raise RuntimeError(
+                    f"compress-image edge function returned {edge_response.status_code}: {edge_response.text}"
+                )
+
+            edge_result = edge_response.json()
+            image_url = edge_result["url"]
+            final_path = edge_result["path"]
+
+            logger.info(
+                f"Image compressed and uploaded: {final_path} | "
+                f"original={edge_result.get('original_size', 0)}B | "
+                f"compressed={edge_result.get('compressed_size', 0)}B | "
+                f"saved={edge_result.get('compression_ratio', 0)}%"
             )
-            
-            # Get public URL - manually construct with proper URL encoding for security
-            # Format: {SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}
-            from backend.python.lib.supabase_client import SUPABASE_URL
-            from urllib.parse import quote
-            
-            # Security: URL encode the path to prevent injection attacks
-            # The bucket name is hardcoded, and path is server-controlled, so this is safe
-            encoded_path = quote(unique_filename, safe='/')  # Keep '/' for path structure
-            image_url = f"{SUPABASE_URL}/storage/v1/object/public/citizen-report-images/{encoded_path}"
-            
-            # Verify the URL was generated correctly
-            logger.info(f"Image uploaded successfully: {unique_filename}")
-            logger.debug(f"Image public URL: {image_url}")
-            
+
             image_metadata = {
-                "filename": image.filename,  # Store original for reference
-                "content_type": image.content_type,
-                "size": len(image_content),
-                "stored_path": unique_filename  # Store server-controlled path
+                "filename": os.path.basename(final_path),
+                "content_type": "image/jpeg" if edge_result.get("was_compressed") else detected_mime,
+                "size": edge_result.get("compressed_size", len(image_content)),
+                "original_size": edge_result.get("original_size", len(image_content)),
+                "compression_ratio": edge_result.get("compression_ratio", 0),
+                "stored_path": final_path,
             }
-            
+
         except ValueError as e:
-            # Security: Don't expose internal errors, log them instead
             logger.error(f"Image validation failed: {e}")
             image_url = None
             image_metadata = {"error": "Invalid image file"}
+            image_upload_error = str(e)
         except Exception as e:
             logger.error(f"Image upload failed: {e}")
-            # Don't fail the entire request if image upload fails
             image_url = None
             image_metadata = {"error": "Upload failed"}
-    
+            image_upload_error = "Image upload failed. Please try again."
+
+    # The damage photo is required (see `image` Form field above); never allow
+    # the report to be inserted without a successfully stored image.
+    if image_url is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=image_upload_error if 'image_upload_error' in locals() else "Damage assessment photo is required."
+        )
+
     # 7. Insert report into database with UNVERIFIED status and AI-enhanced confidence (CR-04)
     try:
         # Calculate confidence score: base 30% + AI confidence boost (if AI detected hazard)
@@ -394,8 +507,6 @@ async def submit_citizen_report(
         else:
             confidence_score = base_confidence
         
-        # Build report data - only include location if coordinates are provided
-        # Note: image_url column is TEXT[] array, so we need to pass an array
         report_data = {
             "tracking_id": tracking_id,
             "hazard_type": hazard_type,
@@ -405,7 +516,8 @@ async def submit_citizen_report(
             "contact_number": contact_number,  # Will be encrypted below
             "contact_phone": contact_phone,  # Will be encrypted below (optional single-use SMS delivery)
             "contact_method": contact_method,  # Will be encrypted below
-            "image_url": [image_url] if image_url else None,  # Convert string to array for TEXT[] column
+            # Stored as TEXT[] in gaia.citizen_reports (admin triage reads image_url or image_urls)
+            "image_url": [image_url],
             "image_metadata": image_metadata,
             "source": "citizen_unverified",
             "confidence_score": confidence_score,
@@ -413,7 +525,15 @@ async def submit_citizen_report(
             # "recaptcha_score": recaptcha_result.get("score", 0.0),  # TEMPORARILY DISABLED
             "captcha_token": "<TOKEN PLACEHOLDER>",  # Edit This when re-enabling CAPTCHA
             "submitted_at": datetime.utcnow().isoformat(),
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
+            # UNDP-mandated fields
+            "infrastructure_types": parsed_infra_types,
+            "infrastructure_details": infrastructure_details.strip(),
+            "infrastructure_other_text": infrastructure_other_text.strip() if infrastructure_other_text else None,
+            "crisis_categories": parsed_crisis_categories,
+            "community_assessment": parsed_community_assessment,
+            "debris_status": debris_status,
+            "damage_severity": damage_severity,
         }
         
         # Add coordinates if available (from user or AI extraction)

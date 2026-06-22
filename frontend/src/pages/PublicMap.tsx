@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, ZoomControl, ScaleControl, LayersControl, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
-import { fetchValidatedHazards, HazardResponse, updateHazardLocation } from '../services/hazardsApi';
+import { fetchValidatedHazards, HazardResponse, updateHazardLocation, mapApiResponseToHazard } from '../services/hazardsApi';
+import type { Hazard } from '../types/hazard';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { Alert } from '../components/ui/alert';
@@ -13,33 +14,34 @@ import { createCustomClusterIcon } from '../components/map/clusterIcon';
 import { getHazardMarkerIcon } from '../components/map/hazardMarkerIcon';
 import { HeatmapLayer, useHeatmapSettings } from '../components/map/HeatmapLayer';
 import { HazardInfoPanel } from '../components/map/HazardInfoPanel';
+import { DamageReportSidebar } from '../components/map/DamageReportSidebar';
 import { FilterPanel } from '../components/filters/FilterPanel';
 import { BoundaryLayer } from '../components/map/BoundaryLayer';
 import { ReportGenerator } from '../components/reports/ReportGenerator';
 import { useHazardFilters } from '../hooks/useHazardFilters';
-import { 
-  SidebarSkeleton, 
+import {
+  SidebarSkeleton,
   FloatingControlsSkeleton,
   HazardCountSkeleton,
 } from '../components/skeletons/MapSkeleton';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faBars, 
-  faTimes, 
-  faSearch, 
-  faChevronUp, 
+import {
+  faBars,
+  faTimes,
+  faSearch,
+  faChevronUp,
   faChevronDown,
-  faMapPin, 
-  faExternalLinkAlt, 
-  faRotateRight, 
-  faLayerGroup, 
-  faMap, 
-  faCog, 
-  faFile, 
+  faMapPin,
+  faExternalLinkAlt,
+  faRotateRight,
+  faLayerGroup,
+  faMap,
+  faCog,
+  faFile,
   faExclamationTriangle,
 } from '@fortawesome/free-solid-svg-icons';
-import { 
-  HAZARD_ICON_REGISTRY, 
+import {
+  HAZARD_ICON_REGISTRY,
   HazardIcon,
 } from '../constants/hazard-icons';
 import { toast } from 'sonner';
@@ -55,53 +57,19 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-interface Hazard {
-  id: string;
-  hazard_type: string;
-  severity: string;
-  location_name: string;
-  latitude: number;
-  longitude: number;
-  confidence_score: number;
-  source_type: string;
-  source_url?: string;
-  source_title?: string;
-  validated: boolean;
-  created_at: string;
-  source_content?: string;
-  validated_at?: string;
-  validated_by?: string;
-}
-
-type HazardLocationMutation = {
+interface HazardLocationMutation {
   id: string;
   latitude: number;
   longitude: number;
   previousLat: number;
   previousLon: number;
-};
+}
 
 /**
- * Map API response to local Hazard interface
+ * Map API response to Hazard type (includes UNDP citizen-report fields)
  */
 function mapResponseToHazard(response: HazardResponse): Hazard {
-  return {
-    id: response.id,
-    hazard_type: response.hazard_type,
-    severity: response.severity || 'unknown',
-    location_name: response.location_name,
-    latitude: response.latitude,
-    longitude: response.longitude,
-    confidence_score: response.confidence_score,
-    source_type: response.source_type,
-    source_url: response.source_url || undefined,
-    source_title: response.source_title || undefined,
-    source_content: response.source_content || undefined,
-    validated: response.validated,
-    created_at: response.created_at,
-    validated_at: response.validated_at || undefined,
-    validated_by: response.validated_by || undefined,
-  };
+  return mapApiResponseToHazard(response);
 }
 
 /**
@@ -263,7 +231,7 @@ interface NominatimResult {
  * Flies to the selected search result and fits bounds if available
  * Placed at module scope to maintain persistent refs across PublicMap re-renders (GV-01)
  */
-const SearchController: React.FC<{ 
+const SearchController: React.FC<{
   location: { lat: number; lon: number } | null;
   bounds: L.LatLngBoundsExpression | null;
   boundaryLevel: string | null;
@@ -278,15 +246,15 @@ const SearchController: React.FC<{
 
   useEffect(() => {
     // Only fly to location if following is enabled
-    if (isFollowing && location && 
-        (!previousLocationRef.current || 
-         previousLocationRef.current.lat !== location.lat || 
-         previousLocationRef.current.lon !== location.lon ||
-         !hasFlownRef.current)) {
-      
+    if (isFollowing && location &&
+      (!previousLocationRef.current ||
+        previousLocationRef.current.lat !== location.lat ||
+        previousLocationRef.current.lon !== location.lon ||
+        !hasFlownRef.current)) {
+
       // Mark that animation is in progress
       isAnimatingRef.current = true;
-      
+
       // If we have boundary bounds, use fitBounds for better UX
       if (bounds) {
         // Adaptive padding based on boundary level
@@ -296,9 +264,9 @@ const SearchController: React.FC<{
           region: [20, 20],
           default: [40, 40]
         };
-        
+
         const padding = paddingOptions[boundaryLevel as keyof typeof paddingOptions] || paddingOptions.default;
-        
+
         map.fitBounds(bounds, {
           padding,
           animate: true,
@@ -310,18 +278,18 @@ const SearchController: React.FC<{
           duration: 1.5
         });
       }
-      
+
       // Update the ref to track this location
       previousLocationRef.current = location;
       hasFlownRef.current = true;
-      
+
       // Clear animation flag when moveend fires
       const handleMoveEnd = () => {
         isAnimatingRef.current = false;
       };
-      
+
       map.on('moveend', handleMoveEnd);
-      
+
       // Cleanup: remove listener on unmount or when dependencies change
       return () => {
         map.off('moveend', handleMoveEnd);
@@ -355,9 +323,9 @@ const SearchController: React.FC<{
 
   // Reset hasFlownRef when location changes
   useEffect(() => {
-    if (location && previousLocationRef.current && 
-        (previousLocationRef.current.lat !== location.lat || 
-         previousLocationRef.current.lon !== location.lon)) {
+    if (location && previousLocationRef.current &&
+      (previousLocationRef.current.lat !== location.lat ||
+        previousLocationRef.current.lon !== location.lon)) {
       hasFlownRef.current = false;
     }
   }, [location]);
@@ -399,11 +367,11 @@ const ZoomTracker: React.FC<{ onZoomChange: (zoom: number) => void }> = ({ onZoo
  */
 const MapInstanceSetter: React.FC<{ mapRef: React.MutableRefObject<L.Map | null> }> = ({ mapRef }) => {
   const map = useMap();
-  
+
   useEffect(() => {
     mapRef.current = map;
   }, [map, mapRef]);
-  
+
   return null;
 };
 
@@ -418,20 +386,20 @@ const PublicMap: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [isMobileControlsOpen, setIsMobileControlsOpen] = useState(false);
   const [isPinEditEnabled, setIsPinEditEnabled] = useState(false);
-  
+
   // Map instance ref for accessing Leaflet map methods
   const mapInstanceRef = useRef<L.Map | null>(null);
-  
+
   // Accessibility: Live region announcements
   const [announcement, setAnnouncement] = useState<string>('');
-  
+
   // Sidebar focus trap ref
   const sidebarRef = useRef<HTMLDivElement>(null);
   const sidebarToggleRef = useRef<HTMLButtonElement>(null);
-  
+
   // Map container ref for PDF screenshot capture
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  
+
   // Search location state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchSuggestions, setSearchSuggestions] = useState<NominatimResult[]>([]);
@@ -441,12 +409,12 @@ const PublicMap: React.FC = () => {
   const [isFollowingSearch, setIsFollowingSearch] = useState(false);
   const [boundaryBounds, setBoundaryBounds] = useState<L.LatLngBoundsExpression | null>(null);
   const [boundaryLevel, setBoundaryLevel] = useState<string | null>(null);
-  
+
   // Map enhancements state (GV-03, GV-04)
   const [clusteringEnabled, setClusteringEnabled] = useState(true);
   const { settings: heatmapSettings, updateSettings: updateHeatmapSettings } = useHeatmapSettings();
   const [currentZoom, setCurrentZoom] = useState(6);
-  
+
   // Filter hook (FP-01, FP-02, FP-03, FP-04) - replaces old layer visibility filters
   const { applyFilters } = useHazardFilters();
 
@@ -482,22 +450,22 @@ const PublicMap: React.FC = () => {
         prev.map((hazard) =>
           hazard.id === updated.id
             ? {
-                ...hazard,
-                latitude: updated.latitude,
-                longitude: updated.longitude,
-                location_name: updated.location_name || hazard.location_name,
-              }
+              ...hazard,
+              latitude: updated.latitude,
+              longitude: updated.longitude,
+              location_name: updated.location_name || hazard.location_name,
+            }
             : hazard
         )
       );
       setSelectedHazard((prev) =>
         prev && prev.id === updated.id
           ? {
-              ...prev,
-              latitude: updated.latitude,
-              longitude: updated.longitude,
-              location_name: updated.location_name || prev.location_name,
-            }
+            ...prev,
+            latitude: updated.latitude,
+            longitude: updated.longitude,
+            location_name: updated.location_name || prev.location_name,
+          }
           : prev
       );
       toast.success('Hazard pin updated');
@@ -533,11 +501,10 @@ const PublicMap: React.FC = () => {
       setLastUpdated(new Date());
       setAnnouncement(
         `Hazard data refreshed. ${deduped.length} active hazards loaded.` +
-          (deduped.length !== mapped.length
-            ? ` Collapsed ${mapped.length - deduped.length} duplicate article${
-                mapped.length - deduped.length === 1 ? '' : 's'
-              }.`
-            : '')
+        (deduped.length !== mapped.length
+          ? ` Collapsed ${mapped.length - deduped.length} duplicate article${mapped.length - deduped.length === 1 ? '' : 's'
+          }.`
+          : '')
       );
     }
   }, [hazardData]);
@@ -578,7 +545,7 @@ const PublicMap: React.FC = () => {
   const PH_LAT_MAX = 22.0;
   const PH_LON_MIN = 116.0;
   const PH_LON_MAX = 127.0;
-  
+
   // Philippines geographic bounds to restrict map panning
   // Format: [[south, west], [north, east]]
   const philippinesBounds: L.LatLngBoundsExpression = [
@@ -601,7 +568,7 @@ const PublicMap: React.FC = () => {
   // Search location using Nominatim geocoding API
   // Initialize geocoding provider (Leaflet-Geosearch)
   const searchProviderRef = useRef<OpenStreetMapProvider | null>(null);
-  
+
   useEffect(() => {
     // Initialize provider once
     if (!searchProviderRef.current) {
@@ -627,9 +594,9 @@ const PublicMap: React.FC = () => {
     try {
       const provider = searchProviderRef.current;
       if (!provider) throw new Error('Geosearch provider not initialized');
-      
+
       const results = await provider.search({ query });
-      
+
       // Transform GeoSearch results to match our NominatimResult interface
       const suggestions = results.map((result: { raw: { place_id: string | number; address?: Record<string, unknown> }; y: number; x: number; label: string }) => ({
         place_id: result.raw.place_id.toString(),
@@ -638,7 +605,7 @@ const PublicMap: React.FC = () => {
         display_name: result.label,
         address: result.raw.address || {}
       }));
-      
+
       setSearchSuggestions(suggestions);
       setShowSuggestions(true);
     } catch (err) {
@@ -667,16 +634,16 @@ const PublicMap: React.FC = () => {
 
   // Handle suggestion selection - coordinates will be used by SearchController
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lon: number } | null>(null);
-  
+
   // Searched location name for boundary highlighting (GV-01 optimization)
   const [searchedLocationName, setSearchedLocationName] = useState<string | null>(null);
-  
+
   const handleSelectSuggestion = (suggestion: NominatimResult) => {
     setSearchQuery(suggestion.display_name);
     setShowSuggestions(false);
     setSelectedLocation({ lat: parseFloat(suggestion.lat), lon: parseFloat(suggestion.lon) });
     setIsFollowingSearch(true); // Enable following when new location selected
-    
+
     // Extract city/municipality name from display_name (first part before comma)
     const locationName = suggestion.display_name.split(',')[0].trim();
     setSearchedLocationName(locationName);
@@ -733,7 +700,7 @@ const PublicMap: React.FC = () => {
       >
         Skip to main content
       </a>
-      
+
       {/* Live Region for Screen Reader Announcements - WCAG 4.1.3 (Level A) */}
       <div
         role="status"
@@ -753,17 +720,15 @@ const PublicMap: React.FC = () => {
           id="sidebar-filters"
           aria-label="Hazard filters and controls"
           aria-hidden={!isSidebarOpen}
-          className={`${
-            isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } ${
-            isSidebarExpanded ? 'md:w-[420px]' : 'md:w-80'
-          } w-full md:max-w-none fixed md:absolute left-0 top-0 h-full transition-all duration-300 ease-in-out motion-reduce:transition-none bg-card shadow-2xl z-[1000] overflow-hidden flex flex-col`}
+          className={`${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            } ${isSidebarExpanded ? 'md:w-[420px]' : 'md:w-80'
+            } w-full md:max-w-none fixed md:absolute left-0 top-0 h-full transition-all duration-300 ease-in-out motion-reduce:transition-none bg-card shadow-2xl z-[1000] overflow-hidden flex flex-col`}
         >
           {/* Sidebar Header - Fixed */}
           <header className="p-4 border-b border-border bg-card shrink-0">
             <div className="flex items-center justify-between gap-4">
-              <Link 
-                to={isAdmin ? "/dashboard" : "/"} 
+              <Link
+                to={isAdmin ? "/dashboard" : "/"}
                 className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#0a2a4d] focus:ring-offset-2 rounded-lg p-1 -m-1"
                 aria-label={isAdmin ? "Go to AGAILA admin dashboard" : "Go to AGAILA homepage"}
               >
@@ -829,7 +794,7 @@ const PublicMap: React.FC = () => {
                     <span id="search-hint" className="sr-only">
                       Type at least 3 characters to search. Use arrow keys to navigate suggestions.
                     </span>
-                    <button 
+                    <button
                       type="button"
                       aria-label={isSearching ? 'Searching...' : 'Search location'}
                       className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 text-[#0a2a4d] hover:bg-muted rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-[#0a2a4d]"
@@ -842,7 +807,7 @@ const PublicMap: React.FC = () => {
                         <FontAwesomeIcon icon={faSearch} className="text-base dark:text-white" aria-hidden="true" />
                       )}
                     </button>
-                    
+
                     {/* Search Suggestions Dropdown */}
                     {showSuggestions && searchSuggestions.length > 0 && (
                       <ul
@@ -874,7 +839,7 @@ const PublicMap: React.FC = () => {
                       </ul>
                     )}
                   </div>
-                  
+
                   {/* Stop Following Button - shown when following active */}
                   {isFollowingSearch && selectedLocation && (
                     <button
@@ -891,7 +856,7 @@ const PublicMap: React.FC = () => {
 
                 {/* FilterPanel Component (FP-01, FP-02, FP-03, FP-04) */}
                 <div className="p-4">
-                  <FilterPanel 
+                  <FilterPanel
                     hazards={hazards}
                     className="h-full"
                     onExpandChange={setIsSidebarExpanded}
@@ -931,18 +896,33 @@ const PublicMap: React.FC = () => {
           </div>
         </aside>
 
-        {/* Hazard Info Panel - Slide-in details panel (GV-02) */}
-        <HazardInfoPanel
-          hazard={selectedHazard}
-          isOpen={selectedHazard !== null}
-          onClose={() => setSelectedHazard(null)}
-          onZoomTo={(lat, lon) => {
-            if (mapInstanceRef.current) {
-              mapInstanceRef.current.flyTo([lat, lon], 16, { duration: 1.5 });
-            }
-            setSelectedHazard(null);
-          }}
-        />
+        {/* Hazard Info Panel / Damage Report Sidebar - Slide-in details panel (GV-02) */}
+        {/* Citizen reports use the UNDP DamageReportSidebar; others use the standard HazardInfoPanel */}
+        {selectedHazard?.source_type === 'citizen_report' ? (
+          <DamageReportSidebar
+            report={selectedHazard}
+            isOpen={selectedHazard !== null}
+            onClose={() => setSelectedHazard(null)}
+            onZoomTo={(lat, lon) => {
+              if (mapInstanceRef.current) {
+                mapInstanceRef.current.flyTo([lat, lon], 16, { duration: 1.5 });
+              }
+              setSelectedHazard(null);
+            }}
+          />
+        ) : (
+          <HazardInfoPanel
+            hazard={selectedHazard}
+            isOpen={selectedHazard !== null}
+            onClose={() => setSelectedHazard(null)}
+            onZoomTo={(lat, lon) => {
+              if (mapInstanceRef.current) {
+                mapInstanceRef.current.flyTo([lat, lon], 16, { duration: 1.5 });
+              }
+              setSelectedHazard(null);
+            }}
+          />
+        )}
 
         {/* Open filters — floating control (close via header X when sidebar is open) */}
         {!isSidebarOpen && (
@@ -963,7 +943,7 @@ const PublicMap: React.FC = () => {
 
         {/* Mobile Overlay when sidebar is open */}
         {isSidebarOpen && (
-          <div 
+          <div
             className="fixed inset-0 bg-black/30 z-[999] md:hidden"
             onClick={() => setIsSidebarOpen(false)}
             aria-hidden="true"
@@ -971,9 +951,9 @@ const PublicMap: React.FC = () => {
         )}
 
         {/* Map Container - Full Screen */}
-        <div 
-          ref={mapContainerRef} 
-          className="absolute inset-0" 
+        <div
+          ref={mapContainerRef}
+          className="absolute inset-0"
           id="public-map-container"
           role="application"
           aria-label="Interactive hazard map of the Philippines"
@@ -998,11 +978,9 @@ const PublicMap: React.FC = () => {
           {/* Unified Floating Controls Panel - Top Right */}
           <Card
             id="mobile-controls-panel"
-            className={`absolute right-4 sm:right-6 z-[1000] bg-card/95 backdrop-blur-sm shadow-lg border border-border w-[280px] sm:w-[300px] max-h-[75vh] sm:max-h-none overflow-y-auto sm:overflow-visible transition-all duration-300 motion-reduce:transition-none ${
-              isMobileControlsOpen && !isSidebarOpen ? 'top-[3.75rem] block' : 'top-4 sm:top-6 hidden sm:block'
-            } ${
-              isSidebarOpen ? 'sm:opacity-0 sm:pointer-events-none md:opacity-100 md:pointer-events-auto' : ''
-            }`}
+            className={`absolute right-4 sm:right-6 z-[1000] bg-card/95 backdrop-blur-sm shadow-lg border border-border w-[280px] sm:w-[300px] max-h-[75vh] sm:max-h-none overflow-y-auto sm:overflow-visible transition-all duration-300 motion-reduce:transition-none ${isMobileControlsOpen && !isSidebarOpen ? 'top-[3.75rem] block' : 'top-4 sm:top-6 hidden sm:block'
+              } ${isSidebarOpen ? 'sm:opacity-0 sm:pointer-events-none md:opacity-100 md:pointer-events-auto' : ''
+              }`}
             data-map-control="true"
             role="region"
             aria-label="Map controls and legend"
@@ -1016,7 +994,7 @@ const PublicMap: React.FC = () => {
                 {/* Report Generator Button (RG-02) - Only for authenticated users */}
                 {user && (
                   <div className="p-3 border-b border-border">
-                    <ReportGenerator 
+                    <ReportGenerator
                       hazards={filteredHazards}
                       mapContainerRef={mapContainerRef}
                       onReportGenerated={() => {
@@ -1041,8 +1019,8 @@ const PublicMap: React.FC = () => {
                       Legend
                     </h2>
                     <div className="flex items-center gap-2">
-                      <Badge 
-                        variant="outline" 
+                      <Badge
+                        variant="outline"
                         className="text-xs bg-blue-50 text-blue-700 border-blue-200"
                         aria-label={`${filteredHazards.length} active hazards`}
                       >
@@ -1064,7 +1042,7 @@ const PublicMap: React.FC = () => {
                     </div>
                   </div>
                   {isLegendVisible && (
-                    <ul 
+                    <ul
                       id="legend-content"
                       className="space-y-1 max-h-[200px] overflow-y-auto mt-3 -mx-1 px-1 scrollbar-thin"
                       aria-label="Hazard types and counts"
@@ -1075,17 +1053,16 @@ const PublicMap: React.FC = () => {
                         return (
                           <li
                             key={key}
-                            className={`flex items-center justify-between p-1.5 rounded-lg transition-colors ${
-                              hasCount ? 'hover:bg-muted/70 cursor-default' : 'opacity-40'
-                            }`}
+                            className={`flex items-center justify-between p-1.5 rounded-lg transition-colors ${hasCount ? 'hover:bg-muted/70 cursor-default' : 'opacity-40'
+                              }`}
                             aria-label={`${config.label}: ${count} ${count === 1 ? 'hazard' : 'hazards'}`}
                           >
                             <div className="flex items-center space-x-2">
-                              <div 
+                              <div
                                 className="flex items-center justify-center w-7 h-7 rounded-md flex-shrink-0"
-                                style={{ 
-                                  backgroundColor: hasCount ? config.bgColor : '#f3f4f6', 
-                                  color: hasCount ? config.color : '#9ca3af' 
+                                style={{
+                                  backgroundColor: hasCount ? config.bgColor : '#f3f4f6',
+                                  color: hasCount ? config.color : '#9ca3af'
                                 }}
                                 aria-hidden="true"
                               >
@@ -1095,13 +1072,12 @@ const PublicMap: React.FC = () => {
                                 {config.label}
                               </span>
                             </div>
-                            <Badge 
-                              variant={hasCount ? "secondary" : "outline"} 
-                              className={`text-xs h-5 min-w-[1.75rem] justify-center ${
-                                hasCount 
-                                  ? 'bg-muted text-foreground' 
-                                  : 'bg-transparent text-muted-foreground border-border'
-                              }`}
+                            <Badge
+                              variant={hasCount ? "secondary" : "outline"}
+                              className={`text-xs h-5 min-w-[1.75rem] justify-center ${hasCount
+                                ? 'bg-muted text-foreground'
+                                : 'bg-transparent text-muted-foreground border-border'
+                                }`}
                             >
                               {count}
                             </Badge>
@@ -1155,10 +1131,10 @@ const PublicMap: React.FC = () => {
                   <div className="flex items-center justify-between" data-tour="heatmap-section">
                     <div className="flex items-center gap-2">
                       <div className={`p-1.5 rounded-md ${currentZoom > heatmapSettings.maxZoom ? 'bg-muted' : 'bg-orange-50 dark:bg-orange-950/40'}`}>
-                        <FontAwesomeIcon 
+                        <FontAwesomeIcon
                           className={`text-xs ${currentZoom > heatmapSettings.maxZoom ? 'text-muted-foreground' : 'text-orange-600'}`}
-                          icon={faMap} 
-                          aria-hidden="true" 
+                          icon={faMap}
+                          aria-hidden="true"
                         />
                       </div>
                       <div className="flex flex-col">
@@ -1333,7 +1309,7 @@ const PublicMap: React.FC = () => {
 
           {/* Loading State - Enhanced Accessibility */}
           {loading && hazards.length === 0 && (
-            <div 
+            <div
               className="fixed inset-0 flex items-center justify-center bg-background/90 backdrop-blur-sm z-[999]"
               role="status"
               aria-live="polite"
@@ -1354,7 +1330,7 @@ const PublicMap: React.FC = () => {
                 </div>
               </div>            </div>
           )}
-          
+
           <MapContainer
             center={philippinesCenter}
             zoom={defaultZoom}
@@ -1369,26 +1345,26 @@ const PublicMap: React.FC = () => {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            
+
             {/* Map Controls - Zoom on left to avoid legend overlap */}
             <ZoomControl position="topleft" />
             <ScaleControl position="bottomright" />
-            
+
             {/* Search Controller - flies map to selected location */}
-            <SearchController 
+            <SearchController
               location={selectedLocation}
               bounds={boundaryBounds}
               boundaryLevel={boundaryLevel}
               isFollowing={isFollowingSearch}
               onStopFollowing={() => setIsFollowingSearch(false)}
             />
-            
+
             {/* Zoom Tracker - updates current zoom for heatmap auto-disable */}
             <ZoomTracker onZoomChange={setCurrentZoom} />
-            
+
             {/* Map Instance Setter - Captures Leaflet map for external component access */}
             <MapInstanceSetter mapRef={mapInstanceRef} />
-            
+
             {/* Heatmap Layer (GV-04) - Auto-disables at zoom > 12 */}
             <HeatmapLayer
               hazards={filteredHazards}
@@ -1398,7 +1374,7 @@ const PublicMap: React.FC = () => {
               maxZoom={heatmapSettings.maxZoom}
               gradient={heatmapSettings.gradient}
             />
-            
+
             {/* Boundary Layer (GV-01) - Location-Based Highlighting */}
             {/* Shows highlighted boundary when user searches for a location */}
             <BoundaryLayer
@@ -1410,7 +1386,7 @@ const PublicMap: React.FC = () => {
                 setBoundaryLevel(level);
               }}
             />
-            
+
             {/* Layers Control - Base Map Switcher (bottom-right to avoid sidebar overlap) */}
             <LayersControl position="bottomright">
               <LayersControl.BaseLayer checked name="OpenStreetMap">
@@ -1419,14 +1395,14 @@ const PublicMap: React.FC = () => {
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
               </LayersControl.BaseLayer>
-              
+
               <LayersControl.BaseLayer name="Satellite">
                 <TileLayer
                   attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
                   url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 />
               </LayersControl.BaseLayer>
-              
+
               <LayersControl.BaseLayer name="Topographic">
                 <TileLayer
                   attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a>'
@@ -1481,8 +1457,8 @@ const PublicMap: React.FC = () => {
       </div>
 
       {/* Stats Footer - Enhanced Responsiveness and Accessibility */}
-      <footer 
-        className="bg-card border-t border-border py-2 sm:py-3 z-[9999] relative" 
+      <footer
+        className="bg-card border-t border-border py-2 sm:py-3 z-[9999] relative"
         data-realtime-footer="true"
         role="contentinfo"
         aria-label="Hazard statistics and controls"
@@ -1491,8 +1467,8 @@ const PublicMap: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
             {/* Hazard Count */}
             <div className="flex items-center gap-2">
-              <Badge 
-                variant="outline" 
+              <Badge
+                variant="outline"
                 className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-800 font-semibold"
                 aria-label={`${hazards.length} active hazards displayed`}
               >
@@ -1516,8 +1492,8 @@ const PublicMap: React.FC = () => {
             </div>
 
             {/* Report a Hazard Link */}
-            <Link 
-              to="/report" 
+            <Link
+              to="/report"
               className="flex items-center gap-1.5 text-secondary dark:text-secondary-foreground hover:text-secondary/80 font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded px-2 py-1 -mx-2 transition-colors"
               aria-label="Report a hazard - opens citizen report form"
             >
