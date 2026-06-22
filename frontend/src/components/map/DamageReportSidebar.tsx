@@ -38,11 +38,15 @@ import {
   CRISIS_CATEGORIES,
   DEBRIS_DISPLAY,
   DAMAGE_SEVERITY_CONFIG,
+  ELECTRICITY_INFRASTRUCTURE_OPTIONS,
+  HEALTH_SERVICES_OPTIONS,
+  PRESSING_NEEDS_OPTIONS,
   type InfrastructureType,
   type CrisisSelections,
   type DebrisStatus,
   type DamageSeverity,
   type CrisisCategoryKey,
+  type CommunityAssessment,
 } from '../../types/undpTypes';
 
 // ============================================================================
@@ -83,7 +87,7 @@ export interface DamageReportSidebarProps {
     created_at: string;
     source_content?: string;
     source_url?: string;
-    image_url?: string[];
+    image_urls?: string[];
     // UNDP fields
     infrastructure_types?: InfrastructureType[];
     infrastructure_other_text?: string;
@@ -91,6 +95,7 @@ export interface DamageReportSidebarProps {
     crisis_categories?: CrisisSelections;
     debris_status?: DebrisStatus;
     damage_severity?: DamageSeverity;
+    community_assessment?: CommunityAssessment;
   } | null;
   isOpen: boolean;
   onClose: () => void;
@@ -164,7 +169,7 @@ export function DamageReportSidebar({
     ? new Date(report.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '';
 
-  const imageUrl = report?.image_url?.[0];
+  const imageUrl = report?.image_urls?.[0];
 
   const debrisCfg = report?.debris_status ? DEBRIS_DISPLAY[report.debris_status] : null;
 
@@ -256,24 +261,32 @@ export function DamageReportSidebar({
         <div className="flex-1 overflow-y-auto">
           {report ? (
             <>
-              {/* Primary Media */}
-              {imageUrl && (
-                <div className="relative group">
-                  <img
-                    src={imageUrl}
-                    alt="Damage assessment photograph"
-                    className="w-full h-56 object-cover cursor-pointer"
-                    onClick={() => setImageExpanded(true)}
-                  />
-                  <button
-                    onClick={() => setImageExpanded(true)}
-                    className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
-                    aria-label="View full image"
-                  >
-                    <Maximize2 size={14} />
-                  </button>
-                </div>
-              )}
+              {/* Primary Media Placeholder / Image */}
+              <div className="relative w-full bg-muted/30">
+                {imageUrl ? (
+                  <div className="relative group">
+                    <img
+                      src={imageUrl}
+                      alt="Damage assessment photograph"
+                      className="w-full h-56 object-cover cursor-pointer"
+                      onClick={() => setImageExpanded(true)}
+                    />
+                    <button
+                      onClick={() => setImageExpanded(true)}
+                      className="absolute bottom-2 right-2 p-1.5 rounded-md bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
+                      aria-label="View full image"
+                    >
+                      <Maximize2 size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-full h-32 flex flex-col items-center justify-center border-b border-border bg-muted/20 text-muted-foreground">
+                    <AlertTriangle className="mb-2 opacity-50" size={24} aria-hidden="true" />
+                    <p className="text-sm font-medium">No Image Provided</p>
+                    <p className="text-xs opacity-70">Submitted without a photo</p>
+                  </div>
+                )}
+              </div>
 
               <div className="p-5 space-y-5">
                 {/* Location name */}
@@ -282,29 +295,43 @@ export function DamageReportSidebar({
                   <p className="text-sm font-medium text-foreground leading-snug">{report.location_name}</p>
                 </div>
 
-                {/* ---- Debris Warning Banner ---- */}
-                {debrisCfg && report.debris_status === 'yes' && (
-                  <div
-                    className="flex items-center gap-2.5 p-3 rounded-lg border"
-                    style={{ backgroundColor: debrisCfg.badgeBg, borderColor: `${debrisCfg.badgeColor}33` }}
-                  >
-                    <Icon name={debrisCfg.iconName} size={20} style={{ color: debrisCfg.badgeColor }} />
-                    <div>
-                      <p className="text-sm font-bold" style={{ color: debrisCfg.badgeColor }}>{debrisCfg.label}</p>
-                      <p className="text-xs text-muted-foreground">Clearing operations may be needed before entry.</p>
+                {/* ---- Coordinates ---- */}
+                <Card className="border-border bg-muted/30 dark:bg-muted/15 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Coordinates</p>
+                  <div className="flex items-start gap-2">
+                    <MapPin size={16} className="mt-0.5 text-muted-foreground shrink-0" aria-hidden />
+                    <div className="font-mono text-sm text-foreground leading-relaxed">
+                      <p>{report.latitude.toFixed(6)}° N</p>
+                      <p>{report.longitude.toFixed(6)}° E</p>
                     </div>
                   </div>
-                )}
+                </Card>
 
-                {/* Debris — non-yes statuses shown as subtle badge */}
-                {debrisCfg && report.debris_status !== 'yes' && (
-                  <span
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-                    style={{ backgroundColor: debrisCfg.badgeBg, color: debrisCfg.badgeColor }}
-                  >
-                    <Icon name={debrisCfg.iconName} size={12} style={{ color: debrisCfg.badgeColor }} />
-                    {debrisCfg.label}
-                  </span>
+                {/* ---- Debris Assessment ---- */}
+                {debrisCfg && (
+                  <Card className="border-border bg-muted/30 dark:bg-muted/15 p-4 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Debris Assessment</p>
+                    {report.debris_status === 'yes' ? (
+                      <div
+                        className="flex items-center gap-2.5 p-3 rounded-lg border"
+                        style={{ backgroundColor: debrisCfg.badgeBg, borderColor: `${debrisCfg.badgeColor}33` }}
+                      >
+                        <Icon name={debrisCfg.iconName} size={20} style={{ color: debrisCfg.badgeColor }} />
+                        <div>
+                          <p className="text-sm font-bold" style={{ color: debrisCfg.badgeColor }}>{debrisCfg.label}</p>
+                          <p className="text-xs text-muted-foreground">Clearing operations may be needed before entry.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+                        style={{ backgroundColor: debrisCfg.badgeBg, color: debrisCfg.badgeColor }}
+                      >
+                        <Icon name={debrisCfg.iconName} size={12} style={{ color: debrisCfg.badgeColor }} />
+                        {debrisCfg.label}
+                      </span>
+                    )}
+                  </Card>
                 )}
 
                 {/* ---- Infrastructure Details ---- */}
@@ -312,9 +339,11 @@ export function DamageReportSidebar({
                   <Card className="border-border bg-muted/30 dark:bg-muted/15 p-4 space-y-3">
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Infrastructure Affected</p>
 
-                    {/* Category badges */}
+                    {/* Category badges — infrastructure type */}
                     {report.infrastructure_types && report.infrastructure_types.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Type</p>
+                        <div className="flex flex-wrap gap-1.5">
                         {report.infrastructure_types.map((type) => {
                           const cfg = INFRASTRUCTURE_TYPE_CONFIG[type];
                           if (!cfg) return null;
@@ -329,6 +358,7 @@ export function DamageReportSidebar({
                             </span>
                           );
                         })}
+                        </div>
                       </div>
                     )}
 
@@ -341,7 +371,10 @@ export function DamageReportSidebar({
 
                     {/* Details text */}
                     {report.infrastructure_details && (
-                      <p className="text-sm text-foreground/90 leading-relaxed">{report.infrastructure_details}</p>
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Details</p>
+                        <p className="text-sm text-foreground/90 leading-relaxed">{report.infrastructure_details}</p>
+                      </div>
                     )}
                   </Card>
                 )}
@@ -373,17 +406,52 @@ export function DamageReportSidebar({
                   </div>
                 )}
 
+                {/* ---- Community Assessment ---- */}
+                {report.community_assessment && (
+                  <Card className="border-border bg-muted/30 dark:bg-muted/15 p-4 space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Community Assessment</p>
+                    
+                    {report.community_assessment.electricityInfrastructure && (
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Electricity</p>
+                        <p className="text-sm text-foreground">
+                          {ELECTRICITY_INFRASTRUCTURE_OPTIONS.find(o => o.value === report.community_assessment?.electricityInfrastructure)?.label || report.community_assessment.electricityInfrastructure}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {report.community_assessment.healthServicesRating && (
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Health Services</p>
+                        <p className="text-sm text-foreground">
+                          {HEALTH_SERVICES_OPTIONS.find(o => o.value === report.community_assessment?.healthServicesRating)?.label || report.community_assessment.healthServicesRating}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {report.community_assessment.pressingNeeds && report.community_assessment.pressingNeeds.length > 0 && (
+                      <div>
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Pressing Needs</p>
+                        <ul className="list-disc pl-4 mt-1 text-sm text-foreground space-y-1">
+                          {report.community_assessment.pressingNeeds.map(need => (
+                            <li key={need}>
+                              {need === 'other' 
+                                ? `Other: ${report.community_assessment?.pressingNeedsOther}` 
+                                : (PRESSING_NEEDS_OPTIONS.find(o => o.value === need)?.label || need)
+                              }
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </Card>
+                )}
+
                 {/* ---- Quick Stats Row ---- */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <Card className="border-border bg-muted/40 dark:bg-muted/25 p-3 text-center">
                     <p className="text-lg font-bold text-foreground">{Math.round(report.confidence_score * 100)}%</p>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Confidence</p>
-                  </Card>
-                  <Card className="border-border bg-muted/40 dark:bg-muted/25 p-3 text-center">
-                    <p className="font-mono text-[11px] text-foreground leading-tight">
-                      {report.latitude.toFixed(3)}<br />{report.longitude.toFixed(3)}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Coords</p>
                   </Card>
                   <Card className="border-border bg-muted/40 dark:bg-muted/25 p-3 text-center">
                     <p className="text-xs font-bold uppercase text-foreground">{report.validated ? 'Verified' : 'Pending'}</p>

@@ -73,16 +73,24 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         # Log request body if enabled (sanitize sensitive data)
         request_body = None
         if self.log_request_body and request.method in ["POST", "PUT", "PATCH"]:
-            try:
-                body_bytes = await request.body()
-                request_body = self._sanitize_body(body_bytes.decode("utf-8"))
-                
-                # Restore body for downstream handlers
-                async def receive() -> Message:
-                    return {"type": "http.request", "body": body_bytes}
-                request._receive = receive
-            except Exception as e:
-                logger.warning(f"Failed to read request body: {str(e)}")
+            content_type = request.headers.get("content-type", "").lower()
+            if content_type.startswith("multipart/") or content_type.startswith("application/octet-stream"):
+                request_body = "[multipart/binary body omitted]"
+            else:
+                try:
+                    body_bytes = await request.body()
+
+                    # Restore body for downstream handlers (form parsers, etc.)
+                    async def receive() -> Message:
+                        return {"type": "http.request", "body": body_bytes}
+                    request._receive = receive
+
+                    try:
+                        request_body = self._sanitize_body(body_bytes.decode("utf-8"))
+                    except UnicodeDecodeError:
+                        request_body = "[binary body omitted]"
+                except Exception as e:
+                    logger.warning(f"Failed to read request body: {str(e)}")
         
         # Process request
         try:

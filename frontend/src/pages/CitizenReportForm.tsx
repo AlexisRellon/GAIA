@@ -2,7 +2,7 @@
  * Citizen Report Form (CR-01, CR-06) — UNDP Redesign
  * 
  * Multi-step wizard for UNDP-mandated damage assessment submission.
- * 3 steps: Incident Details → Infrastructure & Damage → Location & Contact
+ * 3 steps: Incident & Infrastructure → Location & Photo → Community Impact
  *
  * Features:
  * - Step-by-step wizard with progress bar
@@ -51,9 +51,13 @@ import {
   DEBRIS_OPTIONS,
   DAMAGE_SEVERITY_LEVELS,
   DAMAGE_SEVERITY_CONFIG,
+  ELECTRICITY_INFRASTRUCTURE_OPTIONS,
+  HEALTH_SERVICES_OPTIONS,
+  PRESSING_NEEDS_OPTIONS,
   type InfrastructureType,
   type UNDPFormData,
   type CrisisCategoryKey,
+  type PressingNeed,
 } from '../types/undpTypes';
 
 // LocationPicker wraps Leaflet (~150KB+). Lazy-load it so it's excluded from
@@ -123,6 +127,10 @@ interface FormErrors {
   debrisStatus?: string;
   damageSeverity?: string;
   image?: string;
+  electricityInfrastructure?: string;
+  healthServicesRating?: string;
+  pressingNeeds?: string;
+  pressingNeedsOther?: string;
 }
 
 // ============================================================================
@@ -132,7 +140,7 @@ interface FormErrors {
 const descriptionMax = 1000;
 const nameMax = 100;
 
-/** Step 1 validation: Incident Details */
+/** Step 1 validation: Incident & Infrastructure */
 const Step1Schema = z.object({
   hazardType: z.string()
     .min(1, 'Please select a hazard type')
@@ -143,21 +151,16 @@ const Step1Schema = z.object({
     .min(1, 'Description is required')
     .min(20, 'Description must be at least 20 characters')
     .max(descriptionMax, `Description must be ${descriptionMax} characters or less`),
-});
-
-/** Step 2 validation: Infrastructure & Damage */
-const Step2Schema = z.object({
   infrastructureTypes: z.array(z.string())
     .min(1, 'Please select at least one infrastructure type'),
   infrastructureDetails: z.string().trim()
     .min(1, 'Please provide details on the infrastructure'),
   debrisStatus: z.string()
     .min(1, 'Please indicate debris status'),
-  hasImage: z.boolean().refine(val => val, 'Please upload a damage assessment photo'),
 });
 
-/** Step 3 validation: Location & Contact */
-const Step3Schema = z.object({
+/** Step 2 validation: Location & Photo */
+const Step2Schema = z.object({
   latitude: z.number().optional().refine(
     (val): val is number => typeof val === 'number',
     'Please select the hazard location on the map',
@@ -166,6 +169,15 @@ const Step3Schema = z.object({
     (val): val is number => typeof val === 'number',
     'Please select the hazard location on the map',
   ),
+  hasImage: z.boolean().refine(val => val, 'Please upload a damage assessment photo'),
+});
+
+/** Step 3 validation: Community Impact & Contact */
+const Step3Schema = z.object({
+  electricityInfrastructure: z.string().min(1, 'Please select the electricity infrastructure condition'),
+  healthServicesRating: z.string().min(1, 'Please rate the functioning of health services'),
+  pressingNeeds: z.array(z.string()).min(1, 'Please select at least one pressing need'),
+  pressingNeedsOther: z.string().optional(),
   name: z.string().trim()
     .min(1, 'Name is required')
     .max(nameMax, `Name must be ${nameMax} characters or less`)
@@ -176,6 +188,14 @@ const Step3Schema = z.object({
       isValidPhilippinePhoneNumber,
       'Please enter a valid Philippine phone number (e.g., 09123456789, +63 912 345 6789)',
     ),
+}).superRefine((data, ctx) => {
+  if (data.pressingNeeds.includes('other') && !data.pressingNeedsOther?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please specify your other pressing need',
+      path: ['pressingNeedsOther'],
+    });
+  }
 });
 
 // ============================================================================
@@ -183,9 +203,9 @@ const Step3Schema = z.object({
 // ============================================================================
 
 const STEPS = [
-  { number: 1, title: 'Incident Details', subtitle: 'What happened?' },
-  { number: 2, title: 'Infrastructure & Damage', subtitle: 'What was affected?' },
-  { number: 3, title: 'Location & Contact', subtitle: 'Where & who?' },
+  { number: 1, title: 'Incident & Infrastructure', subtitle: 'What happened and what was affected?' },
+  { number: 2, title: 'Location & Photo', subtitle: 'Pin the location and upload evidence' },
+  { number: 3, title: 'Community Impact', subtitle: 'Assess local conditions and needs' },
 ];
 
 // ============================================================================
@@ -198,7 +218,7 @@ const CitizenReportForm: React.FC = () => {
   const { isOnline } = useOnlineStatus();
   // const turnstileRef = useRef<TurnstileInstance | null>(null); // TEMPORARILY DISABLED
   // const [turnstileToken, setTurnstileToken] = useState<string | null>(null); // TEMPORARILY DISABLED
-  
+
   const [currentStep, setCurrentStep] = useState(1);
 
   // Form state
@@ -223,6 +243,12 @@ const CitizenReportForm: React.FC = () => {
     },
     debrisStatus: '',
     damageSeverity: '',
+
+    // Community impact assessment
+    electricityInfrastructure: '',
+    healthServicesRating: '',
+    pressingNeeds: [],
+    pressingNeedsOther: '',
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -288,6 +314,9 @@ const CitizenReportForm: React.FC = () => {
         hazardType: formData.hazardType,
         damageSeverity: formData.damageSeverity,
         description: formData.description,
+        infrastructureTypes: formData.infrastructureTypes,
+        infrastructureDetails: formData.infrastructureDetails,
+        debrisStatus: formData.debrisStatus,
       });
       if (!result.success) {
         for (const issue of result.error.issues) {
@@ -298,6 +327,12 @@ const CitizenReportForm: React.FC = () => {
             newErrors.damageSeverity = issue.message;
           } else if (field === 'description' && !newErrors.description) {
             newErrors.description = issue.message;
+          } else if (field === 'infrastructureTypes' && !newErrors.infrastructureTypes) {
+            newErrors.infrastructureTypes = issue.message;
+          } else if (field === 'infrastructureDetails' && !newErrors.infrastructureDetails) {
+            newErrors.infrastructureDetails = issue.message;
+          } else if (field === 'debrisStatus' && !newErrors.debrisStatus) {
+            newErrors.debrisStatus = issue.message;
           }
         }
         setErrors(newErrors);
@@ -307,20 +342,15 @@ const CitizenReportForm: React.FC = () => {
 
     if (step === 2) {
       const result = Step2Schema.safeParse({
-        infrastructureTypes: formData.infrastructureTypes,
-        infrastructureDetails: formData.infrastructureDetails,
-        debrisStatus: formData.debrisStatus,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
         hasImage: !!formData.image,
       });
       if (!result.success) {
         for (const issue of result.error.issues) {
           const field = issue.path[0] as string;
-          if (field === 'infrastructureTypes' && !newErrors.infrastructureTypes) {
-            newErrors.infrastructureTypes = issue.message;
-          } else if (field === 'infrastructureDetails' && !newErrors.infrastructureDetails) {
-            newErrors.infrastructureDetails = issue.message;
-          } else if (field === 'debrisStatus' && !newErrors.debrisStatus) {
-            newErrors.debrisStatus = issue.message;
+          if ((field === 'latitude' || field === 'longitude') && !newErrors.location) {
+            newErrors.location = issue.message;
           } else if (field === 'hasImage' && !newErrors.image) {
             newErrors.image = issue.message;
           }
@@ -332,16 +362,24 @@ const CitizenReportForm: React.FC = () => {
 
     if (step === 3) {
       const result = Step3Schema.safeParse({
-        latitude: formData.latitude,
-        longitude: formData.longitude,
+        electricityInfrastructure: formData.electricityInfrastructure,
+        healthServicesRating: formData.healthServicesRating,
+        pressingNeeds: formData.pressingNeeds,
+        pressingNeedsOther: formData.pressingNeedsOther,
         name: formData.name,
         contactNumber: formData.contactNumber,
       });
       if (!result.success) {
         for (const issue of result.error.issues) {
           const field = issue.path[0] as string;
-          if ((field === 'latitude' || field === 'longitude') && !newErrors.location) {
-            newErrors.location = issue.message;
+          if (field === 'electricityInfrastructure' && !newErrors.electricityInfrastructure) {
+            newErrors.electricityInfrastructure = issue.message;
+          } else if (field === 'healthServicesRating' && !newErrors.healthServicesRating) {
+            newErrors.healthServicesRating = issue.message;
+          } else if (field === 'pressingNeeds' && !newErrors.pressingNeeds) {
+            newErrors.pressingNeeds = issue.message;
+          } else if (field === 'pressingNeedsOther' && !newErrors.pressingNeedsOther) {
+            newErrors.pressingNeedsOther = issue.message;
           } else if (field === 'name' && !newErrors.name) {
             newErrors.name = issue.message;
           } else if (field === 'contactNumber' && !newErrors.contactNumber) {
@@ -366,7 +404,16 @@ const CitizenReportForm: React.FC = () => {
   // ============================================================================
 
   const handleInputChange = (field: keyof UNDPFormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'hazardType' && value !== 'other') {
+        next.crisisCategories = {
+          technological_hazards: [],
+          human_made_crises: [],
+        };
+      }
+      return next;
+    });
     if (errors[field as keyof FormErrors]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
@@ -412,6 +459,23 @@ const CitizenReportForm: React.FC = () => {
     // Crisis categories are optional — no validation error to clear
   };
 
+  const togglePressingNeed = (need: PressingNeed) => {
+    setFormData(prev => {
+      const current = prev.pressingNeeds;
+      const updated = current.includes(need)
+        ? current.filter(n => n !== need)
+        : [...current, need];
+      return {
+        ...prev,
+        pressingNeeds: updated,
+        pressingNeedsOther: need === 'other' && current.includes('other') ? '' : prev.pressingNeedsOther,
+      };
+    });
+    if (errors.pressingNeeds) {
+      setErrors(prev => ({ ...prev, pressingNeeds: undefined }));
+    }
+  };
+
   const handleImageUpload = useCallback((file: File | undefined, metadata?: { timestamp?: string; device?: string }) => {
     setFormData(prev => ({ ...prev, image: file, imageMetadata: metadata }));
     if (errors.image) {
@@ -455,7 +519,7 @@ const CitizenReportForm: React.FC = () => {
         let imageDataUrl: string | undefined;
         let imageFileName: string | undefined;
         if (formData.image) {
-          imageDataUrl  = await fileToDataUrl(formData.image);
+          imageDataUrl = await fileToDataUrl(formData.image);
           imageFileName = formData.image.name;
         }
 
@@ -469,9 +533,19 @@ const CitizenReportForm: React.FC = () => {
           infrastructureTypes: formData.infrastructureTypes,
           infrastructureOtherText: DOMPurify.sanitize(formData.infrastructureOtherText.trim()),
           infrastructureDetails: DOMPurify.sanitize(formData.infrastructureDetails.trim()),
-          crisisCategories: formData.crisisCategories,
           debrisStatus: formData.debrisStatus,
           damageSeverity: formData.damageSeverity,
+          communityAssessment: {
+            electricity_infrastructure: formData.electricityInfrastructure,
+            health_services_rating: formData.healthServicesRating,
+            pressing_needs: formData.pressingNeeds,
+            pressing_needs_other: formData.pressingNeedsOther.trim()
+              ? DOMPurify.sanitize(formData.pressingNeedsOther.trim())
+              : undefined,
+          },
+          ...(formData.hazardType === 'other'
+            ? { crisisCategories: formData.crisisCategories }
+            : { crisisCategories: { technological_hazards: [], human_made_crises: [] } }),
           // Image serialized as base64 — safe across the IDB ↔ SW context boundary
           imageDataUrl,
           imageFileName,
@@ -504,6 +578,10 @@ const CitizenReportForm: React.FC = () => {
           },
           debrisStatus: '',
           damageSeverity: '',
+          electricityInfrastructure: '',
+          healthServicesRating: '',
+          pressingNeeds: [],
+          pressingNeedsOther: '',
         });
         setCurrentStep(1); // Good UX practice to reset the wizard step
         setIsSubmitting(false);
@@ -551,9 +629,19 @@ const CitizenReportForm: React.FC = () => {
       if (formData.infrastructureTypes.includes('other') && formData.infrastructureOtherText) {
         formDataPayload.append('infrastructure_other_text', DOMPurify.sanitize(formData.infrastructureOtherText.trim()));
       }
-      formDataPayload.append('crisis_categories', JSON.stringify(formData.crisisCategories));
+      if (formData.hazardType === 'other') {
+        formDataPayload.append('crisis_categories', JSON.stringify(formData.crisisCategories));
+      }
       formDataPayload.append('debris_status', formData.debrisStatus);
       formDataPayload.append('damage_severity', formData.damageSeverity);
+      formDataPayload.append('community_assessment', JSON.stringify({
+        electricity_infrastructure: formData.electricityInfrastructure,
+        health_services_rating: formData.healthServicesRating,
+        pressing_needs: formData.pressingNeeds,
+        pressing_needs_other: formData.pressingNeedsOther.trim()
+          ? DOMPurify.sanitize(formData.pressingNeedsOther.trim())
+          : undefined,
+      }));
 
       // Image is now mandatory
       if (formData.image) {
@@ -616,27 +704,24 @@ const CitizenReportForm: React.FC = () => {
             <React.Fragment key={step.number}>
               <div className="flex flex-col items-center flex-1 min-w-0">
                 <div
-                  className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300 font-bold text-sm ${
-                    isCompleted
-                      ? 'bg-primary border-primary text-primary-foreground'
-                      : isActive
-                        ? 'border-primary bg-primary/10 text-primary dark:text-white dark:bg-primary/25 ring-4 ring-primary/20'
-                        : 'border-border bg-muted text-muted-foreground'
-                  }`}
+                  className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300 font-bold text-sm ${isCompleted
+                    ? 'bg-primary border-primary text-primary-foreground'
+                    : isActive
+                      ? 'border-primary bg-primary/10 text-primary dark:text-white dark:bg-primary/25 ring-4 ring-primary/20'
+                      : 'border-border bg-muted text-muted-foreground'
+                    }`}
                   aria-current={isActive ? 'step' : undefined}
                 >
                   {isCompleted ? <Check size={18} /> : step.number}
                 </div>
-                <span className={`mt-2 text-xs font-medium text-center leading-tight hidden sm:block ${
-                  isActive ? 'text-primary dark:text-white' : 'text-muted-foreground'
-                }`}>
+                <span className={`mt-2 text-xs font-medium text-center leading-tight hidden sm:block ${isActive ? 'text-primary dark:text-white' : 'text-muted-foreground'
+                  }`}>
                   {step.title}
                 </span>
               </div>
               {idx < STEPS.length - 1 && (
-                <div className={`flex-shrink-0 h-0.5 w-8 sm:w-16 mt-[-20px] sm:mt-[-10px] transition-colors duration-300 ${
-                  currentStep > step.number ? 'bg-primary' : 'bg-border'
-                }`} />
+                <div className={`flex-shrink-0 h-0.5 w-8 sm:w-16 mt-[-20px] sm:mt-[-10px] transition-colors duration-300 ${currentStep > step.number ? 'bg-primary' : 'bg-border'
+                  }`} />
               )}
             </React.Fragment>
           );
@@ -659,11 +744,10 @@ const CitizenReportForm: React.FC = () => {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all text-sm font-medium ${
-        selected
-          ? 'border-primary bg-primary/10 text-primary dark:text-white dark:bg-primary/20 ring-2 ring-ring shadow-sm'
-          : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60 text-foreground'
-      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border-2 transition-all text-sm font-medium ${selected
+        ? 'border-primary bg-primary/10 text-primary dark:text-white dark:bg-primary/20 ring-2 ring-ring shadow-sm'
+        : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60 text-foreground'
+        } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       aria-pressed={selected}
     >
       <span
@@ -682,11 +766,133 @@ const CitizenReportForm: React.FC = () => {
 
   const renderStep1 = () => (
     <div className="space-y-6 animate-in fade-in-0 slide-in-from-right-4 duration-300">
+      {/* Infrastructure Type — formerly Step 2, now first in Step 1 */}
+      <div>
+        <label className="block text-sm font-semibold text-foreground mb-1">
+          Type of Infrastructure <span className="text-destructive">*</span>
+        </label>
+        <p className="text-xs text-muted-foreground mb-3">
+          Select all types of infrastructure affected.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {INFRASTRUCTURE_TYPES.map((type) => {
+            const config = INFRASTRUCTURE_TYPE_CONFIG[type];
+            const selected = formData.infrastructureTypes.includes(type);
+            return (
+              <Chip
+                key={type}
+                label={config.label}
+                iconName={config.iconName}
+                selected={selected}
+                onClick={() => toggleInfrastructureType(type)}
+                disabled={isSubmitting}
+                color={config.color}
+                bgColor={config.bgColor}
+              />
+            );
+          })}
+        </div>
+        {errors.infrastructureTypes && (
+          <p className="mt-2 text-sm text-destructive flex items-center gap-1">
+            <AlertCircle size={14} aria-hidden /> {errors.infrastructureTypes}
+          </p>
+        )}
+
+        {formData.infrastructureTypes.includes('other') && (
+          <div className="mt-3">
+            <label htmlFor="infra-other" className="block text-sm font-medium text-foreground mb-1">
+              Please specify the infrastructure type:
+            </label>
+            <input
+              id="infra-other"
+              type="text"
+              value={formData.infrastructureOtherText}
+              onChange={(e) => handleInputChange('infrastructureOtherText', e.target.value)}
+              placeholder="e.g., Water treatment plant"
+              className="w-full rounded-md border border-input bg-background px-4 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={isSubmitting}
+              maxLength={200}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Infrastructure Details */}
+      <div>
+        <label htmlFor="infra-details" className="block text-sm font-semibold text-foreground mb-1">
+          Infrastructure Details <span className="text-destructive">*</span>
+        </label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Provide the name and additional details about the affected infrastructure.
+        </p>
+        <textarea
+          id="infra-details"
+          value={formData.infrastructureDetails}
+          onChange={(e) => handleInputChange('infrastructureDetails', e.target.value)}
+          rows={3}
+          placeholder="e.g., Barangay Hall of San Miguel — east wing partially collapsed, roof caved in"
+          className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none ${errors.infrastructureDetails ? 'border-destructive' : 'border-input'
+            }`}
+          disabled={isSubmitting}
+          maxLength={500}
+        />
+        {errors.infrastructureDetails && (
+          <p className="mt-1 text-sm text-destructive flex items-center gap-1">
+            <AlertCircle size={14} aria-hidden /> {errors.infrastructureDetails}
+          </p>
+        )}
+      </div>
+
+      {/* Debris Assessment */}
+      <div>
+        <label className="block text-sm font-semibold text-foreground mb-1">
+          Debris Assessment <span className="text-destructive">*</span>
+        </label>
+        <p className="text-xs text-muted-foreground mb-3">
+          Is there any debris that requires clearing on or near the infrastructure site?
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {DEBRIS_OPTIONS.map((option) => {
+            const isSelected = formData.debrisStatus === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({ ...prev, debrisStatus: option.value }));
+                  if (errors.debrisStatus) setErrors(prev => ({ ...prev, debrisStatus: undefined }));
+                }}
+                disabled={isSubmitting}
+                className={`flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 transition-all ${isSelected
+                  ? 'border-primary bg-primary/10 dark:bg-primary/20 ring-2 ring-ring shadow-sm'
+                  : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
+                  } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                aria-pressed={isSelected}
+              >
+                <UndpIcon name={option.iconName} size={24} className={isSelected ? 'text-primary dark:text-white' : 'text-muted-foreground'} />
+                <span className={`text-sm font-semibold ${isSelected ? 'text-primary dark:text-white' : 'text-foreground'}`}>
+                  {option.label}
+                </span>
+                <span className="text-xs text-muted-foreground text-center leading-tight">
+                  {option.description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {errors.debrisStatus && (
+          <p className="mt-2 text-sm text-destructive flex items-center gap-1">
+            <AlertCircle size={14} aria-hidden /> {errors.debrisStatus}
+          </p>
+        )}
+      </div>
+
       {/* Hazard Type */}
       <div>
         <label htmlFor="hazard-type" className="block text-sm font-semibold text-foreground mb-3">
           Hazard Type <span className="text-destructive">*</span>
         </label>
+
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
           {ALL_HAZARD_TYPES.map((type) => {
             const config = HAZARD_ICON_REGISTRY[type as keyof typeof HAZARD_ICON_REGISTRY];
@@ -697,11 +903,10 @@ const CitizenReportForm: React.FC = () => {
                 type="button"
                 onClick={() => handleInputChange('hazardType', type)}
                 disabled={isSubmitting}
-                className={`flex items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                  isSelected
-                    ? 'border-primary dark:text-white bg-primary/10 ring-2 ring-ring dark:bg-primary/20'
-                    : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
-                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                className={`flex items-center gap-2 p-3 rounded-lg border-2 transition-all ${isSelected
+                  ? 'border-primary dark:text-white bg-primary/10 ring-2 ring-ring dark:bg-primary/20'
+                  : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
+                  } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 aria-pressed={isSelected}
               >
                 <div
@@ -727,42 +932,44 @@ const CitizenReportForm: React.FC = () => {
         )}
       </div>
 
-      {/* Supplementary Crisis Factors (Optional) */}
-      <div>
-        <label className="block text-sm font-semibold text-foreground mb-1">
-          Additional Crisis Factors <span className="text-xs font-normal text-muted-foreground">(Optional)</span>
-        </label>
-        <p className="text-xs text-muted-foreground mb-3">
-          If the incident also involves technological or human-made factors, select them below.
-        </p>
-        <div className="space-y-4">
-          {(Object.entries(CRISIS_CATEGORIES) as [CrisisCategoryKey, typeof CRISIS_CATEGORIES[CrisisCategoryKey]][]).map(
-            ([catKey, category]) => (
-              <div key={catKey}>
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <UndpIcon name={category.iconName} size={14} />
-                  {category.label}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {category.options.map((option) => {
-                    const selected = formData.crisisCategories[catKey].includes(option.value);
-                    return (
-                      <Chip
-                        key={option.value}
-                        label={option.label}
-                        iconName={option.iconName}
-                        selected={selected}
-                        onClick={() => toggleCrisisOption(catKey, option.value)}
-                        disabled={isSubmitting}
-                      />
-                    );
-                  })}
+      {/* Additional Crisis Factors — only when Other Hazards is selected */}
+      {formData.hazardType === 'other' && (
+        <div>
+          <label className="block text-sm font-semibold text-foreground mb-1">
+            Additional Crisis Factors <span className="text-xs font-normal text-muted-foreground">(Optional)</span>
+          </label>
+          <p className="text-xs text-muted-foreground mb-3">
+            If the incident also involves technological or human-made factors, select them below.
+          </p>
+          <div className="space-y-4">
+            {(Object.entries(CRISIS_CATEGORIES) as [CrisisCategoryKey, typeof CRISIS_CATEGORIES[CrisisCategoryKey]][]).map(
+              ([catKey, category]) => (
+                <div key={catKey}>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <UndpIcon name={category.iconName} size={14} />
+                    {category.label}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {category.options.map((option) => {
+                      const selected = formData.crisisCategories[catKey].includes(option.value);
+                      return (
+                        <Chip
+                          key={option.value}
+                          label={option.label}
+                          iconName={option.iconName}
+                          selected={selected}
+                          onClick={() => toggleCrisisOption(catKey, option.value)}
+                          disabled={isSubmitting}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ),
-          )}
+              ),
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Damage Severity */}
       <div>
@@ -785,11 +992,10 @@ const CitizenReportForm: React.FC = () => {
                   if (errors.damageSeverity) setErrors(prev => ({ ...prev, damageSeverity: undefined }));
                 }}
                 disabled={isSubmitting}
-                className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
-                  isSelected
-                    ? `border-primary bg-primary/10 dark:bg-primary/20 ring-2 ${config.ring}`
-                    : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
-                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${isSelected
+                  ? `border-primary bg-primary/10 dark:bg-primary/20 ring-2 ${config.ring}`
+                  : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
+                  } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 aria-pressed={isSelected}
               >
                 <span
@@ -824,9 +1030,8 @@ const CitizenReportForm: React.FC = () => {
           maxLength={descriptionMax}
           rows={4}
           placeholder="Please describe what you observed, when it happened, and any immediate dangers..."
-          className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none ${
-            errors.description ? 'border-destructive' : 'border-input'
-          }`}
+          className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none ${errors.description ? 'border-destructive' : 'border-input'
+            }`}
           disabled={isSubmitting}
         />
         <div className="mt-1 flex justify-between items-center">
@@ -846,154 +1051,6 @@ const CitizenReportForm: React.FC = () => {
   );
 
   const renderStep2 = () => (
-    <div className="space-y-6 animate-in fade-in-0 slide-in-from-right-4 duration-300">
-      {/* Infrastructure Type */}
-      <div>
-        <label className="block text-sm font-semibold text-foreground mb-1">
-          Type of Infrastructure <span className="text-destructive">*</span>
-        </label>
-        <p className="text-xs text-muted-foreground mb-3">
-          Select all types of infrastructure affected.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {INFRASTRUCTURE_TYPES.map((type) => {
-            const config = INFRASTRUCTURE_TYPE_CONFIG[type];
-            const selected = formData.infrastructureTypes.includes(type);
-            return (
-              <Chip
-                key={type}
-                label={config.label}
-                iconName={config.iconName}
-                selected={selected}
-                onClick={() => toggleInfrastructureType(type)}
-                disabled={isSubmitting}
-                color={config.color}
-                bgColor={config.bgColor}
-              />
-            );
-          })}
-        </div>
-        {errors.infrastructureTypes && (
-          <p className="mt-2 text-sm text-destructive flex items-center gap-1">
-            <AlertCircle size={14} aria-hidden /> {errors.infrastructureTypes}
-          </p>
-        )}
-
-        {/* Conditional "Other" text input */}
-        {formData.infrastructureTypes.includes('other') && (
-          <div className="mt-3">
-            <label htmlFor="infra-other" className="block text-sm font-medium text-foreground mb-1">
-              Please specify the infrastructure type:
-            </label>
-            <input
-              id="infra-other"
-              type="text"
-              value={formData.infrastructureOtherText}
-              onChange={(e) => handleInputChange('infrastructureOtherText', e.target.value)}
-              placeholder="e.g., Water treatment plant"
-              className="w-full rounded-md border border-input bg-background px-4 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              disabled={isSubmitting}
-              maxLength={200}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Infrastructure Details */}
-      <div>
-        <label htmlFor="infra-details" className="block text-sm font-semibold text-foreground mb-1">
-          Infrastructure Details <span className="text-destructive">*</span>
-        </label>
-        <p className="text-xs text-muted-foreground mb-2">
-          Provide the name and additional details about the affected infrastructure.
-        </p>
-        <textarea
-          id="infra-details"
-          value={formData.infrastructureDetails}
-          onChange={(e) => handleInputChange('infrastructureDetails', e.target.value)}
-          rows={3}
-          placeholder="e.g., Barangay Hall of San Miguel — east wing partially collapsed, roof caved in"
-          className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none ${
-            errors.infrastructureDetails ? 'border-destructive' : 'border-input'
-          }`}
-          disabled={isSubmitting}
-          maxLength={500}
-        />
-        {errors.infrastructureDetails && (
-          <p className="mt-1 text-sm text-destructive flex items-center gap-1">
-            <AlertCircle size={14} aria-hidden /> {errors.infrastructureDetails}
-          </p>
-        )}
-      </div>
-
-      {/* Debris Assessment */}
-      <div>
-        <label className="block text-sm font-semibold text-foreground mb-1">
-          Debris Assessment <span className="text-destructive">*</span>
-        </label>
-        <p className="text-xs text-muted-foreground mb-3">
-          Is there any debris that requires clearing on or near the infrastructure site?
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {DEBRIS_OPTIONS.map((option) => {
-            const isSelected = formData.debrisStatus === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  setFormData(prev => ({ ...prev, debrisStatus: option.value }));
-                  if (errors.debrisStatus) setErrors(prev => ({ ...prev, debrisStatus: undefined }));
-                }}
-                disabled={isSubmitting}
-                className={`flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 transition-all ${
-                  isSelected
-                    ? 'border-primary bg-primary/10 dark:bg-primary/20 ring-2 ring-ring shadow-sm'
-                    : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
-                } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                aria-pressed={isSelected}
-              >
-                <UndpIcon name={option.iconName} size={24} className={isSelected ? 'text-primary dark:text-white' : 'text-muted-foreground'} />
-                <span className={`text-sm font-semibold ${isSelected ? 'text-primary dark:text-white' : 'text-foreground'}`}>
-                  {option.label}
-                </span>
-                <span className="text-xs text-muted-foreground text-center leading-tight">
-                  {option.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {errors.debrisStatus && (
-          <p className="mt-2 text-sm text-destructive flex items-center gap-1">
-            <AlertCircle size={14} aria-hidden /> {errors.debrisStatus}
-          </p>
-        )}
-      </div>
-
-      {/* Mandatory Image Upload */}
-      <div>
-        <label className="block text-sm font-semibold text-foreground mb-2">
-          Damage Assessment Photo <span className="text-destructive">*</span>
-        </label>
-        <ImageUpload
-          onFileSelect={handleImageUpload}
-          disabled={isSubmitting}
-        />
-        <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-          <ImageIcon size={12} aria-hidden />
-          Required. Max 5MB. JPEG or PNG format. GPS coordinates will be extracted if available.
-        </p>
-        {errors.image && (
-          <p className="mt-1 text-sm text-destructive flex items-center gap-1">
-            <AlertCircle size={14} aria-hidden /> {errors.image}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderStep3 = () => (
     <div className="space-y-6 animate-in fade-in-0 slide-in-from-right-4 duration-300">
       {/* Location Picker */}
       <div>
@@ -1024,6 +1081,183 @@ const CitizenReportForm: React.FC = () => {
         </div>
       </div>
 
+      {/* Mandatory Image Upload */}
+      <div>
+        <label className="block text-sm font-semibold text-foreground mb-2">
+          Damage Assessment Photo <span className="text-destructive">*</span>
+        </label>
+        <ImageUpload
+          onFileSelect={handleImageUpload}
+          disabled={isSubmitting}
+          value={formData.image ?? null}
+        />
+        <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+          <ImageIcon size={12} aria-hidden />
+          Required. Max 5MB. JPEG or PNG format. GPS coordinates will be extracted if available.
+        </p>
+        {errors.image && (
+          <p className="mt-1 text-sm text-destructive flex items-center gap-1">
+            <AlertCircle size={14} aria-hidden /> {errors.image}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderStep3 = () => (
+    <div className="space-y-6 animate-in fade-in-0 slide-in-from-right-4 duration-300">
+      {/* Electricity Infrastructure */}
+      <div>
+        <label className="block text-sm font-semibold text-foreground mb-1">
+          What is the current condition of electricity infrastructure in your community following the crisis?{' '}
+          <span className="text-destructive">*</span>
+        </label>
+        <div className="mt-3 space-y-2">
+          {ELECTRICITY_INFRASTRUCTURE_OPTIONS.map((option) => {
+            const isSelected = formData.electricityInfrastructure === option.value;
+            return (
+              <label
+                key={option.value}
+                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${isSelected
+                  ? 'border-primary bg-primary/10 dark:bg-primary/20 ring-2 ring-ring'
+                  : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
+                  }`}
+              >
+                <input
+                  type="radio"
+                  name="electricity-infrastructure"
+                  value={option.value}
+                  checked={isSelected}
+                  onChange={() => {
+                    setFormData(prev => ({ ...prev, electricityInfrastructure: option.value }));
+                    if (errors.electricityInfrastructure) {
+                      setErrors(prev => ({ ...prev, electricityInfrastructure: undefined }));
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  className="mt-1"
+                />
+                <span className={`text-sm ${isSelected ? 'text-primary dark:text-white font-medium' : 'text-foreground'}`}>
+                  {option.label}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {errors.electricityInfrastructure && (
+          <p className="mt-2 text-sm text-destructive flex items-center gap-1">
+            <AlertCircle size={14} aria-hidden /> {errors.electricityInfrastructure}
+          </p>
+        )}
+      </div>
+
+      {/* Health Services */}
+      <div>
+        <label className="block text-sm font-semibold text-foreground mb-1">
+          How would you rate the overall functioning of health services in your community since the event?{' '}
+          <span className="text-destructive">*</span>
+        </label>
+        <div className="mt-3 space-y-2">
+          {HEALTH_SERVICES_OPTIONS.map((option) => {
+            const isSelected = formData.healthServicesRating === option.value;
+            return (
+              <label
+                key={option.value}
+                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${isSelected
+                  ? 'border-primary bg-primary/10 dark:bg-primary/20 ring-2 ring-ring'
+                  : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
+                  }`}
+              >
+                <input
+                  type="radio"
+                  name="health-services-rating"
+                  value={option.value}
+                  checked={isSelected}
+                  onChange={() => {
+                    setFormData(prev => ({ ...prev, healthServicesRating: option.value }));
+                    if (errors.healthServicesRating) {
+                      setErrors(prev => ({ ...prev, healthServicesRating: undefined }));
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  className="mt-1"
+                />
+                <span className={`text-sm ${isSelected ? 'text-primary dark:text-white font-medium' : 'text-foreground'}`}>
+                  {option.label}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {errors.healthServicesRating && (
+          <p className="mt-2 text-sm text-destructive flex items-center gap-1">
+            <AlertCircle size={14} aria-hidden /> {errors.healthServicesRating}
+          </p>
+        )}
+      </div>
+
+      {/* Pressing Needs */}
+      <div>
+        <label className="block text-sm font-semibold text-foreground mb-1">
+          What are the most pressing needs? <span className="text-destructive">*</span>
+        </label>
+        <p className="text-xs text-muted-foreground mb-3">Select all that apply.</p>
+        <div className="space-y-2">
+          {PRESSING_NEEDS_OPTIONS.map((option) => {
+            const isSelected = formData.pressingNeeds.includes(option.value);
+            return (
+              <label
+                key={option.value}
+                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${isSelected
+                  ? 'border-primary bg-primary/10 dark:bg-primary/20 ring-2 ring-ring'
+                  : 'border-border bg-card hover:border-muted-foreground/35 hover:bg-muted/60'
+                  }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => togglePressingNeed(option.value)}
+                  disabled={isSubmitting}
+                  className="mt-1"
+                />
+                <span className={`text-sm ${isSelected ? 'text-primary dark:text-white font-medium' : 'text-foreground'}`}>
+                  {option.label}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        {errors.pressingNeeds && (
+          <p className="mt-2 text-sm text-destructive flex items-center gap-1">
+            <AlertCircle size={14} aria-hidden /> {errors.pressingNeeds}
+          </p>
+        )}
+
+        {formData.pressingNeeds.includes('other') && (
+          <div className="mt-3">
+            <label htmlFor="pressing-needs-other" className="block text-sm font-medium text-foreground mb-1">
+              Please specify other pressing need: <span className="text-destructive">*</span>
+            </label>
+            <input
+              id="pressing-needs-other"
+              type="text"
+              value={formData.pressingNeedsOther}
+              onChange={(e) => handleInputChange('pressingNeedsOther', e.target.value)}
+              placeholder="Describe the other need"
+              className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${errors.pressingNeedsOther ? 'border-destructive' : 'border-input'
+                }`}
+              disabled={isSubmitting}
+              maxLength={300}
+            />
+            {errors.pressingNeedsOther && (
+              <p className="mt-1 text-sm text-destructive flex items-center gap-1">
+                <AlertCircle size={14} aria-hidden /> {errors.pressingNeedsOther}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Name Input */}
       <div>
         <label htmlFor="name" className="block text-sm font-semibold text-foreground mb-2">
@@ -1036,9 +1270,8 @@ const CitizenReportForm: React.FC = () => {
           onChange={(e) => handleInputChange('name', e.target.value)}
           maxLength={nameMax}
           placeholder="Enter your full name"
-          className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${
-            errors.name ? 'border-destructive' : 'border-input'
-          }`}
+          className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${errors.name ? 'border-destructive' : 'border-input'
+            }`}
           disabled={isSubmitting}
         />
         <div className="mt-1 flex justify-between items-center">
@@ -1063,9 +1296,8 @@ const CitizenReportForm: React.FC = () => {
           value={formData.contactNumber}
           onChange={(e) => handleInputChange('contactNumber', e.target.value)}
           placeholder="e.g., 09123456789 or +63 912 345 6789"
-          className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${
-            errors.contactNumber ? 'border-destructive' : 'border-input'
-          }`}
+          className={`w-full rounded-md border bg-background px-4 py-2 text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${errors.contactNumber ? 'border-destructive' : 'border-input'
+            }`}
           disabled={isSubmitting}
         />
         {errors.contactNumber && (

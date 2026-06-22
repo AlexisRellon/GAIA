@@ -230,6 +230,53 @@ export const DAMAGE_SEVERITY_CONFIG: Record<
 };
 
 // ============================================================================
+// COMMUNITY IMPACT ASSESSMENT (Step 3)
+// ============================================================================
+
+export const ELECTRICITY_INFRASTRUCTURE_OPTIONS = [
+  { value: 'no_damage', label: 'No damage observed' },
+  { value: 'minor_damage', label: 'Minor damage (service disruptions but quickly repairable)' },
+  { value: 'moderate_damage', label: 'Moderate damage (partial outages requiring repairs)' },
+  { value: 'severe_damage', label: 'Severe damage (major infrastructure damaged, prolonged outages)' },
+  { value: 'completely_destroyed', label: 'Completely destroyed (no electricity infrastructure functioning)' },
+  { value: 'unknown', label: 'Unknown/cannot be assessed' },
+] as const;
+
+export type ElectricityInfrastructureStatus = typeof ELECTRICITY_INFRASTRUCTURE_OPTIONS[number]['value'];
+
+export const HEALTH_SERVICES_OPTIONS = [
+  { value: 'fully_functional', label: 'Fully functional' },
+  { value: 'partially_functional', label: 'Partially functional' },
+  { value: 'largely_disrupted', label: 'Largely disrupted' },
+  { value: 'not_functioning', label: 'Not functioning at all' },
+  { value: 'unknown', label: 'Unknown' },
+] as const;
+
+export type HealthServicesRating = typeof HEALTH_SERVICES_OPTIONS[number]['value'];
+
+export const PRESSING_NEEDS_OPTIONS = [
+  { value: 'food_water', label: 'Food assistance and safe drinking water' },
+  { value: 'cash_financial', label: 'Cash or financial assistance' },
+  { value: 'healthcare_medicines', label: 'Access to healthcare and essential medicines' },
+  { value: 'shelter_housing', label: 'Shelter, housing repair, or temporary accommodation' },
+  { value: 'livelihoods_income', label: 'Restoration of livelihoods or income sources' },
+  { value: 'wash', label: 'Water, sanitation, and hygiene (toilets, washing facilities)' },
+  { value: 'basic_services', label: 'Restoration of basic services and infrastructure (electricity, roads, schools)' },
+  { value: 'protection_psychosocial', label: 'Protection services and psychosocial support' },
+  { value: 'local_authority_support', label: 'Support from local authorities and community organizations' },
+  { value: 'other', label: 'Other, please specify' },
+] as const;
+
+export type PressingNeed = typeof PRESSING_NEEDS_OPTIONS[number]['value'];
+
+export interface CommunityAssessment {
+  electricityInfrastructure: ElectricityInfrastructureStatus | '';
+  healthServicesRating: HealthServicesRating | '';
+  pressingNeeds: PressingNeed[];
+  pressingNeedsOther: string;
+}
+
+// ============================================================================
 // COMPOSITE FORM / REPORT TYPES
 // ============================================================================
 
@@ -256,6 +303,12 @@ export interface UNDPFormData {
   crisisCategories: CrisisSelections; // optional supplementary factors
   debrisStatus: DebrisStatus | '';
   damageSeverity: DamageSeverity | '';
+
+  // Community impact assessment (Step 3)
+  electricityInfrastructure: ElectricityInfrastructureStatus | '';
+  healthServicesRating: HealthServicesRating | '';
+  pressingNeeds: PressingNeed[];
+  pressingNeedsOther: string;
 }
 
 /**
@@ -282,6 +335,8 @@ export interface DamageReportData {
   infrastructure_other_text?: string;
   infrastructure_details?: string;
   crisis_categories?: CrisisSelections;
+  community_assessment?: CommunityAssessment;
   debris_status: DebrisStatus;
   damage_severity: DamageSeverity;
+  video_urls?: string[];
 }

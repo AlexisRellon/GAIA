@@ -16,6 +16,13 @@
  */
 
 import type { Hazard } from '@/types/hazard';
+import type {
+  CommunityAssessment,
+  CrisisSelections,
+  DamageSeverity,
+  DebrisStatus,
+  InfrastructureType,
+} from '@/types/undpTypes';
 import { apiRequest } from '../lib/api';
 
 // API Configuration
@@ -45,6 +52,14 @@ export interface HazardResponse {
   created_at: string;
   validated_at: string | null;
   validated_by: string | null;
+  infrastructure_types?: InfrastructureType[];
+  infrastructure_details?: string;
+  infrastructure_other_text?: string;
+  crisis_categories?: CrisisSelections;
+  community_assessment?: CommunityAssessment;
+  debris_status?: DebrisStatus;
+  damage_severity?: DamageSeverity;
+  image_urls?: string[];
 }
 
 export interface HazardStatsResponse {
@@ -92,7 +107,7 @@ export interface ValidatedHazardsQueryOptions {
  */
 function buildQueryString(params: HazardsQueryParams): string {
   const searchParams = new URLSearchParams();
-  
+
   if (params.hazard_types?.length) {
     searchParams.append('hazard_types', params.hazard_types.join(','));
   }
@@ -123,7 +138,7 @@ function buildQueryString(params: HazardsQueryParams): string {
   if (params.offset !== undefined) {
     searchParams.append('offset', String(params.offset));
   }
-  
+
   const queryString = searchParams.toString();
   return queryString ? `?${queryString}` : '';
 }
@@ -156,7 +171,7 @@ export async function fetchHazards(
   params: HazardsQueryParams = {}
 ): Promise<HazardResponse[]> {
   const queryString = buildQueryString(params);
-  
+
   const response = await fetch(`${HAZARDS_API_BASE}/${queryString}`, {
     method: 'GET',
     headers: {
@@ -164,14 +179,14 @@ export async function fetchHazards(
     },
     credentials: 'include', // Include auth cookies if present
   });
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({
       detail: `HTTP error! status: ${response.status}`,
     }));
     throw new Error(errorData.detail || 'Failed to fetch hazards');
   }
-  
+
   return response.json();
 }
 
@@ -224,7 +239,7 @@ export async function fetchHazardById(id: string): Promise<HazardResponse> {
     },
     credentials: 'include',
   });
-  
+
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error(`Hazard not found: ${id}`);
@@ -234,7 +249,7 @@ export async function fetchHazardById(id: string): Promise<HazardResponse> {
     }));
     throw new Error(errorData.detail || 'Failed to fetch hazard');
   }
-  
+
   return response.json();
 }
 
@@ -251,14 +266,14 @@ export async function fetchHazardStats(): Promise<HazardStatsResponse> {
     },
     credentials: 'include',
   });
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({
       detail: `HTTP error! status: ${response.status}`,
     }));
     throw new Error(errorData.detail || 'Failed to fetch hazard stats');
   }
-  
+
   return response.json();
 }
 
@@ -295,10 +310,10 @@ export async function fetchNearbyHazards(
   if (options.limit) {
     params.append('limit', String(options.limit));
   }
-  
+
   const queryString = params.toString();
   const url = `${HAZARDS_API_BASE}/nearby/${latitude}/${longitude}${queryString ? `?${queryString}` : ''}`;
-  
+
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -306,14 +321,14 @@ export async function fetchNearbyHazards(
     },
     credentials: 'include',
   });
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({
       detail: `HTTP error! status: ${response.status}`,
     }));
     throw new Error(errorData.detail || 'Failed to fetch nearby hazards');
   }
-  
+
   return response.json();
 }
 
@@ -332,7 +347,7 @@ export const hazardsQueryKeys = {
   details: () => [...hazardsQueryKeys.all, 'detail'] as const,
   detail: (id: string) => [...hazardsQueryKeys.details(), id] as const,
   stats: () => [...hazardsQueryKeys.all, 'stats'] as const,
-  nearby: (lat: number, lon: number, radius?: number) => 
+  nearby: (lat: number, lon: number, radius?: number) =>
     [...hazardsQueryKeys.all, 'nearby', lat, lon, radius] as const,
 };
 
@@ -361,6 +376,14 @@ export function mapApiResponseToHazard(response: HazardResponse): Hazard {
     created_at: response.created_at,
     validated_at: response.validated_at || undefined,
     validated_by: response.validated_by || undefined,
+    infrastructure_types: response.infrastructure_types ?? undefined,
+    infrastructure_details: response.infrastructure_details || undefined,
+    infrastructure_other_text: response.infrastructure_other_text || undefined,
+    crisis_categories: response.crisis_categories ?? undefined,
+    community_assessment: response.community_assessment ?? undefined,
+    debris_status: response.debris_status || undefined,
+    damage_severity: response.damage_severity || undefined,
+    image_urls: response.image_urls || undefined,
   };
 }
 

@@ -12,7 +12,7 @@
  * - Error handling and user feedback
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, X, AlertCircle, Check } from 'lucide-react';
 import EXIF from 'exif-js';
 
@@ -23,6 +23,8 @@ import EXIF from 'exif-js';
 interface ImageUploadProps {
   onFileSelect: (file: File | undefined, metadata?: ImageMetadata) => void;
   disabled?: boolean;
+  /** Controlled file value — keeps preview when parent remounts the component */
+  value?: File | null;
 }
 
 interface ImageMetadata {
@@ -54,13 +56,13 @@ function isHeicFile(filename: string, mimeType: string): boolean {
   if (HEIC_HEIF_TYPES.includes(mimeType)) {
     return true;
   }
-  
+
   // Fallback: check file extension if MIME type is empty or generic
   if (!mimeType || mimeType === 'application/octet-stream') {
     const ext = filename.toLowerCase().split('.').pop();
     return ext === 'heic' || ext === 'heif';
   }
-  
+
   return false;
 }
 
@@ -81,12 +83,12 @@ function convertDMSToDD(degrees: number, minutes: number, seconds: number, direc
 async function extractEXIFMetadata(file: File): Promise<ImageMetadata | null> {
   return new Promise((resolve) => {
     const reader = new FileReader();
-    
+
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        EXIF.getData(img as any, function(this: any) {
+        EXIF.getData(img as any, function (this: any) {
           const metadata: ImageMetadata = {};
 
           // Extract timestamp
@@ -114,7 +116,7 @@ async function extractEXIFMetadata(file: File): Promise<ImageMetadata | null> {
             try {
               const latitude = convertDMSToDD(lat[0], lat[1], lat[2], latRef);
               const longitude = convertDMSToDD(lng[0], lng[1], lng[2], lngRef);
-              
+
               // Validate coordinates are within Philippine bounds (approximately)
               if (latitude >= 4 && latitude <= 21 && longitude >= 116 && longitude <= 127) {
                 metadata.gps = { latitude, longitude };
@@ -127,7 +129,7 @@ async function extractEXIFMetadata(file: File): Promise<ImageMetadata | null> {
           resolve(Object.keys(metadata).length > 0 ? metadata : null);
         });
       };
-      
+
       img.onerror = () => {
         resolve(null);
       };
@@ -158,16 +160,51 @@ function formatFileSize(bytes: number): string {
 // MAIN COMPONENT
 // ============================================================================
 
-const ImageUpload: React.FC<ImageUploadProps> = ({ onFileSelect, disabled = false }) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+const ImageUpload: React.FC<ImageUploadProps> = ({ onFileSelect, disabled = false, value = null }) => {
+  const [selectedFile, setSelectedFile] = useState<File | null>(value);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [metadata, setMetadata] = useState<ImageMetadata | null>(null);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  // Sync controlled value from parent (e.g. when navigating wizard steps)
+  useEffect(() => {
+    if (value) {
+      setSelectedFile(value);
+      if (!previewUrlRef.current) {
+        const url = URL.createObjectURL(value);
+        previewUrlRef.current = url;
+        setPreviewUrl(url);
+      }
+      setError(null);
+      return;
+    }
+
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewUrl(null);
+    setSelectedFile(null);
+    setMetadata(null);
+    setWarning(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
 
   // ============================================================================
   // VALIDATION
@@ -177,7 +214,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onFileSelect, disabled = fals
     // Check file type (with HEIC/HEIF extension fallback)
     const isHeic = isHeicFile(file.name, file.type);
     const isStandardType = ALLOWED_TYPES.includes(file.type);
-    
+
     if (!isHeic && !isStandardType) {
       return 'Only JPEG, PNG, JFIF, HEIC, and HEIF images are allowed';
     }
@@ -213,6 +250,10 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onFileSelect, disabled = fals
 
     // Create preview URL
     const url = URL.createObjectURL(file);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+    previewUrlRef.current = url;
     setPreviewUrl(url);
     setSelectedFile(file);
 
@@ -242,8 +283,9 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onFileSelect, disabled = fals
   };
 
   const handleRemove = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
     }
     setSelectedFile(null);
     setPreviewUrl(null);
@@ -251,7 +293,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onFileSelect, disabled = fals
     setWarning(null);
     setMetadata(null);
     onFileSelect(undefined);
-    
+
     // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -305,7 +347,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onFileSelect, disabled = fals
             alt="Preview"
             className="w-full h-64 object-cover"
           />
-          
+
           {/* Remove Button */}
           <button
             type="button"
@@ -344,19 +386,19 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onFileSelect, disabled = fals
         {metadata && (
           <div className="p-3 rounded-lg border border-primary/25 bg-primary/10 text-sm space-y-1 dark:border-primary/40 dark:bg-primary/15">
             <p className="font-medium text-foreground mb-2">Image Metadata</p>
-            
+
             {metadata.timestamp && (
               <p className="text-foreground/90">
                 <span className="font-medium">Captured:</span> {metadata.timestamp}
               </p>
             )}
-            
+
             {metadata.device && (
               <p className="text-foreground/90">
                 <span className="font-medium">Device:</span> {metadata.device}
               </p>
             )}
-            
+
             {metadata.gps && (
               <p className="text-foreground/90">
                 <span className="font-medium">GPS Location:</span> Found ✓

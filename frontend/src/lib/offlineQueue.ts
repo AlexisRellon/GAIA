@@ -34,6 +34,12 @@ export interface OfflineReport {
   crisisCategories: CrisisSelections;
   debrisStatus: string;
   damageSeverity: string;
+  communityAssessment?: {
+    electricity_infrastructure: string;
+    health_services_rating: string;
+    pressing_needs: string[];
+    pressing_needs_other?: string;
+  };
   /**
    * Image serialized as a base64 data URL (e.g. "data:image/jpeg;base64,...").
    * Stored as a string so the Service Worker can safely read it from IndexedDB
