@@ -962,114 +962,45 @@ async def validate_citizen_report(
                 detail="Report has already been validated"
             )
 
+        # 3. Validate optional corrected coordinates (Philippine bounds: 4-21°N, 116-127°E)
         coordinate_updates: Dict[str, Any] = {}
-        if request_body.latitude is not None and request_body.longitude is not None:
-            coordinate_updates = {
-                "latitude": request_body.latitude,
-                "longitude": request_body.longitude,
-                "location": f"POINT({request_body.longitude} {request_body.latitude})"
-            }
-            report['latitude'] = request_body.latitude
-            report['longitude'] = request_body.longitude
-            report['location'] = coordinate_updates["location"]
-        
-        # 3. Update citizen_reports table with optional coordinate corrections
-        update_data = {
-            "status": "verified",
-            "validated_by": current_user.user_id,
-            "validated_at": datetime.utcnow().isoformat(),
-            "validation_notes": request_body.notes
-        }
-
-        if coordinate_updates:
-            update_data.update(coordinate_updates)
-        
-        # If admin provides corrected coordinates, update the report
-        if request_body.latitude is not None and request_body.longitude is not None:
-            # Validate Philippine boundaries (4-21°N, 116-127°E)
-            if 4 <= request_body.latitude <= 21 and 116 <= request_body.longitude <= 127:
-                update_data["latitude"] = request_body.latitude
-                update_data["longitude"] = request_body.longitude
-                update_data["location"] = f"POINT({request_body.longitude} {request_body.latitude})"
-                logger.info(f"Admin corrected coordinates for report {tracking_id}")
-            else:
+        corrected_lat = request_body.latitude
+        corrected_lng = request_body.longitude
+        if corrected_lat is not None and corrected_lng is not None:
+            if not (4 <= corrected_lat <= 21 and 116 <= corrected_lng <= 127):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Corrected coordinates are outside Philippine boundaries"
                 )
-        
-        update_response = supabase.schema("gaia").from_("citizen_reports") \
-            .update(update_data) \
-            .eq("tracking_id", tracking_id) \
-            .execute()
-        
-        if not update_response.data:
+            coordinate_updates = {"latitude": corrected_lat, "longitude": corrected_lng}
+            logger.info(f"Admin corrected coordinates for report {safe_tracking_id}")
+
+        # 4. Atomically verify the report and create the linked hazard.
+        #    gaia.promote_citizen_report() updates the citizen report, inserts a
+        #    LIGHTWEIGHT hazard, and writes promoted_to_hazard_id in one
+        #    transaction (Reference + JOIN model — no description/UNDP/image
+        #    duplication; those are JOINed on demand via promoted_to_hazard_id).
+        validated_at_iso = datetime.utcnow().isoformat()
+        try:
+            promote_response = supabase.schema("gaia").rpc(
+                "promote_citizen_report",
+                {
+                    "p_tracking_id": tracking_id,
+                    "p_validator": current_user.user_id,
+                    "p_notes": request_body.notes,
+                    "p_lat": corrected_lat,
+                    "p_lng": corrected_lng,
+                },
+            ).execute()
+        except Exception as promote_error:
+            logger.error(f"Failed to promote report {safe_tracking_id}: {promote_error}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update report status"
+                detail="Failed to validate report and create hazard record"
             )
-        
-        # Use updated coordinates from the update response if they were corrected
-        updated_report = update_response.data[0]
-        
-        # 4. Create hazard record for validated report
-        final_latitude = report.get('latitude')
-        final_longitude = report.get('longitude')
-        final_location_geom = report.get('location')
 
-        # Map damage_severity to hazard severity level
-        # The user-selected damage_severity is the authoritative source
-        damage_sev = report.get('damage_severity', 'moderate')
-        DAMAGE_TO_SEVERITY = {
-            'destroyed': 'critical',
-            'severe': 'severe',
-            'moderate': 'moderate',
-            'minor': 'minor',
-            'no_visible_damage': 'minor',
-        }
-        mapped_severity = DAMAGE_TO_SEVERITY.get(damage_sev, 'moderate')
-
-        # Build image_urls from citizen_reports image_url column
-        # citizen_reports stores as TEXT[] in image_url; hazards expects image_urls (TEXT[])
-        raw_image = report.get('image_url') or report.get('image_urls')
-        if isinstance(raw_image, list):
-            image_urls = raw_image
-        elif isinstance(raw_image, str):
-            image_urls = [raw_image]
-        else:
-            image_urls = []
-
-        hazard_data = {
-            "hazard_type": report['hazard_type'],
-            "location_name": report['location_name'],
-            "latitude": final_latitude,
-            "longitude": final_longitude,
-            "location": final_location_geom,  # PostGIS geometry
-            "severity": mapped_severity,  # Derived from user-selected damage_severity
-            "confidence_score": min(report.get('confidence_score', 0.3) + 0.4, 1.0),  # Boost confidence after validation
-            "source_type": "citizen_report",
-            "source_content": report['description'],
-            "validated": True,
-            "validated_by": current_user.user_id,
-            "validated_at": datetime.utcnow().isoformat(),
-            "created_at": datetime.utcnow().isoformat(),
-            # UNDP damage assessment fields (copied from citizen report)
-            "infrastructure_types": report.get('infrastructure_types'),
-            "infrastructure_details": report.get('infrastructure_details'),
-            "infrastructure_other_text": report.get('infrastructure_other_text'),
-            "crisis_categories": report.get('crisis_categories'),
-            "community_assessment": report.get('community_assessment'),
-            "debris_status": report.get('debris_status'),
-            "damage_severity": damage_sev,
-            "image_urls": image_urls,
-        }
-        
-        hazard_response = supabase.schema("gaia").from_("hazards") \
-            .insert(hazard_data) \
-            .execute()
-        
-        if not hazard_response.data:
-            logger.warning(f"Failed to create hazard record for validated report {tracking_id}")
+        hazard_id = promote_response.data
+        logger.info(f"Promoted report {safe_tracking_id} to hazard {hazard_id}")
         
         # 5. Log activity (fire and forget)
         try:
@@ -1133,7 +1064,7 @@ async def validate_citizen_report(
             action="validated",
             status="verified",
             validated_by=current_user.email,
-            validated_at=update_data["validated_at"],
+            validated_at=validated_at_iso,
             message="Report validated successfully and added to hazard map"
         )
         
