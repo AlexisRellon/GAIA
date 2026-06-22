@@ -356,6 +356,40 @@ export const hazardsQueryKeys = {
 // ============================================================================
 
 /**
+ * Normalize community_assessment from DB/API snake_case to frontend camelCase.
+ *
+ * The CitizenReportForm sends snake_case keys (electricity_infrastructure,
+ * health_services_rating, pressing_needs, pressing_needs_other) which are
+ * stored as-is in the JSONB column. The CommunityAssessment interface and
+ * DamageReportSidebar expect camelCase. This function handles both conventions
+ * so existing and new data render correctly.
+ */
+function normalizeCommunityAssessment(
+  raw: Record<string, unknown> | undefined | null,
+): CommunityAssessment | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  return {
+    electricityInfrastructure:
+      (raw.electricityInfrastructure ??
+      raw.electricity_infrastructure ??
+      '') as CommunityAssessment['electricityInfrastructure'],
+    healthServicesRating:
+      (raw.healthServicesRating ??
+      raw.health_services_rating ??
+      '') as CommunityAssessment['healthServicesRating'],
+    pressingNeeds:
+      (raw.pressingNeeds ??
+      raw.pressing_needs ??
+      []) as CommunityAssessment['pressingNeeds'],
+    pressingNeedsOther:
+      ((raw.pressingNeedsOther as string) ||
+      (raw.pressing_needs_other as string) ||
+      ''),
+  };
+}
+
+/**
  * Convert API response to match existing Hazard type
  * Use this during migration to maintain compatibility with existing components
  */
@@ -380,7 +414,9 @@ export function mapApiResponseToHazard(response: HazardResponse): Hazard {
     infrastructure_details: response.infrastructure_details || undefined,
     infrastructure_other_text: response.infrastructure_other_text || undefined,
     crisis_categories: response.crisis_categories ?? undefined,
-    community_assessment: response.community_assessment ?? undefined,
+    community_assessment: normalizeCommunityAssessment(
+      response.community_assessment as Record<string, unknown> | undefined,
+    ),
     debris_status: response.debris_status || undefined,
     damage_severity: response.damage_severity || undefined,
     image_urls: response.image_urls || undefined,
