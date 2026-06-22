@@ -1,174 +1,111 @@
 """
-Boundaries API - Serve Philippine administrative boundaries by location
-Provides on-demand GeoJSON boundaries for cities/municipalities to avoid
-loading large files in the browser.
+Boundaries API - Serve Philippine administrative boundaries by location.
 
-Part of GV-01: Philippine Administrative Boundaries
+Resolves a single administrative boundary (region / province / city /
+municipality / barangay) to a GeoJSON FeatureCollection for the map's boundary
+overlay (GV-01).
+
+Backed by PostGIS (`gaia.get_boundary_geojson`) rather than parsing multi-MB
+GeoJSON files on every request:
+  * Optimization — one indexed row + DB-side geometry simplification, instead of
+    reading + JSON-parsing whole boundary files per request.
+  * Security (OWASP / FASTAPI-INJECT-001) — the lookup is a parameterized RPC
+    (`p_name` is a bound parameter), so the user-supplied name can never be
+    interpolated into SQL. Input is validated (FASTAPI-VALID-001) and errors are
+    generic (no internal detail leakage).
 """
 
-import json
 import logging
-from pathlib import Path
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Request
+import re
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from philippine_regions import (
-    get_region_from_location,
-    PHILIPPINE_ADMIN_MAPPING,
-    normalize_location_with_region
-)
+from backend.python.lib.supabase_client import supabase
 from backend.python.middleware.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/boundaries", tags=["boundaries"])
 
-# Path to GeoJSON boundary files
-BOUNDARIES_DATA_DIR = Path(__file__).parent.parent.parent / "frontend" / "public" / "data" / "boundaries"
+# Boundaries change rarely — allow browser/CDN caching to cut load.
+_CACHE_CONTROL = "public, max-age=3600"
+
+# Defense-in-depth input validation (the DB call is already parameterized).
+# Allow letters (incl. Unicode/ñ/accents via \w), digits, a literal space and
+# the punctuation that appears in PSGC place names. A literal space (not \s)
+# keeps newlines/tabs/control whitespace out. Reject everything else.
+_MAX_NAME_LEN = 100
+_VALID_NAME_RE = re.compile(r"^[\w \-'.,()&/]+$", re.UNICODE)
 
 
-def load_geojson_file(filename: str) -> Optional[Dict[str, Any]]:
-    """Load and parse a GeoJSON file."""
-    filepath = BOUNDARIES_DATA_DIR / filename
-    
-    if not filepath.exists():
-        logger.warning(f"GeoJSON file not found: {filepath}")
-        return None
-    
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading GeoJSON file {filepath}: {e}")
-        return None
-
-
-def extract_feature_by_name(geojson: Dict[str, Any], location_name: str, field_priority: list = None) -> Optional[Dict[str, Any]]:
-    """Extract a specific feature from GeoJSON by name with field priority."""
-    if not geojson or geojson.get('type') != 'FeatureCollection':
-        return None
-    
-    features = geojson.get('features', [])
-    location_lower = location_name.lower().strip()
-    
-    if field_priority is None:
-        field_priority = ['adm3_en', 'adm2_en', 'adm1_en', 'name']
-    
-    for feature in features:
-        properties = feature.get('properties', {})
-        for field in field_priority:
-            if field in properties:
-                feature_name = str(properties[field]).lower().strip()
-                if location_lower == feature_name or location_lower in feature_name:
-                    return feature
-    return None
+def _validate_location_name(raw: str) -> str:
+    """Validate + normalize the user-supplied location name, or raise 400."""
+    clean = (raw or "").strip()
+    if not clean or len(clean) > _MAX_NAME_LEN or not _VALID_NAME_RE.match(clean):
+        # Generic message — do not echo attacker input back verbatim.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid location name")
+    return clean
 
 
 @router.get("/health")
-@limiter.limit("60/minute")  # Allow 60 health checks per minute for monitoring
+@limiter.limit("60/minute")
 async def health_check(request: Request):
-    """Health check endpoint."""
-    regions_file = BOUNDARIES_DATA_DIR / "regions.geojson"
-    provinces_file = BOUNDARIES_DATA_DIR / "provinces.geojson"
-    municipalities_file = BOUNDARIES_DATA_DIR / "municipalities.geojson"
-    
+    """Health check — reports whether the boundary data source is configured."""
     return {
-        "status": "healthy" if all([f.exists() for f in [regions_file, provinces_file, municipalities_file]]) else "degraded",
-        "files": {
-            "regions": {"exists": regions_file.exists(), "size_mb": round(regions_file.stat().st_size / 1024 / 1024, 2) if regions_file.exists() else 0},
-            "provinces": {"exists": provinces_file.exists(), "size_mb": round(provinces_file.stat().st_size / 1024 / 1024, 2) if provinces_file.exists() else 0},
-            "municipalities": {"exists": municipalities_file.exists(), "size_mb": round(municipalities_file.stat().st_size / 1024 / 1024, 2) if municipalities_file.exists() else 0}
-        }
+        "status": "healthy" if supabase is not None else "degraded",
+        "source": "postgis:gaia.get_boundary_geojson",
     }
 
 
 @router.get("/{location_name}")
-@limiter.limit("20/minute")  # Limit boundary requests to 20 per minute per IP
+@limiter.limit("30/minute")
 async def get_location_boundary(location_name: str, request: Request):
-    """Get GeoJSON boundary for location (municipality > province > region priority)."""
-    logger.info(f"Boundary request: {location_name}")
-    location_clean = location_name.strip()[:100]
-    
-    if not location_clean:
-        raise HTTPException(status_code=400, detail="Invalid location name")
-    
-    # Try as city first, then as province
-    region_data = get_region_from_location(city=location_clean)
-    if not region_data:
-        region_data = get_region_from_location(province=location_clean)
-    
-    # Case-insensitive fallback
-    if not region_data:
-        for key in PHILIPPINE_ADMIN_MAPPING.keys():
-            if key.lower() == location_clean.lower():
-                region_data = get_region_from_location(city=key)
-                if not region_data:
-                    region_data = get_region_from_location(province=key)
-                location_clean = key
-                break
-    
-    if not region_data:
-        raise HTTPException(status_code=404, detail=f"Location '{location_name}' not found")
-    
-    region = region_data.get('region')
-    province = region_data.get('province')
-    region_name = region_data.get('region_name')
-    
-    feature = None
-    boundary_level = None
-    
-    # Try municipality first
-    municipalities_geojson = load_geojson_file("municipalities.geojson")
-    if municipalities_geojson:
-        feature = extract_feature_by_name(municipalities_geojson, location_clean, ['adm3_en'])
-        if feature:
-            boundary_level = "municipality"
-            logger.info(f"Municipality boundary: {location_clean}")
-    
-    # Try province
+    """Return the GeoJSON boundary for a location name (any admin level).
+
+    Resolution prefers an exact larger-unit match (e.g. "Cavite" -> province,
+    "Quezon City" -> city), bridges affix differences ("Imus" -> "City of
+    Imus"), and falls back to barangay only when nothing larger matches.
+    """
+    clean = _validate_location_name(location_name)
+
+    if supabase is None:
+        # Fail closed with a generic error; never expose configuration details.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Boundary service unavailable",
+        )
+
+    try:
+        # Parameterized RPC: `p_name` is bound, not concatenated into SQL.
+        response = supabase.schema("gaia").rpc(
+            "get_boundary_geojson", {"p_name": clean}
+        ).execute()
+    except Exception as exc:  # noqa: BLE001
+        # Log internally; return a generic message to the client.
+        logger.error("Boundary lookup failed for %r: %s", clean, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Boundary lookup failed",
+        )
+
+    feature: Optional[dict] = response.data if isinstance(response.data, dict) else None
     if not feature:
-        provinces_geojson = load_geojson_file("provinces.geojson")
-        if provinces_geojson:
-            feature = extract_feature_by_name(provinces_geojson, province, ['adm2_en'])
-            if feature:
-                boundary_level = "province"
-                logger.info(f"Province boundary: {province}")
-    
-    # Fallback to region
-    if not feature:
-        regions_geojson = load_geojson_file("regions.geojson")
-        if not regions_geojson:
-            raise HTTPException(status_code=500, detail="Boundary data unavailable")
-        feature = extract_feature_by_name(regions_geojson, region_name, ['adm1_en'])
-        if feature:
-            boundary_level = "region"
-            logger.info(f"Region fallback: {region_name}")
-    
-    if not feature:
-        raise HTTPException(status_code=404, detail=f"Boundary not found for {location_name}")
-    
-    if 'properties' not in feature:
-        feature['properties'] = {}
-    
-    feature['properties'].update({
-        'searched_location': location_clean,
-        'city': location_clean,
-        'province': province,
-        'region': region,
-        'region_name': region_name,
-        'boundary_level': boundary_level,
-        'highlight': True
-    })
-    
-    return JSONResponse(content={
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Boundary not found for '{clean}'",
+        )
+
+    props = feature.get("properties") or {}
+    content = {
         "type": "FeatureCollection",
         "features": [feature],
         "metadata": {
-            "location": location_clean,
-            "province": province,
-            "region": region,
-            "region_name": region_name,
-            "boundary_level": boundary_level
-        }
-    })
+            "location": clean,
+            "name": props.get("name"),
+            "psgc_code": props.get("psgc_code"),
+            "boundary_level": props.get("boundary_level"),
+        },
+    }
+    return JSONResponse(content=content, headers={"Cache-Control": _CACHE_CONTROL})
