@@ -133,6 +133,30 @@ def test_match_file_resolves_province_less_ncr_via_region():
     assert unmatched == []
 
 
+def test_match_file_handles_manila_district_split():
+    # faeldon files Manila per-district (ADM3=TONDO/BINONDO), naming the city in
+    # ADM2; the DB codes Manila's "Barangay N" under district prefixes
+    # 1380601-1380614. All must resolve to the one City of Manila barangay set.
+    regions = [("1300000000", "National Capital Region (NCR)")]
+    provinces = []
+    munis = [("1380600000", "City of Manila")]
+    idx_prov, idx_reg = build_muni_index(regions, provinces, munis)
+    bidx = build_brgy_index([("1380601009", "Barangay 9"), ("1380602287", "Barangay 287")])
+    features = [
+        {"properties": {"ADM1_EN": "NATIONAL CAPITAL REGION (NCR)",
+                        "ADM2_EN": "NCR, CITY OF MANILA, FIRST DISTRICT (Not a Province)",
+                        "ADM3_EN": "TONDO I / II", "ADM4_EN": "Barangay 9"},
+         "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [0, 0]]]}},
+        {"properties": {"ADM1_EN": "NATIONAL CAPITAL REGION (NCR)",
+                        "ADM2_EN": "NCR, CITY OF MANILA, FIRST DISTRICT (Not a Province)",
+                        "ADM3_EN": "BINONDO", "ADM4_EN": "Barangay 287"},
+         "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [0, 2], [2, 2], [0, 0]]]}},
+    ]
+    matched, unmatched = match_file(features, idx_prov, idx_reg, bidx)
+    assert {m[0] for m in matched} == {"1380601009", "1380602287"}
+    assert unmatched == []
+
+
 def test_normalize_brgy_roman_numeral_tail():
     # faeldon writes "Aniban I"/"Ligas II"; the DB writes "Aniban 1"/"Ligas 2".
     # A trailing Roman numeral is converted so the two forms match.
