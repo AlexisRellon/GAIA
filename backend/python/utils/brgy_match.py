@@ -53,9 +53,27 @@ def normalize_admin(name: str) -> str:
     return s
 
 
+_ROMAN = {
+    "i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6", "vii": "7",
+    "viii": "8", "ix": "9", "x": "10", "xi": "11", "xii": "12", "xiii": "13",
+    "xiv": "14", "xv": "15", "xvi": "16", "xvii": "17", "xviii": "18", "xix": "19",
+    "xx": "20",
+}
+
+
+def _roman_to_arabic_tail(s: str) -> str:
+    """Convert a trailing standalone Roman-numeral token to Arabic
+    ('aniban i' -> 'aniban 1'), so faeldon 'Aniban I' matches DB 'Aniban 1'.
+    Applied to both sides, so names already using Arabic are unaffected."""
+    parts = s.rsplit(" ", 1)
+    if len(parts) == 2 and parts[1] in _ROMAN:
+        return f"{parts[0]} {_ROMAN[parts[1]]}"
+    return s
+
+
 def normalize_brgy(name: str) -> str:
     """Normalize a barangay name (no city/municipality affix stripping)."""
-    return _core(name)
+    return _roman_to_arabic_tail(_core(name))
 
 
 # Region names changed between faeldon's 2019 vintage and the DB's 2024 PSGC

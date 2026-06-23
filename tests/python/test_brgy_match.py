@@ -68,7 +68,7 @@ def test_build_muni_index_keys_on_province_and_region():
 
 def test_build_brgy_index_scopes_by_muni_prefix():
     bidx = build_brgy_index(DB_BRGYS)
-    assert bidx[("0402109", "bucandala i")] == "0402109011"
+    assert bidx[("0402109", "bucandala 1")] == "0402109011"  # "Bucandala I" -> roman tail -> "1"
     assert bidx[("0402109", "alapan i b")] == "0402109001"
 
 
@@ -131,3 +131,13 @@ def test_match_file_resolves_province_less_ncr_via_region():
     matched, unmatched = match_file(features, idx_prov, idx_reg, bidx)
     assert {m[0] for m in matched} == {"1380600001"}
     assert unmatched == []
+
+
+def test_normalize_brgy_roman_numeral_tail():
+    # faeldon writes "Aniban I"/"Ligas II"; the DB writes "Aniban 1"/"Ligas 2".
+    # A trailing Roman numeral is converted so the two forms match.
+    assert normalize_brgy("Aniban I") == normalize_brgy("Aniban 1")
+    assert normalize_brgy("Ligas II") == normalize_brgy("Ligas 2")
+    assert normalize_brgy("Talaba III") == normalize_brgy("Talaba 3")
+    # a base name without a numeral stays distinct from the numbered one
+    assert normalize_brgy("Ligas") != normalize_brgy("Ligas 1")
