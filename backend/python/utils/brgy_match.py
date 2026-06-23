@@ -118,18 +118,20 @@ def build_muni_index(regions, provinces, munis):
 
 # City of Manila is split into districts by faeldon (ADM3), but the DB codes all
 # of its ~897 "Barangay N" rows under one city — across district prefixes
-# 1380601-1380614, which all share the 6-digit "138060". Bucket them under the
-# city so faeldon's district-split files resolve to a single Manila barangay set.
-MANILA_PREFIX6 = "138060"
+# 1380601-1380614, which all share the 5-digit "13806" (region 13 + Manila's
+# province-equivalent 806). Bucket them under the city so faeldon's district-split
+# files resolve to a single Manila barangay set.
+MANILA_PREFIX5 = "13806"
 MANILA_MUNI7 = "1380600"
 
 
 def build_brgy_index(brgys):
     """brgys: list of (code10, name) -> { (muni7, norm_brgy): code10 }.
-    Manila barangays (prefix 138060*) are bucketed under MANILA_MUNI7."""
+    Manila barangays (5-digit prefix 13806, spanning district prefixes
+    1380601-1380614) are bucketed under MANILA_MUNI7."""
     out = {}
     for code10, name in brgys:
-        muni7 = MANILA_MUNI7 if code10[:6] == MANILA_PREFIX6 else code10[:7]
+        muni7 = MANILA_MUNI7 if code10[:5] == MANILA_PREFIX5 else code10[:7]
         out[(muni7, normalize_brgy(name))] = code10
     return out
 

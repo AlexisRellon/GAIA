@@ -108,6 +108,9 @@ def _load_indexes(cur):
 def main() -> int:
     ap = argparse.ArgumentParser(description="Re-ingest barangay geometry from faeldon 2019 hires.")
     ap.add_argument("--province", default="", help="only files whose ADM2_EN normalizes to this")
+    ap.add_argument("--name-prefix", default="",
+                    help="only files whose filename starts with this (filters BEFORE download; "
+                         "e.g. 'barangays-municity-ph1339' for City of Manila)")
     ap.add_argument("--dry-run", action="store_true", help="report match rate; write nothing")
     args = ap.parse_args()
 
@@ -131,6 +134,11 @@ def main() -> int:
             print(f"{len(names)} municipality files found.", flush=True)
 
             for name in names:
+                # Filename filter happens BEFORE download (cheap), so a targeted
+                # re-run (e.g. just Manila) never fetches the rest of the country.
+                if args.name_prefix and not name.startswith(args.name_prefix):
+                    files_skipped += 1
+                    continue
                 # Isolate each file: one bad fetch/parse/write must not abort the
                 # whole nationwide run. Already-committed files stay committed.
                 try:

@@ -141,7 +141,14 @@ def test_match_file_handles_manila_district_split():
     provinces = []
     munis = [("1380600000", "City of Manila")]
     idx_prov, idx_reg = build_muni_index(regions, provinces, munis)
-    bidx = build_brgy_index([("1380601009", "Barangay 9"), ("1380602287", "Barangay 287")])
+    # district 01 (prefix 1380601), district 02 (1380602), and district 14
+    # (1380614) — the last shares only the 5-digit "13806", which a 6-digit
+    # bucket prefix would miss.
+    bidx = build_brgy_index([
+        ("1380601009", "Barangay 9"),
+        ("1380602287", "Barangay 287"),
+        ("1380614745", "Barangay 745"),
+    ])
     features = [
         {"properties": {"ADM1_EN": "NATIONAL CAPITAL REGION (NCR)",
                         "ADM2_EN": "NCR, CITY OF MANILA, FIRST DISTRICT (Not a Province)",
@@ -151,9 +158,13 @@ def test_match_file_handles_manila_district_split():
                         "ADM2_EN": "NCR, CITY OF MANILA, FIRST DISTRICT (Not a Province)",
                         "ADM3_EN": "BINONDO", "ADM4_EN": "Barangay 287"},
          "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [0, 2], [2, 2], [0, 0]]]}},
+        {"properties": {"ADM1_EN": "NATIONAL CAPITAL REGION (NCR)",
+                        "ADM2_EN": "NCR, CITY OF MANILA, FOURTH DISTRICT (Not a Province)",
+                        "ADM3_EN": "SAMPALOC", "ADM4_EN": "Barangay 745"},
+         "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [0, 3], [3, 3], [0, 0]]]}},
     ]
     matched, unmatched = match_file(features, idx_prov, idx_reg, bidx)
-    assert {m[0] for m in matched} == {"1380601009", "1380602287"}
+    assert {m[0] for m in matched} == {"1380601009", "1380602287", "1380614745"}
     assert unmatched == []
 
 
