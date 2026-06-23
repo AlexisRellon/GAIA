@@ -1,24 +1,21 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { GeoJSON } from 'react-leaflet';
-import { Skeleton } from '../ui/skeleton';
 import { PathOptions, LatLngBoundsExpression } from 'leaflet';
 import L from 'leaflet';
 import { useBoundaryData } from '../../hooks/useBoundaryData';
 
 /**
- * BoundaryLayer Component
- * 
- * Renders highlighted boundary for a searched location.
- * Uses backend API to fetch only the specific boundary instead of loading all data.
- * 
- * Features:
- * - On-demand loading (only fetches boundary for searched location)
- * - Highlight styling for visual emphasis
- * - Hover effects with location metadata
- * 
+ * BoundaryLayer Component (GV-01)
+ *
+ * Renders a Google-Maps-style "spotlight" for a searched location: the area
+ * OUTSIDE the boundary is dimmed with a semi-opaque mask while the inside stays
+ * clear, and the boundary edge is outlined. Only the searched boundary is
+ * fetched from the backend (on-demand).
+ *
  * @param enabled - Whether to display the boundary
- * @param locationName - Name of location to highlight (e.g., "Imus", "Manila")
- * @param highlightColor - Color for the boundary highlight (default: blue)
+ * @param locationName - Location to highlight (e.g., "Imus", "Calabarzon")
+ * @param highlightColor - Color for the boundary outline (default: blue)
+ * @param onBoundsCalculated - Receives the boundary bounds (for map fitBounds)
  */
 
 interface BoundaryLayerProps {
@@ -28,117 +25,94 @@ interface BoundaryLayerProps {
   onBoundsCalculated?: (bounds: LatLngBoundsExpression, boundaryLevel: string) => void;
 }
 
+// A ring covering the whole world; the searched boundary's outer rings are
+// punched out as holes so only the area OUTSIDE the boundary is filled (the dim).
+const WORLD_RING: number[][] = [
+  [-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90],
+];
+
+/**
+ * Build the "spotlight" mask: one polygon = world ring minus the boundary's
+ * exterior rings (as holes). Filling it dims everything outside the boundary.
+ */
+function buildSpotlightMask(fc: GeoJSON.FeatureCollection): GeoJSON.Feature {
+  const holes: number[][][] = [];
+  for (const feature of fc.features) {
+    const geom = feature.geometry;
+    if (geom.type === 'Polygon') {
+      if (geom.coordinates[0]) holes.push(geom.coordinates[0] as number[][]);
+    } else if (geom.type === 'MultiPolygon') {
+      for (const poly of geom.coordinates) {
+        if (poly[0]) holes.push(poly[0] as number[][]);
+      }
+    }
+  }
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'Polygon', coordinates: [WORLD_RING, ...holes] },
+  };
+}
+
 export const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
   enabled,
   locationName,
-  highlightColor = '#3b82f6', // Default: Tailwind blue-500
+  highlightColor = '#3b82f6',
   onBoundsCalculated,
 }) => {
-  // Fetch boundary data for specific location
   const { data, loading, error, metadata } = useBoundaryData(locationName, enabled);
-  
-  // Track if bounds already calculated for this data to prevent re-calculation
   const boundsCalculatedRef = useRef<string | null>(null);
 
-  // Calculate and notify bounds when data changes (ONCE per location)
+  // Notify the parent of the boundary bounds once per location (for fitBounds).
   useEffect(() => {
     if (error) {
-      console.error(`[BoundaryLayer] Error:`, error);
+      console.error('[BoundaryLayer] Error:', error);
       return;
     }
-    
-    // Calculate bounds from GeoJSON data (only once per location)
     if (data && data.features.length > 0 && onBoundsCalculated) {
       const locationKey = `${locationName}-${metadata?.boundary_level}`;
-      
-      // Skip if already calculated for this exact location
-      if (boundsCalculatedRef.current === locationKey) {
-        return;
-      }
-      
-      const geoJsonLayer = new L.GeoJSON(data);
-      const bounds = geoJsonLayer.getBounds();
-      const boundaryLevel = metadata?.boundary_level || 'unknown';
-      
+      if (boundsCalculatedRef.current === locationKey) return;
+      const bounds = new L.GeoJSON(data).getBounds();
       if (bounds.isValid()) {
-        onBoundsCalculated(bounds, boundaryLevel);
-        boundsCalculatedRef.current = locationKey; // Mark as calculated
+        onBoundsCalculated(bounds, metadata?.boundary_level || 'unknown');
+        boundsCalculatedRef.current = locationKey;
       }
     }
   }, [data, locationName, metadata, onBoundsCalculated, error]);
 
-  // Don't render if no data or loading
-  if (!enabled || !data || loading) {
+  const mask = useMemo(() => (data ? buildSpotlightMask(data) : null), [data]);
+
+  if (loading || !enabled || !data || !mask) {
     return null;
   }
 
-  // Highlight styling for searched location boundary
-  const boundaryStyle = (): PathOptions => {
-    return {
-      fillColor: highlightColor,
-      fillOpacity: 0.15, // Subtle fill to highlight area
-      color: highlightColor,
-      weight: 3,
-      opacity: 0.8,
-      className: 'boundary-highlight',
-    };
-  };
+  // Both layers are non-interactive: the mask must not swallow map clicks
+  // outside the boundary, and a non-interactive outline has no browser focus
+  // outline (this is what removes the stray bounding-box rectangle).
+  const maskStyle = (): PathOptions => ({
+    fillColor: '#0f172a',  // slate-900 dim over the surrounding area
+    fillOpacity: 0.4,
+    weight: 0,
+    stroke: false,
+    interactive: false,
+  });
 
-  // Enhanced hover effect for highlighted boundary
-  const onEachFeature = (feature: GeoJSON.Feature, layer: L.Layer) => {
-    if (!feature.properties) return;
+  const outlineStyle = (): PathOptions => ({
+    color: highlightColor,
+    weight: 3,
+    opacity: 0.95,
+    fill: false,
+    interactive: false,
+  });
 
-    const searchedLocation = feature.properties.searched_location || feature.properties.city;
-    const province = feature.properties.province;
-    const regionName = feature.properties.region_name;
-    
-    // Tooltip with full location information
-    const tooltipText = searchedLocation
-      ? `${searchedLocation}${province ? `, ${province}` : ''}${regionName ? ` (${regionName})` : ''}`
-      : 'Location boundary';
-      
-    layer.bindTooltip(tooltipText, {
-      permanent: false,
-      direction: 'center',
-      className: 'boundary-tooltip-highlight',
-      opacity: 0.95,
-    });
-
-    // Enhanced hover effects
-    layer.on({
-      mouseover: (e) => {
-        const target = e.target;
-        target.setStyle({
-          fillOpacity: 0.25, // More prominent on hover
-          weight: 4,
-          opacity: 1,
-        });
-        target.bringToFront();
-      },
-      mouseout: (e) => {
-        const target = e.target;
-        target.setStyle(boundaryStyle());
-      },
-    });
-  };
+  // key forces a remount when the searched location changes — react-leaflet sets
+  // GeoJSON `data` once on mount, so a changing key swaps the rendered geometry.
+  const key = `${locationName}-${metadata?.boundary_level}`;
 
   return (
     <>
-      {loading && (
-        <div className="leaflet-control leaflet-top leaflet-right">
-          <div className="bg-white rounded px-3 py-2 shadow-md text-sm text-gray-600 space-y-2 min-w-[220px]">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-48 max-w-full" />
-          </div>
-        </div>
-      )}
-
-      <GeoJSON
-        data={data}
-        style={boundaryStyle}
-        onEachFeature={onEachFeature}
-        pane="overlayPane" // z-index 400 (above tiles, below markers)
-      />
+      <GeoJSON key={`mask-${key}`} data={mask} style={maskStyle} pane="overlayPane" />
+      <GeoJSON key={`outline-${key}`} data={data} style={outlineStyle} pane="overlayPane" />
     </>
   );
 };
