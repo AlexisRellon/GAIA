@@ -16,6 +16,7 @@
  */
 
 import type { Hazard } from '@/types/hazard';
+import type { CommunityAssessment } from '@/types/undpTypes';
 import { apiRequest } from '../lib/api';
 
 // API Configuration
@@ -42,6 +43,7 @@ export interface CitizenReportJoin {
   crisis_categories: Record<string, unknown> | null;
   debris_status: string | null;
   damage_severity: string | null;
+  community_assessment: Record<string, unknown> | null;
   image_url: string[] | null;
 }
 
@@ -359,6 +361,40 @@ export const hazardsQueryKeys = {
 // ============================================================================
 
 /**
+ * Normalize community_assessment from DB/API snake_case to frontend camelCase.
+ *
+ * The CitizenReportForm sends snake_case keys (electricity_infrastructure,
+ * health_services_rating, pressing_needs, pressing_needs_other) which are
+ * stored as-is in the JSONB column. The CommunityAssessment interface and
+ * DamageReportSidebar expect camelCase. This function handles both conventions
+ * so existing and new data render correctly.
+ */
+export function normalizeCommunityAssessment(
+  raw: Record<string, unknown> | undefined | null,
+): CommunityAssessment | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  return {
+    electricityInfrastructure:
+      (raw.electricityInfrastructure ??
+      raw.electricity_infrastructure ??
+      '') as CommunityAssessment['electricityInfrastructure'],
+    healthServicesRating:
+      (raw.healthServicesRating ??
+      raw.health_services_rating ??
+      '') as CommunityAssessment['healthServicesRating'],
+    pressingNeeds:
+      (raw.pressingNeeds ??
+      raw.pressing_needs ??
+      []) as CommunityAssessment['pressingNeeds'],
+    pressingNeedsOther:
+      ((raw.pressingNeedsOther as string) ||
+      (raw.pressing_needs_other as string) ||
+      ''),
+  };
+}
+
+/**
  * Convert API response to match existing Hazard type
  * Use this during migration to maintain compatibility with existing components
  */
@@ -379,9 +415,9 @@ export function mapApiResponseToHazard(response: HazardResponse): Hazard {
     created_at: response.created_at,
     validated_at: response.validated_at || undefined,
     validated_by: response.validated_by || undefined,
-    // UNDP/citizen-report fields are not on the list/base response; they're
-    // populated on selection from `citizen_report` (see PublicMap's
-    // handleSelectHazard), not by this base mapper.
+    // UNDP / community-assessment fields are not on the lightweight list
+    // response; they're populated on selection from the `citizen_report` JOIN
+    // (see PublicMap's handleSelectHazard), not by this base mapper.
   };
 }
 
