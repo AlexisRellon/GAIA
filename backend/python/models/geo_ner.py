@@ -26,6 +26,24 @@ from philippine_regions import (
 
 logger = logging.getLogger(__name__)
 
+# Specificity ranking for choosing THE hazard location among several candidates.
+# Higher = more precise. Explicit coordinates always win; broad areas (island /
+# region) rank lowest so a city/province/coords is preferred over e.g. "Mindanao".
+SPECIFICITY_RANK = {
+    'coordinates': 5,
+    'street': 4, 'barangay': 4, 'landmark': 4,
+    'city': 3, 'municipality': 3,
+    'location': 2, 'province': 2,
+    'region': 1, 'island': 1,
+}
+
+# Island groups are not in the province/region lists but must rank as broad areas.
+ISLAND_GROUPS = {'Luzon', 'Visayas', 'Mindanao'}
+
+# Philippine bounding box (lat 4-22°N, lng 116-127°E) — shared validation.
+def _within_philippines(lat: float, lng: float) -> bool:
+    return 4.0 <= lat <= 22.0 and 116.0 <= lng <= 127.0
+
 
 class GeoNER:
     """
@@ -259,7 +277,12 @@ class GeoNER:
             
             # Add Philippines-specific locations (higher priority)
             locations.extend(philippines_locations)
-            
+
+            # Step 3: Explicit coordinates (e.g. "05.57°N, 124.98°E" in PHIVOLCS /
+            # PAGASA bulletins) are the most precise signal — prepend with top
+            # priority so they win the primary-location selection.
+            locations = self._extract_explicit_coordinates(text, named_locations=locations) + locations
+
             # Deduplicate locations
             locations = self._deduplicate_locations(locations)
             
@@ -388,7 +411,14 @@ class GeoNER:
     def _classify_location_type(self, location_name: str) -> str:
         """Classify the type of location based on name patterns"""
         name_lower = location_name.lower()
-        
+
+        # Broad areas (islands / named regions) must rank low so they never beat a
+        # more specific city/province/coordinate (e.g. "Mindanao" vs "Maasim").
+        if location_name.strip() in ISLAND_GROUPS or any(
+            r.lower() == name_lower for r in self.PHILIPPINE_REGIONS
+        ):
+            return 'region'
+
         if any(keyword in name_lower for keyword in ['city', 'town', 'municipality']):
             return 'city'
         elif any(keyword in name_lower for keyword in ['province', 'region']):
@@ -467,8 +497,89 @@ class GeoNER:
             if loc_key not in seen:
                 seen.add(loc_key)
                 unique_locations.append(loc)
-        
+
         return unique_locations
+
+    # Directional form: "05.57°N, 124.98°E" (degree symbol optional)
+    _COORD_DIRECTIONAL = re.compile(
+        r"(\d{1,2}(?:\.\d+)?)\s*°?\s*([NnSs])\s*[, ;]+\s*(\d{2,3}(?:\.\d+)?)\s*°?\s*([EeWw])"
+    )
+    # Bare decimal pair: "14.5995, 120.9842" — conservative (>=3 decimals) so it
+    # never matches magnitudes/depths/times ("7.8", "33", "7:37").
+    _COORD_BARE = re.compile(
+        r"(?<![\d.])(\d{1,2}\.\d{3,})\s*[, ]\s*(1[12]\d\.\d{3,})(?![\d.])"
+    )
+
+    def _best_named_label(self, named_locations: Optional[List[Dict]]) -> Optional[str]:
+        """Label explicit coordinates with the most specific named place in the text."""
+        if not named_locations:
+            return None
+        ranked = sorted(
+            named_locations,
+            key=lambda l: SPECIFICITY_RANK.get(l.get('location_type'), 2),
+            reverse=True,
+        )
+        for loc in ranked:
+            if loc.get('location_type') != 'region' and loc.get('location_name'):
+                return loc['location_name']
+        return None
+
+    def _extract_explicit_coordinates(
+        self, text: str, named_locations: Optional[List[Dict]] = None
+    ) -> List[Dict]:
+        """Parse explicit lat/lng coordinates from the article text.
+
+        Returns location dicts (type 'coordinates', confidence 0.99) for any pairs
+        that fall within Philippine boundaries. This is the most precise signal in
+        agency bulletins and should outrank any geocoded place name.
+        """
+        results: List[Dict] = []
+        seen = set()
+
+        def _add(lat: float, lng: float):
+            if not _within_philippines(lat, lng):
+                return
+            key = (round(lat, 4), round(lng, 4))
+            if key in seen:
+                return
+            seen.add(key)
+            results.append({
+                'location_name': self._best_named_label(named_locations) or f"{lat:.4f}, {lng:.4f}",
+                'location_type': 'coordinates',
+                'confidence': 0.99,
+                'source': 'explicit_coords',
+                'latitude': lat,
+                'longitude': lng,
+                'country': 'Philippines',
+            })
+
+        for m in self._COORD_DIRECTIONAL.finditer(text):
+            lat = float(m.group(1)) * (-1 if m.group(2).upper() == 'S' else 1)
+            lng = float(m.group(3)) * (-1 if m.group(4).upper() == 'W' else 1)
+            _add(lat, lng)
+
+        for m in self._COORD_BARE.finditer(text):
+            _add(float(m.group(1)), float(m.group(2)))
+
+        return results
+
+    def select_primary_location(self, locations: List[Dict]) -> Optional[Dict]:
+        """Pick THE hazard location: most specific first, then highest confidence.
+
+        Explicit coordinates > street/barangay > city/municipality > province >
+        region/island. Only considers entries that carry coordinates. Returns None
+        when no candidate has coordinates.
+        """
+        candidates = [
+            loc for loc in (locations or [])
+            if loc.get('latitude') is not None and loc.get('longitude') is not None
+        ]
+        if not candidates:
+            return None
+        return max(
+            candidates,
+            key=lambda l: (SPECIFICITY_RANK.get(l.get('location_type'), 2), l.get('confidence', 0.0)),
+        )
 
 
 # Global GeoNER instance (FastAPI pattern - reuse across requests)

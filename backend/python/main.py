@@ -9,7 +9,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -18,6 +18,10 @@ from typing import List, Optional
 project_root = Path(__file__).parent.parent.parent.resolve()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+# Security: RBAC dependencies + SSRF-safe URL validation (OWASP hardening)
+from backend.python.middleware.rbac import require_master_admin, require_admin, UserContext
+from backend.python.utils.url_safety import is_safe_public_url
 
 # Import AI models and processors
 from backend.python.models.classifier import classifier
@@ -119,11 +123,23 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Error closing Redis cache: {e}")
 
 # Initialize FastAPI application with lifespan handler
+# Determine environment early — needed for docs exposure + CORS hardening.
+ENV = os.getenv("ENV", "development")
+
+# OWASP A05 (FASTAPI-OPENAPI-001): do not expose interactive docs / OpenAPI
+# schema in production — it discloses the full API surface (routes, schemas).
+_DOCS_URL = None if ENV == "production" else "/docs"
+_REDOC_URL = None if ENV == "production" else "/redoc"
+_OPENAPI_URL = None if ENV == "production" else "/openapi.json"
+
 app = FastAPI(
     title="AGAILA API",
     description="A Framework Integrating Zero-Shot Classification and Geo-NER for Natural Hazard Detection",
     version="1.1.14",
     lifespan=lifespan,
+    docs_url=_DOCS_URL,
+    redoc_url=_REDOC_URL,
+    openapi_url=_OPENAPI_URL,
     openapi_tags=[
         {
             "name": "Core",
@@ -144,8 +160,7 @@ app = FastAPI(
     ]
 )
 
-# Determine environment for security and CORS configuration
-ENV = os.getenv("ENV", "development")
+# (ENV is determined above, before the FastAPI() init.)
 
 # Configure CORS with environment-based whitelist
 # Support for Vercel + Railway deployment, localhost development, and future custom domains
@@ -168,7 +183,9 @@ allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",") i
 # This allows PR preview URLs like https://gaia-abc123.vercel.app
 allowed_origin_regex = os.getenv(
     "CORS_ORIGIN_REGEX",
-    r"https://.*\.vercel\.app" if ENV == "production" else None
+    # OWASP A05: scope preview origins to THIS project's Vercel deployments only.
+    # `https://.*\.vercel\.app` would trust ANY vercel.app site (attacker-controlled).
+    r"^https://agaila-ph(-[a-z0-9-]+)?\.vercel\.app$" if ENV == "production" else None,
 )
 
 # Log CORS configuration for debugging
@@ -316,17 +333,17 @@ from backend.python.middleware.redis_rate_limiter import get_rate_limit_stats
 
 # PATCH-2: Rate limit statistics endpoint
 @app.get("/api/v1/rate-limit/stats", tags=["System"])
-async def rate_limit_stats():
-    """Get rate limiting statistics (PATCH-2)"""
+async def rate_limit_stats(current_user: UserContext = Depends(require_admin)):
+    """Get rate limiting statistics (PATCH-2). Admin-only (operational metrics)."""
     return await get_rate_limit_stats()
 
 
 # PATCH-5: Cache statistics endpoint
 @app.get("/api/v1/cache/stats", tags=["System"])
-async def cache_stats():
+async def cache_stats(current_user: UserContext = Depends(require_admin)):
     """
-    Get Redis cache statistics (PATCH-5).
-    
+    Get Redis cache statistics (PATCH-5). Admin-only (operational metrics).
+
     Returns cache hit/miss rates, memory usage, and key counts.
     """
     try:
@@ -346,10 +363,10 @@ async def cache_stats():
 
 # PATCH-5: Cache invalidation endpoint (admin only)
 @app.delete("/api/v1/cache/clear", tags=["System"])
-async def clear_cache():
+async def clear_cache(current_user: UserContext = Depends(require_master_admin)):
     """
-    Clear all cache entries (PATCH-5).
-    
+    Clear all cache entries (PATCH-5). Master-admin only (destructive).
+
     **WARNING**: This will cause temporary performance degradation.
     Use only when cache data is stale or corrupted.
     """
@@ -522,22 +539,37 @@ async def get_model_info():
 # ============================================================================
 
 @app.post("/api/v1/rss/process", tags=["RSS Processing"])
-async def process_rss_feeds(request: ProcessRSSRequest, background_tasks: BackgroundTasks):
+async def process_rss_feeds(
+    request: ProcessRSSRequest,
+    background_tasks: BackgroundTasks,
+    current_user: UserContext = Depends(require_master_admin),
+):
     """
-    Process RSS feeds to detect environmental hazards.
-    
+    Process RSS feeds to detect environmental hazards. Master-admin only.
+
     - **feeds**: Optional list of RSS feed URLs (uses default Philippine news sources if not provided)
-    
+
     Triggers background processing of feeds with AI pipeline.
     Returns immediately with task started confirmation.
-    
-    **IMPORTANT**: This endpoint returns immediately and processes feeds in the background
-    to prevent blocking other API requests. Check processing status via logs or database.
+
+    **Security**: this endpoint fetches the supplied URLs server-side, so it is
+    restricted to master_admin and every user-supplied feed URL is validated
+    against SSRF (must be a public http(s) URL — private/loopback/metadata IPs
+    are rejected). Default feeds are trusted constants.
     """
     try:
-        # Set feeds
-        feeds_to_process = request.feeds if request.feeds else rss_processor.DEFAULT_FEEDS
-        
+        # OWASP A10 (SSRF): treat user-supplied feed URLs as untrusted.
+        if request.feeds:
+            unsafe = [u for u in request.feeds if not is_safe_public_url(u)]
+            if unsafe:
+                raise HTTPException(
+                    status_code=400,
+                    detail="One or more feed URLs are not allowed. Feeds must be public http(s) URLs.",
+                )
+            feeds_to_process = request.feeds
+        else:
+            feeds_to_process = rss_processor.DEFAULT_FEEDS
+
         # Add background task (non-blocking)
         async def process_feeds_background():
             try:
@@ -558,10 +590,12 @@ async def process_rss_feeds(request: ProcessRSSRequest, background_tasks: Backgr
             "feeds": feeds_to_process,
             "note": "Processing happens in background. Check logs or database for results."
         }
-        
+
+    except HTTPException:
+        raise  # preserve 400 (SSRF rejection) / auth errors
     except Exception as e:
         logger.error(f"RSS processing error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="RSS processing failed to start.")
 
 
 @app.get("/api/v1/rss/default-feeds", tags=["RSS Processing"])
@@ -573,30 +607,9 @@ async def get_default_feeds():
     }
 
 
-# ============================================================================
-# Database Integration Endpoints (Placeholder - will connect to Supabase)
-# ============================================================================
-
-@app.get("/api/v1/hazards")
-async def get_hazards():
-    """Get all hazards from database (placeholder for Supabase integration)"""
-    return {
-        "hazards": [],
-        "message": "Database integration pending - Supabase connection to be added"
-    }
-
-
-@app.get("/api/v1/hazards/{hazard_id}")
-async def get_hazard(hazard_id: int):
-    """Get specific hazard by ID (placeholder)"""
-    return {
-        "hazard": None,
-        "message": f"Hazard {hazard_id} - Database integration pending"
-    }
-
-
-# NOTE: Routers already included at lines 133-140 with /api/v1 prefix
-# Duplicate inclusions removed to prevent path conflicts
+# NOTE: The real hazards endpoints are served by `hazards_api.router`
+# (included with the /api/v1 prefix above). Earlier placeholder /api/v1/hazards
+# routes were removed — they returned stub data and shadowed the real router.
 
 
 if __name__ == "__main__":

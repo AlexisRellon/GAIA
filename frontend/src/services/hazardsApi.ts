@@ -16,13 +16,7 @@
  */
 
 import type { Hazard } from '@/types/hazard';
-import type {
-  CommunityAssessment,
-  CrisisSelections,
-  DamageSeverity,
-  DebrisStatus,
-  InfrastructureType,
-} from '@/types/undpTypes';
+import type { CommunityAssessment } from '@/types/undpTypes';
 import { apiRequest } from '../lib/api';
 
 // API Configuration
@@ -35,6 +29,23 @@ const VALIDATED_HAZARDS_REFRESH_INTERVAL_MS = 30_000;
 // ============================================================================
 // Types
 // ============================================================================
+
+/**
+ * Damage-assessment payload of the citizen report linked to a hazard
+ * (returned by the hazard-detail endpoint via promoted_to_hazard_id JOIN).
+ * PII (reporter name/email/phone, captcha, IP) is intentionally excluded.
+ */
+export interface CitizenReportJoin {
+  tracking_id: string;
+  description: string | null;
+  infrastructure_types: string[] | null;
+  infrastructure_details: string | null;
+  crisis_categories: Record<string, unknown> | null;
+  debris_status: string | null;
+  damage_severity: string | null;
+  community_assessment: Record<string, unknown> | null;
+  image_url: string[] | null;
+}
 
 export interface HazardResponse {
   id: string;
@@ -52,14 +63,8 @@ export interface HazardResponse {
   created_at: string;
   validated_at: string | null;
   validated_by: string | null;
-  infrastructure_types?: InfrastructureType[];
-  infrastructure_details?: string;
-  infrastructure_other_text?: string;
-  crisis_categories?: CrisisSelections;
-  community_assessment?: CommunityAssessment;
-  debris_status?: DebrisStatus;
-  damage_severity?: DamageSeverity;
-  image_urls?: string[];
+  // Present only on the detail endpoint for citizen-report hazards.
+  citizen_report?: CitizenReportJoin | null;
 }
 
 export interface HazardStatsResponse {
@@ -364,7 +369,7 @@ export const hazardsQueryKeys = {
  * DamageReportSidebar expect camelCase. This function handles both conventions
  * so existing and new data render correctly.
  */
-function normalizeCommunityAssessment(
+export function normalizeCommunityAssessment(
   raw: Record<string, unknown> | undefined | null,
 ): CommunityAssessment | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -410,16 +415,9 @@ export function mapApiResponseToHazard(response: HazardResponse): Hazard {
     created_at: response.created_at,
     validated_at: response.validated_at || undefined,
     validated_by: response.validated_by || undefined,
-    infrastructure_types: response.infrastructure_types ?? undefined,
-    infrastructure_details: response.infrastructure_details || undefined,
-    infrastructure_other_text: response.infrastructure_other_text || undefined,
-    crisis_categories: response.crisis_categories ?? undefined,
-    community_assessment: normalizeCommunityAssessment(
-      response.community_assessment as Record<string, unknown> | undefined,
-    ),
-    debris_status: response.debris_status || undefined,
-    damage_severity: response.damage_severity || undefined,
-    image_urls: response.image_urls || undefined,
+    // UNDP / community-assessment fields are not on the lightweight list
+    // response; they're populated on selection from the `citizen_report` JOIN
+    // (see PublicMap's handleSelectHazard), not by this base mapper.
   };
 }
 

@@ -71,16 +71,11 @@ class HazardResponse(BaseModel):
     created_at: str
     validated_at: Optional[str] = None
     validated_by: Optional[str] = None
-    # UNDP damage assessment fields (populated for citizen_report source_type)
-    infrastructure_types: Optional[List[str]] = None
-    infrastructure_details: Optional[str] = None
-    infrastructure_other_text: Optional[str] = None
-    crisis_categories: Optional[Dict[str, Any]] = None
-    community_assessment: Optional[Dict[str, Any]] = None
-    debris_status: Optional[str] = None
-    damage_severity: Optional[str] = None
-    image_urls: Optional[List[str]] = None
-    
+    # For citizen-report hazards: the linked citizen report's damage-assessment
+    # payload, fetched via JOIN (promoted_to_hazard_id) instead of duplicated.
+    # PII (reporter name/email/phone, captcha, IP) is intentionally excluded.
+    citizen_report: Optional[dict] = None
+
     class Config:
         # Allow extra fields from database (e.g. location geometry, is_duplicate, etc.)
         extra = "ignore"
@@ -355,10 +350,18 @@ async def get_hazard_by_id(
 
         async def fetch_hazard():
             # DQG-01: never surface a row that was collapsed as a duplicate.
+            # For citizen-report hazards, JOIN the linked citizen report's
+            # damage-assessment payload via promoted_to_hazard_id instead of
+            # duplicating it onto the hazard. PII fields are NOT selected.
+            select_cols = (
+                "*, citizen_report:citizen_reports!promoted_to_hazard_id("
+                "tracking_id, description, infrastructure_types, infrastructure_details, "
+                "crisis_categories, debris_status, damage_severity, community_assessment, image_url)"
+            )
             response = await asyncio.to_thread(
                 lambda: supabase.schema("gaia")
                 .from_("hazards")
-                .select("*")
+                .select(select_cols)
                 .eq("id", hazard_id)
                 .eq("is_duplicate", False)
                 .execute()
@@ -367,7 +370,12 @@ async def get_hazard_by_id(
                 # Return a sentinel dict instead of None so get_or_set can cache
                 # the "not found" result and avoid repeated DB hits.
                 return {"__hazard_not_found__": True}
-            return response.data[0]
+            hazard = response.data[0]
+            # PostgREST returns the reverse embed as a list; normalize to one object.
+            cr = hazard.get("citizen_report")
+            if isinstance(cr, list):
+                hazard["citizen_report"] = cr[0] if cr else None
+            return hazard
 
         data = await get_or_set(cache_key, fetch_hazard, ttl=CACHE_TTLS.get("hazards:detail", 30))
 

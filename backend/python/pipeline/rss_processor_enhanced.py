@@ -229,7 +229,11 @@ class RSSProcessorEnhanced:
                     if classification['is_hazard']:
                         # Extract locations
                         locations = geo_ner.extract_locations(content_data['text'])
-                        
+
+                        # Choose the most specific location (explicit coords > city >
+                        # province > region) instead of the first one mentioned.
+                        primary_location = geo_ner.select_primary_location(locations)
+
                         # Only save if locations were found
                         if locations:
                             # Map classifier type to DB type for dedup
@@ -249,7 +253,7 @@ class RSSProcessorEnhanced:
                             is_duplicate, duplicate_id = await self._check_duplicate(
                                 entry.get('link', ''),
                                 content_data,
-                                locations[0] if locations else None,
+                                primary_location,
                                 hazard_type=db_hazard_type
                             )
                             
@@ -275,7 +279,7 @@ class RSSProcessorEnhanced:
                                     'title': content_data['title'],
                                     'hazard_type': classification['hazard_type'],
                                     'confidence_score': classification['score'],
-                                    'location': locations[0] if locations else None
+                                    'location': primary_location
                                 }
                                 hazards_saved.append(hazard_summary)
                                 items_added += 1
@@ -683,13 +687,10 @@ class RSSProcessorEnhanced:
             if published_date is None and hasattr(entry, 'published_parsed') and entry.published_parsed:
                 published_date = datetime(*entry.published_parsed[:6], tzinfo=PHT)
             
-            # Use primary location (first one with coordinates)
-            primary_location = None
-            for loc in locations:
-                if loc.get('latitude') and loc.get('longitude'):
-                    primary_location = loc
-                    break
-            
+            # Choose the most specific location (explicit coords > city/municipality
+            # > province > region), replacing the old "first with coordinates" pick.
+            primary_location = geo_ner.select_primary_location(locations)
+
             if not primary_location:
                 logger.error(f"No valid location coordinates for: {content_data['title']}")
                 return None
