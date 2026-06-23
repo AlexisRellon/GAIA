@@ -109,7 +109,7 @@ def test_geojson_nests_undp_assessment_for_citizen_reports(monkeypatch):
 def test_geojson_omits_ph_georef_when_unresolved(monkeypatch):
     # When PSGC cannot be resolved (e.g. an offshore point, or geometry not yet
     # loaded), ph_georef must be absent rather than empty — never break the export.
-    monkeypatch.setattr(reports, "_resolve_psgc", lambda lat, lng: None)
+    monkeypatch.setattr(reports, "_build_psgc_map", lambda hazards: {})
     fc = reports._build_geojson([_rss_hazard()], generated_by="x")
     assert "ph_georef" not in fc["features"][0]["properties"]
 
@@ -121,7 +121,11 @@ def test_geojson_includes_ph_georef_when_resolved(monkeypatch):
         "city_municipality": {"name": "Imus", "psgc": "0402109000"},
         "barangay": {"name": "Alapan I-B", "psgc": "0402109026"},
     }
-    monkeypatch.setattr(reports, "_resolve_psgc", lambda lat, lng: georef)
+    # _build_psgc_map returns a {(rounded_lat, rounded_lng): georef} map; the
+    # builder looks it up by the hazard's rounded coordinate.
+    monkeypatch.setattr(
+        reports, "_build_psgc_map", lambda hazards: {(14.676, 121.0437): georef}
+    )
 
     fc = reports._build_geojson([_rss_hazard()], generated_by="x")
     props = fc["features"][0]["properties"]

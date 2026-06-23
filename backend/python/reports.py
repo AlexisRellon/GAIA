@@ -1127,47 +1127,59 @@ def _fetch_undp_assessments(hazard_ids: List[str]) -> Dict[str, dict]:
     return result_map
 
 
-def _resolve_psgc(lat: float, lng: float) -> Optional[dict]:
-    """Resolve the PSGC hierarchy (region -> barangay) for a coordinate via
-    gaia.get_psgc_hierarchy. Returns a nested ``ph_georef`` dict, or None when
-    nothing resolves (e.g. boundary geometry not yet backfilled). Fails soft so
-    the export never breaks."""
-    if supabase is None:
-        return None
-    try:
-        resp = (
-            supabase.schema("gaia")
-            .rpc("get_psgc_hierarchy", {"lat": float(lat), "lng": float(lng)})
-            .execute()
-        )
-        rows = resp.data or []
-        row = rows[0] if rows else None
-        if not row:
-            return None
-        levels = (
-            ("region", "region_name", "region_psgc"),
-            ("province", "province_name", "province_psgc"),
-            ("city_municipality", "city_municipality_name", "city_municipality_psgc"),
-            ("barangay", "barangay_name", "barangay_psgc"),
-        )
-        georef: Dict[str, dict] = {}
-        for key, name_col, psgc_col in levels:
-            name, psgc = row.get(name_col), row.get(psgc_col)
-            if name or psgc:
-                georef[key] = {"name": name, "psgc": psgc}
-        return georef or None
-    except Exception as psgc_error:  # noqa: BLE001 - export must not hard-fail
-        logger.warning(f"Failed to resolve PSGC for ({lat}, {lng}): {psgc_error}")
-        return None
+_PSGC_LEVELS = (
+    ("region", "region_name", "region_psgc"),
+    ("province", "province_name", "province_psgc"),
+    ("city_municipality", "city_municipality_name", "city_municipality_psgc"),
+    ("barangay", "barangay_name", "barangay_psgc"),
+)
+
+
+def _row_to_georef(row: dict) -> Optional[dict]:
+    """Convert a gaia.get_psgc_hierarchy_batch row into a nested ``ph_georef``
+    dict (only the levels that resolved), or None when nothing resolved."""
+    georef: Dict[str, dict] = {}
+    for key, name_col, psgc_col in _PSGC_LEVELS:
+        name, psgc = row.get(name_col), row.get(psgc_col)
+        if name or psgc:
+            georef[key] = {"name": name, "psgc": psgc}
+    return georef or None
 
 
 def _build_psgc_map(hazards: List[HazardData]) -> Dict[tuple, Optional[dict]]:
-    """Resolve PSGC once per unique coordinate (deduplicated) for the export."""
+    """Resolve the PSGC hierarchy for every DISTINCT coordinate in a SINGLE
+    batched RPC (gaia.get_psgc_hierarchy_batch) — one point-in-polygon join for
+    all points, instead of one round-trip per hazard (the old N+1). Fails soft so
+    the export never breaks."""
     cache: Dict[tuple, Optional[dict]] = {}
+    if supabase is None:
+        return cache
+
+    # Deduplicate coordinates; `keys` preserves order so the RPC's 0-based idx
+    # maps straight back to a coordinate.
+    keys: List[tuple] = []
     for h in hazards:
         key = (round(h.latitude, 6), round(h.longitude, 6))
         if key not in cache:
-            cache[key] = _resolve_psgc(h.latitude, h.longitude)
+            cache[key] = None
+            keys.append(key)
+    if not keys:
+        return cache
+
+    # ST_MakePoint expects (lng, lat).
+    points = [[lng, lat] for (lat, lng) in keys]
+    try:
+        resp = (
+            supabase.schema("gaia")
+            .rpc("get_psgc_hierarchy_batch", {"p_points": points})
+            .execute()
+        )
+        for row in (resp.data or []):
+            idx = row.get("idx")
+            if isinstance(idx, int) and 0 <= idx < len(keys):
+                cache[keys[idx]] = _row_to_georef(row)
+    except Exception as psgc_error:  # noqa: BLE001 - export must not hard-fail
+        logger.warning(f"Batch PSGC resolution failed: {psgc_error}")
     return cache
 
 
