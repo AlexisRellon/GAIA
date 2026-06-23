@@ -58,12 +58,12 @@ DB_BRGYS = [
 ]
 
 
-def test_build_muni_index_keys_on_normalized_hierarchy():
-    idx, idx_noprov = build_muni_index(DB_REGIONS, DB_PROVINCES, DB_MUNIS)
-    # normalize_admin strips punctuation, so "IV-A" normalizes to "iv a" (matches
-    # the existing normalizer behavior verified by test_punctuation_and_whitespace).
-    assert idx[("region iv a", "cavite", "imus")] == "0402109"
-    assert idx_noprov[("region iv a", "imus")] == "0402109"
+def test_build_muni_index_keys_on_province_and_region():
+    idx_prov, idx_reg = build_muni_index(DB_REGIONS, DB_PROVINCES, DB_MUNIS)
+    # Primary key is (province, municipality); region (with "IV-A" -> "iv a"
+    # punctuation stripping) is the province-less fallback key.
+    assert idx_prov[("cavite", "imus")] == "0402109"
+    assert idx_reg[("region iv a", "imus")] == "0402109"
 
 
 def test_build_brgy_index_scopes_by_muni_prefix():
@@ -98,3 +98,36 @@ def test_match_file_reports_unmatched_municipality():
     matched, unmatched = match_file(features, midx, midx_noprov, bidx)
     assert matched == []
     assert unmatched and unmatched[0]["reason"] == "municipality_not_found"
+
+
+def test_match_file_resolves_via_province_despite_region_name_drift():
+    # The DB stores MIMAROPA as "MIMAROPA Region"; faeldon 2019 says
+    # "Region IV-B (MIMAROPA)". Region names differ, but the province name
+    # ("Marinduque") is stable, so (province, municipality) still resolves.
+    regions = [("1700000000", "MIMAROPA Region")]
+    provinces = [("1704000000", "Marinduque")]
+    munis = [("1704009000", "Mogpog")]
+    idx_prov, idx_reg = build_muni_index(regions, provinces, munis)
+    bidx = build_brgy_index([("1704009001", "Bocboc")])
+    features = [{"properties": {"ADM1_EN": "REGION IV-B (MIMAROPA)", "ADM2_EN": "MARINDUQUE",
+                                "ADM3_EN": "Mogpog", "ADM4_EN": "Bocboc"},
+                 "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [0, 0]]]}}]
+    matched, unmatched = match_file(features, idx_prov, idx_reg, bidx)
+    assert {m[0] for m in matched} == {"1704009001"}
+    assert unmatched == []
+
+
+def test_match_file_resolves_province_less_ncr_via_region():
+    # NCR cities have no province; they resolve through the region fallback,
+    # whose name DOES match between faeldon and the DB.
+    regions = [("1300000000", "National Capital Region (NCR)")]
+    provinces = []
+    munis = [("1380600000", "City of Navotas")]
+    idx_prov, idx_reg = build_muni_index(regions, provinces, munis)
+    bidx = build_brgy_index([("1380600001", "Bangkulasi")])
+    features = [{"properties": {"ADM1_EN": "NATIONAL CAPITAL REGION (NCR)", "ADM2_EN": "",
+                                "ADM3_EN": "City of Navotas", "ADM4_EN": "Bangkulasi"},
+                 "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [0, 1], [1, 1], [0, 0]]]}}]
+    matched, unmatched = match_file(features, idx_prov, idx_reg, bidx)
+    assert {m[0] for m in matched} == {"1380600001"}
+    assert unmatched == []

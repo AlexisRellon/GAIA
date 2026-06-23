@@ -5,7 +5,9 @@ Re-ingest higher-fidelity barangay geometry from faeldon/philippines-json-maps
 hierarchy (see brgy_match.py). Barangay rows ONLY are updated; city/municipality/
 province/region geometry is never touched.
 
-Run inside the backend container (DATABASE_URL must be set):
+Run inside the backend container. Requires DATABASE_URL; GITHUB_TOKEN is strongly
+recommended (the unauthenticated GitHub API is 60 req/hr and will 403). Pass it
+with `docker exec -e GITHUB_TOKEN=$(gh auth token) gaia-backend ...`:
     # validation: report match rate, write nothing
     python -m backend.python.utils.ingest_barangays_faeldon --province Cavite --dry-run
     # real run for one province
@@ -31,8 +33,11 @@ from backend.python.utils.brgy_match import (
     build_muni_index, build_brgy_index, match_file, normalize_admin,
 )
 
-API_DIR = ("https://api.github.com/repos/faeldon/philippines-json-maps/"
-           "contents/2019/geojson/barangays/hires")
+# Enumerate via the Git Trees API, not the Contents API: the Contents API caps
+# directory listings at 1000 entries but there are ~1647 municipality files.
+GH_PARENT = ("https://api.github.com/repos/faeldon/philippines-json-maps/"
+             "contents/2019/geojson/barangays")
+GH_TREE = "https://api.github.com/repos/faeldon/philippines-json-maps/git/trees/"
 RAW_BASE = ("https://raw.githubusercontent.com/faeldon/philippines-json-maps/"
             "master/2019/geojson/barangays/hires")
 
@@ -43,25 +48,42 @@ UPDATE_SQL = (
 )
 
 
-def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "agaila-ingest"})
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        return json.load(resp)
+def _get(url, retries=3):
+    """GET + JSON-parse a URL, with auth for the GitHub API and simple retry.
+
+    A GITHUB_TOKEN (if set) is sent only to api.github.com to lift the 60 req/hr
+    unauthenticated cap to 5000/hr. Transient failures are retried with backoff.
+    """
+    headers = {"User-Agent": "agaila-ingest"}
+    token = os.getenv("GITHUB_TOKEN", "").strip()
+    if token and "api.github.com" in url:
+        headers["Authorization"] = f"Bearer {token}"
+    last = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                return json.load(resp)
+        except Exception as exc:  # noqa: BLE001 - retry any transient error
+            last = exc
+            time.sleep(1.5 * (attempt + 1))
+    raise last
 
 
 def _list_files():
-    """Enumerate every per-municipality file (contents API, paginated)."""
-    files, page = [], 1
-    while True:
-        batch = _get(f"{API_DIR}?per_page=100&page={page}")
-        if not batch:
-            break
-        files.extend(e["name"] for e in batch if e["name"].endswith(".json"))
-        if len(batch) < 100:
-            break
-        page += 1
-        time.sleep(0.3)  # be polite to the API
-    return files
+    """Enumerate every per-municipality filename via the Git Trees API.
+
+    Resolve the 'hires' directory's tree SHA, then list that tree (a single level,
+    ~1647 entries) — the Trees API is not subject to the Contents API's 1000-entry
+    directory cap.
+    """
+    parent = _get(GH_PARENT)
+    sha = next((e["sha"] for e in parent if e.get("name") == "hires"), None)
+    if not sha:
+        raise RuntimeError("could not resolve the 'hires' directory tree SHA")
+    tree = _get(f"{GH_TREE}{sha}")
+    return [e["path"] for e in tree.get("tree", [])
+            if e.get("type") == "blob" and str(e.get("path", "")).endswith(".json")]
 
 
 def _load_indexes(cur):
@@ -98,7 +120,7 @@ def main() -> int:
 
     conn = psycopg2.connect(_resolve_dsn(db_url))
     conn.autocommit = False
-    tot_matched = tot_unmatched = files_done = files_skipped = 0
+    tot_matched = tot_unmatched = files_done = files_skipped = files_errored = 0
     unmatched_munis, sample_unmatched_brgy = [], []
     try:
         with conn.cursor() as cur:
@@ -109,40 +131,45 @@ def main() -> int:
             print(f"{len(names)} municipality files found.", flush=True)
 
             for name in names:
-                fc = _get(f"{RAW_BASE}/{name}")
-                feats = fc.get("features", [])
-                if not feats:
-                    continue
-                if want_prov:
-                    fprov = normalize_admin(feats[0].get("properties", {}).get("ADM2_EN", ""))
-                    if fprov != want_prov:
-                        files_skipped += 1
+                # Isolate each file: one bad fetch/parse/write must not abort the
+                # whole nationwide run. Already-committed files stay committed.
+                try:
+                    fc = _get(f"{RAW_BASE}/{name}")
+                    feats = fc.get("features", [])
+                    if not feats:
                         continue
+                    if want_prov:
+                        fprov = normalize_admin(feats[0].get("properties", {}).get("ADM2_EN", ""))
+                        if fprov != want_prov:
+                            files_skipped += 1
+                            continue
 
-                matched, unmatched = match_file(feats, muni_idx, muni_idx_noprov, brgy_idx)
-                tot_matched += len(matched)
-                tot_unmatched += len(unmatched)
-                for u in unmatched:
-                    if u["reason"] == "municipality_not_found":
-                        unmatched_munis.append((u["region"], u["province"], u["municipality"]))
-                    elif len(sample_unmatched_brgy) < 25:
-                        sample_unmatched_brgy.append((u["municipality"], u["barangay"]))
+                    matched, unmatched = match_file(feats, muni_idx, muni_idx_noprov, brgy_idx)
+                    tot_matched += len(matched)
+                    tot_unmatched += len(unmatched)
+                    for u in unmatched:
+                        if u["reason"] == "municipality_not_found":
+                            unmatched_munis.append((u["region"], u["province"], u["municipality"]))
+                        elif len(sample_unmatched_brgy) < 25:
+                            sample_unmatched_brgy.append((u["municipality"], u["barangay"]))
 
-                if not args.dry_run and matched:
-                    rows = [(json.dumps(g), c) for c, g in matched]
-                    execute_batch(cur, UPDATE_SQL, rows, page_size=500)
-                    conn.commit()
-                files_done += 1
-                if files_done % 100 == 0:
-                    print(f"  … {files_done} files, {tot_matched} matched", flush=True)
-    except Exception:
-        conn.rollback()
-        raise
+                    if not args.dry_run and matched:
+                        rows = [(json.dumps(g), c) for c, g in matched]
+                        execute_batch(cur, UPDATE_SQL, rows, page_size=500)
+                        conn.commit()
+                    files_done += 1
+                    if files_done % 100 == 0:
+                        print(f"  … {files_done} files, {tot_matched} matched", flush=True)
+                except Exception as exc:  # noqa: BLE001 - isolate one bad file
+                    files_errored += 1
+                    conn.rollback()  # discard this file's partial/aborted write
+                    print(f"  ERROR {name}: {exc}", flush=True)
+                    continue
     finally:
         conn.close()
 
     print("\n==== SUMMARY ====")
-    print(f"files processed: {files_done} (skipped {files_skipped})")
+    print(f"files processed: {files_done} (skipped {files_skipped}, errored {files_errored})")
     print(f"barangays matched:   {tot_matched}")
     print(f"barangays unmatched: {tot_unmatched}")
     if unmatched_munis:

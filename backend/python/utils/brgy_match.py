@@ -58,26 +58,44 @@ def normalize_brgy(name: str) -> str:
     return _core(name)
 
 
-# append to backend/python/utils/brgy_match.py
+# Region names changed between faeldon's 2019 vintage and the DB's 2024 PSGC
+# (MIMAROPA was "Region IV-B"; ARMM became BARMM; NIR was re-created). So region
+# is NOT used as the primary match key — (province, municipality) is, because
+# province names are globally unique and stable across that reorg. Region is only
+# a fallback for province-less LGUs (NCR); these aliases keep that path robust.
+_REGION_ALIASES = {
+    "region iv b": "mimaropa",
+    "mimaropa region": "mimaropa",
+    "autonomous region in muslim mindanao": "armm",
+    "bangsamoro autonomous region in muslim mindanao": "armm",
+}
+
+
+def canon_region(norm_region: str) -> str:
+    """Collapse known region-name variants to a stable token (fallback path only)."""
+    return _REGION_ALIASES.get(norm_region, norm_region)
+
 
 def build_muni_index(regions, provinces, munis):
-    """Return (idx, idx_noprov):
-      idx[(norm_region, norm_province, norm_muni)] -> muni 7-digit prefix
-      idx_noprov[(norm_region, norm_muni)]         -> muni 7-digit prefix
-    Args are lists of (code10, name). NCR-style province-less municipalities are
-    reachable via idx_noprov.
+    """Return (idx_prov, idx_reg):
+      idx_prov[(norm_province, norm_muni)]             -> muni 7-digit prefix (primary)
+      idx_reg[(canon_region(norm_region), norm_muni)]  -> muni 7-digit prefix (fallback)
+    Args are lists of (code10, name). (province, municipality) is the primary key
+    because province names survive the 2019<->2024 reorg; idx_reg covers
+    province-less LGUs (e.g. NCR), where region names DO match.
     """
-    region_by2 = {c[:2]: normalize_admin(n) for c, n in regions}
+    region_by2 = {c[:2]: canon_region(normalize_admin(n)) for c, n in regions}
     prov_by5 = {c[:5]: normalize_admin(n) for c, n in provinces}
-    idx, idx_noprov = {}, {}
+    idx_prov, idx_reg = {}, {}
     for code10, name in munis:
         muni7 = code10[:7]
         nreg = region_by2.get(code10[:2], "")
         nprov = prov_by5.get(code10[:5], "")
         nmuni = normalize_admin(name)
-        idx[(nreg, nprov, nmuni)] = muni7
-        idx_noprov[(nreg, nmuni)] = muni7
-    return idx, idx_noprov
+        if nprov:
+            idx_prov[(nprov, nmuni)] = muni7
+        idx_reg[(nreg, nmuni)] = muni7
+    return idx_prov, idx_reg
 
 
 def build_brgy_index(brgys):
@@ -102,10 +120,12 @@ def match_file(features, muni_idx, muni_idx_noprov, brgy_idx):
         return matched, unmatched
 
     p0 = features[0].get("properties", {})
-    nreg = normalize_admin(p0.get("ADM1_EN", ""))
+    nreg = canon_region(normalize_admin(p0.get("ADM1_EN", "")))
     nprov = normalize_admin(p0.get("ADM2_EN", ""))
     nmuni = normalize_admin(p0.get("ADM3_EN", ""))
-    muni7 = muni_idx.get((nreg, nprov, nmuni)) or muni_idx_noprov.get((nreg, nmuni))
+    # Primary key is (province, municipality) — province names are stable across
+    # the 2019<->2024 PSGC reorg; region is only a fallback for province-less LGUs.
+    muni7 = muni_idx.get((nprov, nmuni)) or muni_idx_noprov.get((nreg, nmuni))
 
     if muni7 is None:
         unmatched.append({"reason": "municipality_not_found", "region": nreg,
