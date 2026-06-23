@@ -23,6 +23,7 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 import psycopg2
@@ -56,7 +57,8 @@ def _get(url, retries=3):
     """
     headers = {"User-Agent": "agaila-ingest"}
     token = os.getenv("GITHUB_TOKEN", "").strip()
-    if token and "api.github.com" in url:
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    if token and host == "api.github.com":
         headers["Authorization"] = f"Bearer {token}"
     last = None
     for attempt in range(retries):
