@@ -19,11 +19,10 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { StatsCard } from '../StatsCard';
-import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
 import { AnalyticsSkeleton } from './AnalyticsSkeleton';
+import { CHART_COLORS, CountUp, SectionHeader, SegmentedControl } from './chartTheme';
 import {
   OptimizedTrendsChart,
   OptimizedPieChart,
@@ -111,6 +110,44 @@ function ProgressBar({ value, color = 'bg-blue-500' }: ProgressBarProps) {
   return (
     <div className="w-full bg-muted rounded-full h-1 overflow-hidden">
       <div className={`${color} h-1`} style={{ width: `${Math.min(value, 100)}%` }} />
+    </div>
+  );
+}
+
+// Branded KPI tile — accent-colored left rail by metric type, count-up headline (ops-console language)
+interface KpiTileProps {
+  title: string;
+  value: number;
+  decimals?: number;
+  suffix?: string;
+  description: string;
+  icon: React.ReactNode;
+  accent: string;
+  loading?: boolean;
+  index?: number;
+}
+
+function KpiTile({ title, value, decimals = 0, suffix = '', description, icon, accent, loading = false, index = 0 }: KpiTileProps) {
+  return (
+    <div
+      className="animate-fade-in relative overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-shadow duration-200 hover:shadow-md"
+      style={{ animationDelay: `${Math.min(index * 70, 350)}ms` }}
+    >
+      <div className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} aria-hidden="true" />
+      <div className="space-y-1.5 p-4 pl-5">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-muted-foreground">{title}</span>
+          <span style={{ color: accent }}>{icon}</span>
+        </div>
+        {loading ? (
+          <div className="h-9 w-24 animate-pulse rounded bg-muted" />
+        ) : (
+          <div className="font-lato text-3xl font-bold tracking-tight text-foreground">
+            <CountUp value={value} decimals={decimals} suffix={suffix} />
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
     </div>
   );
 }
@@ -229,43 +266,53 @@ export default function AnalyticsView() {
       </Card>
 
       {/* Core KPI Cards */}
-      <div>
-        <h2 className="text-lg font-semibold mb-4 text-primary dark:text-white">System Overview</h2>
+      <div className="space-y-4">
+        <SectionHeader title="System Overview" description="At-a-glance hazard volume and model confidence." />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatsCard
+          <KpiTile
             title="Total Hazards"
-            value={totalHazards.toLocaleString()}
+            value={totalHazards}
             description="All time reports"
             icon={<Activity className="h-4 w-4" />}
+            accent={CHART_COLORS.navy}
             loading={statsLoading}
+            index={0}
           />
-          <StatsCard
+          <KpiTile
             title="Active Hazards"
-            value={activeHazards.toLocaleString()}
+            value={activeHazards}
             description="Requires attention"
-            icon={<AlertTriangle className="h-4 w-4 text-orange-500" />}
+            icon={<AlertTriangle className="h-4 w-4" />}
+            accent={CHART_COLORS.accent}
             loading={statsLoading}
+            index={1}
           />
-          <StatsCard
+          <KpiTile
             title="Resolved"
-            value={resolvedHazards.toLocaleString()}
+            value={resolvedHazards}
             description="Successfully handled"
-            icon={<CheckCircle2 className="h-4 w-4 text-green-500" />}
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            accent={CHART_COLORS.emerald}
             loading={statsLoading}
+            index={2}
           />
-          <StatsCard
+          <KpiTile
             title="Avg Confidence"
-            value={`${(avgConfidence * 100).toFixed(1)}%`}
+            value={avgConfidence * 100}
+            decimals={1}
+            suffix="%"
             description="AI model accuracy"
-            icon={<TrendingUp className="h-4 w-4 text-blue-500" />}
+            icon={<TrendingUp className="h-4 w-4" />}
+            accent={CHART_COLORS.steel}
             loading={statsLoading}
+            index={3}
           />
         </div>
       </div>
 
       {/* AI/ML Quality Metrics */}
-      <div>
-        <h2 className="text-lg font-semibold mb-4 text-primary dark:text-white">AI/ML Quality Metrics</h2>
+      <div className="space-y-4">
+        <SectionHeader title="AI/ML Quality Metrics" description="Validation quality, throughput, and source reliability signals." />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {/* False Positive Rate */}
           <Card className="hover:shadow-md transition-shadow">
@@ -525,30 +572,20 @@ export default function AnalyticsView() {
 
             {/* Trends Tab */}
             <TabsContent value="trends" className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={trendDays === 7 ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setTrendDays(7)}
-                >
-                  7 Days
-                </Button>
-                <Button
-                  variant={trendDays === 30 ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setTrendDays(30)}
-                >
-                  30 Days
-                </Button>
-                <Button
-                  variant={trendDays === 90 ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setTrendDays(90)}
-                >
-                  90 Days
-                </Button>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Detection trend</span>
+                <SegmentedControl
+                  options={[
+                    { label: '7d', value: 7 },
+                    { label: '30d', value: 30 },
+                    { label: '90d', value: 90 },
+                  ]}
+                  value={trendDays}
+                  onChange={setTrendDays}
+                  ariaLabel="Select time range for hazard trends"
+                />
               </div>
-              
+
               <OptimizedTrendsChart data={trends || []} hazardTypes={hazardLegend} />
             </TabsContent>
 
