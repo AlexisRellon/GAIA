@@ -1066,78 +1066,39 @@ async def get_service_health(
         start_date = end_date - timedelta(days=days - 1)
         start_date_normalized = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        def extract_response_time_ms(metadata: Any) -> Optional[float]:
-            if not isinstance(metadata, dict):
-                return None
-
-            for key in (
-                "response_time_ms",
-                "avg_response_time_ms",
-                "duration_ms",
-                "responseTimeMs",
-            ):
-                value = metadata.get(key)
-                if value is None:
-                    continue
-                try:
-                    return float(value)
-                except (TypeError, ValueError):
-                    continue
-            return None
-
-        # Fetch audit log rows in the window. Do not rely solely on a single
-        # `user_role='system'` filter because many system-origin rows (e.g.
-        # from Celery or notification workers) may omit that field. Retrieve
-        # additional columns and perform robust filtering in Python below.
-        resp = supabase.schema('gaia').from_('audit_logs') \
-            .select('created_at, severity, status, metadata, user_role, event_type, action, resource_type, resource') \
-            .gte('created_at', start_date_normalized.isoformat()) \
-            .lt('created_at', end_date.isoformat()) \
+        # Durable source of truth: gaia.service_health_checks (written per-check by
+        # the Celery heartbeat). Each row is one probe: status up/degraded/down and
+        # a measured response_time_ms (NULL when the probe failed or for backfilled
+        # historical rows). We aggregate raw rows into daily buckets at query time.
+        resp = supabase.schema('gaia').from_('service_health_checks') \
+            .select('checked_at, status, response_time_ms') \
+            .gte('checked_at', start_date_normalized.isoformat()) \
+            .lt('checked_at', end_date.isoformat()) \
+            .order('checked_at', desc=False) \
             .execute()
         rows = resp.data or []
 
-        # Group by date in Python
+        # Seed every day in the window so gaps are explicit (no-data days stay null).
         daily_data: Dict[str, Dict] = {}
         for i in range(days):
             date_str = (start_date_normalized + timedelta(days=i)).strftime("%Y-%m-%d")
-            daily_data[date_str] = {'total': 0, 'errors': 0, 'response_times': []}
+            daily_data[date_str] = {'total': 0, 'down': 0, 'response_times': []}
 
         for r in rows:
-            created = r.get('created_at', '')
-            if not created:
+            checked = r.get('checked_at', '')
+            if not checked:
                 continue
 
-            date_str = created[:10]  # Extract YYYY-MM-DD
+            date_str = checked[:10]  # Extract YYYY-MM-DD
             if date_str not in daily_data:
                 continue
 
-            # Determine whether this audit row should be considered a
-            # "system" telemetry record. We accept a variety of indicators
-            # because different writers set different fields.
-            user_role_val = (r.get('user_role') or '').lower()
-            resource_type_val = (r.get('resource_type') or '').lower()
-            event_type_val = (r.get('event_type') or '').lower()
-            action_val = (r.get('action') or '').lower()
-            resource_val = (r.get('resource') or '').lower()
-
-            is_system_row = (
-                user_role_val == 'system'
-                or resource_type_val == 'system'
-                or event_type_val.startswith('system')
-                or action_val.startswith('system_')
-                or resource_val == 'system'
-            )
-
-            if not is_system_row:
-                # Skip rows that are not system-origin telemetry
-                continue
-
             daily_data[date_str]['total'] += 1
-            sev = (r.get('severity') or '').upper()
-            status = (r.get('status') or '').lower()
-            if sev in ('CRITICAL', 'ERROR') or status == 'failure':
-                daily_data[date_str]['errors'] += 1
-            rt = extract_response_time_ms(r.get('metadata'))
+            # Downtime = explicit 'down' probes only. 'degraded' counts as
+            # up-but-slow (the service responded), NOT downtime.
+            if (r.get('status') or '').lower() == 'down':
+                daily_data[date_str]['down'] += 1
+            rt = r.get('response_time_ms')
             if rt is not None:
                 try:
                     daily_data[date_str]['response_times'].append(float(rt))
@@ -1149,78 +1110,37 @@ async def get_service_health(
         for date_str in sorted(daily_data.keys()):
             metrics = daily_data[date_str]
             total = metrics['total']
-            error_count = metrics['errors']
+            down_count = metrics['down']
             response_times = metrics['response_times']
 
-            # If there were no telemetry rows for this day, surface unknowns instead of perfect metrics
+            # No checks for this day -> honest gap (null metrics + 'no_data' status).
             if total == 0:
                 uptime_percent = None
                 avg_response_ms = None
+                day_status = 'no_data'
             else:
-                uptime_percent = max(0.0, 100.0 - (error_count / total * 100.0))
+                uptime_percent = round(100.0 * (total - down_count) / total, 2)
                 avg_response_ms = round(sum(response_times) / len(response_times), 2) if response_times else None
+                # Per-day rollup status for the chart/tooltip:
+                #   any down probe -> 'down'; all checks slow-but-up -> 'degraded'
+                #   when uptime is perfect but no response samples; else 'up'.
+                if down_count > 0:
+                    day_status = 'down'
+                elif uptime_percent < 100.0:
+                    day_status = 'degraded'
+                else:
+                    day_status = 'up'
 
             point = {
                 "date": date_str,
-                "uptime_percent": round(uptime_percent, 2) if uptime_percent is not None else None,
-                "avg_response_ms": avg_response_ms
+                "uptime_percent": uptime_percent,
+                "avg_response_ms": avg_response_ms,
+                "status": day_status,
             }
 
             uptime_series.append(point)
             response_series.append(dict(point))
-        # If many days have no direct audit telemetry, try fallback sources
-        # (activity_logs and rss_processing_logs) to infer system activity.
-        # This helps when certain subsystems write to other tables but not
-        # the audit_logs.user_role field.
-        missing_dates = [d for d in daily_data.keys() if daily_data[d]['total'] == 0]
-        if missing_dates:
-            try:
-                act_resp = supabase.schema('gaia').from_('activity_logs') \
-                    .select('created_at, user_role, event_type, resource_type, action') \
-                    .gte('created_at', start_date_normalized.isoformat()) \
-                    .lt('created_at', end_date.isoformat()) \
-                    .execute()
-                act_rows = act_resp.data or []
 
-                rss_resp = supabase.schema('gaia').from_('rss_processing_logs') \
-                    .select('created_at, status, metadata') \
-                    .gte('created_at', start_date_normalized.isoformat()) \
-                    .lt('created_at', end_date.isoformat()) \
-                    .execute()
-                rss_rows = rss_resp.data or []
-
-                # Map activity rows by date
-                act_by_date: Dict[str, int] = {}
-                for r in act_rows:
-                    ca = r.get('created_at')
-                    if not ca:
-                        continue
-                    ds = ca[:10]
-                    act_by_date[ds] = act_by_date.get(ds, 0) + 1
-
-                rss_by_date: Dict[str, int] = {}
-                for r in rss_rows:
-                    ca = r.get('created_at')
-                    if not ca:
-                        continue
-                    ds = ca[:10]
-                    rss_by_date[ds] = rss_by_date.get(ds, 0) + 1
-
-                # Update series for missing dates if fallbacks exist
-                for i, p in enumerate(uptime_series):
-                    if p['uptime_percent'] is None:
-                        d = p['date']
-                        act_count = act_by_date.get(d, 0)
-                        rss_count = rss_by_date.get(d, 0)
-                        inferred_total = act_count + rss_count
-                        if inferred_total > 0:
-                            # If we only have fallback entries, assume uptime unless explicit failures
-                            # Note: this is an inference and should be treated cautiously.
-                            uptime_series[i]['uptime_percent'] = 100.0
-                            response_series[i]['uptime_percent'] = 100.0
-            except Exception:
-                # Non-fatal: fall back to original behavior (leave nulls)
-                logger.debug("Service-health fallback aggregation failed; leaving nulls where no telemetry exists")
         return {"uptime": uptime_series, "response_time": response_series}
 
     try:

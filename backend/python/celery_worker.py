@@ -15,9 +15,8 @@ import os
 import logging
 from celery import Celery
 from celery.schedules import crontab
-from datetime import datetime, timedelta
-
-from backend.python.middleware.audit_integrity import compute_checksum_for_log, GENESIS_HASH
+from datetime import datetime, timedelta, timezone
+from time import perf_counter
 
 # Configure logging
 logging.basicConfig(
@@ -80,10 +79,14 @@ logger.info(f"Celery configured: RSS feeds will be processed every {RSS_UPDATE_I
 
 @celery_app.task(name='celery_worker.system_heartbeat_task', bind=True)
 def system_heartbeat_task(self):
-    """Write a tamper-evident heartbeat entry to audit_logs.
+    """Record a durable service-health snapshot in gaia.service_health_checks.
 
-    This keeps the service-health dashboard populated even on days when no
-    other system telemetry is generated.
+    Measures a REAL database response time by timing a lightweight
+    gaia.system_config ping (mirrors status_api.check_supabase_database), then
+    persists one row to the dedicated health table. This is the source of truth
+    for the uptime/response-time dashboard and survives restarts, downtime and
+    audit pruning. It no longer writes to audit_logs (keeps the audit trail
+    clean and preserves its tamper-evident checksum chain untouched).
     """
     logger.info(f"Starting system heartbeat (Task ID: {self.request.id})")
 
@@ -92,63 +95,70 @@ def system_heartbeat_task(self):
     try:
         from backend.python.lib.supabase_client import supabase
 
+        # Measure a real DB response time with a lightweight ping. Time only the
+        # round-trip to the database (perf_counter for monotonic wall-clock ms).
+        ping_start = perf_counter()
+        try:
+            supabase.schema('gaia').from_('system_config').select('config_key').limit(1).execute()
+            response_time_ms = round((perf_counter() - ping_start) * 1000, 2)
+            check_status = 'up'
+        except Exception as ping_err:
+            # Probe failed: the database/check is down. Leave response_time NULL
+            # (unknown on a failed probe) rather than recording a fake value.
+            response_time_ms = None
+            check_status = 'down'
+            logger.warning(f"Heartbeat DB ping failed (status=down): {ping_err}")
+
         timestamp = datetime.utcnow().isoformat()
-        metadata = {
-            'task_id': self.request.id,
-            'heartbeat_type': 'system',
-            'source': 'celery_beat',
-            'response_time_ms': 0,
-        }
-
-        log_entry = {
-            'event_type': 'system_event',
-            'severity': 'INFO',
-            'action': 'system_heartbeat',
-            'action_description': 'Scheduled system heartbeat',
-            'resource_type': 'system',
-            'resource_id': 'heartbeat',
-            'user_id': None,
-            'user_email': 'system@agaila.local',
-            'user_role': 'system',
-            'ip_address': None,
-            'user_agent': 'celery-beat',
+        health_row = {
+            'checked_at': timestamp,
+            'service_name': 'system',
+            'status': check_status,
+            'response_time_ms': response_time_ms,
+            'metadata': {
+                'task_id': self.request.id,
+                'source': 'celery_beat',
+            },
             'created_at': timestamp,
-            'first_occurred_at': timestamp,
-            'last_occurred_at': timestamp,
-            'occurrence_count': 1,
-            'status': 'success',
-            'success': True,
-            'context': metadata,
-            'metadata': metadata,
-            'old_values': {},
-            'new_values': {},
         }
 
-        previous_log_response = supabase.schema('gaia').from_('audit_logs').select('checksum').order('created_at', desc=True).order('id', desc=True).limit(1).execute()
-        previous_hash = previous_log_response.data[0]['checksum'] if previous_log_response.data and previous_log_response.data[0].get('checksum') else GENESIS_HASH
-
-        log_entry['checksum'] = compute_checksum_for_log(
-            action=log_entry['action'],
-            user_id=log_entry['user_id'],
-            user_email=log_entry['user_email'],
-            user_role=log_entry['user_role'],
-            resource_type=log_entry['resource_type'],
-            resource_id=log_entry['resource_id'],
-            ip_address=log_entry['ip_address'],
-            details=log_entry['metadata'],
-            timestamp=timestamp,
-            previous_hash=previous_hash,
-        )
-
-        response = supabase.schema('gaia').from_('audit_logs').insert(log_entry).execute()
+        response = supabase.schema('gaia').from_('service_health_checks').insert(health_row).execute()
         if not response.data:
-            raise RuntimeError('heartbeat insert returned no data')
+            raise RuntimeError('service_health_checks insert returned no data')
+
+        # Retention: prune snapshots older than 120 days (gives headroom over the
+        # 90-day dashboard read window). No separate scheduler needed.
+        try:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=120)).isoformat()
+            supabase.schema('gaia').from_('service_health_checks').delete().lt('checked_at', cutoff).execute()
+        except Exception as prune_err:
+            logger.warning(f"Heartbeat retention prune failed (non-fatal): {prune_err}")
+
+        # Change-based cache invalidation: the freshly written check makes the
+        # service-health charts refresh on the next read, then serve from Redis
+        # across the 5-minute gap until the next heartbeat.
+        try:
+            import asyncio
+            from backend.python.middleware.redis_cache import invalidate_pattern
+
+            async def _invalidate_health_caches():
+                await invalidate_pattern("analytics:service-health:*")
+                await invalidate_pattern("analytics:system-health:*")
+
+            asyncio.run(_invalidate_health_caches())
+        except Exception as inv_err:
+            logger.debug(f"Heartbeat cache invalidation skipped (non-fatal): {inv_err}")
 
         duration_ms = round((datetime.utcnow() - start_time).total_seconds() * 1000, 2)
-        logger.info(f"System heartbeat logged successfully in {duration_ms} ms")
+        logger.info(
+            f"System heartbeat recorded (status={check_status}, "
+            f"response_time_ms={response_time_ms}) in {duration_ms} ms"
+        )
         return {
             'status': 'success',
             'task_id': self.request.id,
+            'check_status': check_status,
+            'response_time_ms': response_time_ms,
             'duration_ms': duration_ms,
         }
     except Exception as exc:
