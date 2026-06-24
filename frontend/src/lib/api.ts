@@ -114,6 +114,8 @@ export const adminApi = {
     list: (params?: {
       user_email?: string;
       event?: string;
+      event_type?: string;
+      exclude_system?: boolean;
       action?: string;
       resource_type?: string;
       start_date?: string;
@@ -126,6 +128,8 @@ export const adminApi = {
       if (params?.user_email) queryParams.append('user_email', params.user_email);
       // Both event and action are sent to backend independently
       if (params?.event) queryParams.append('event', params.event);
+      if (params?.event_type) queryParams.append('event_type', params.event_type);
+      if (params?.exclude_system !== undefined) queryParams.append('exclude_system', params.exclude_system.toString());
       if (params?.action) queryParams.append('action', params.action);
       if (params?.resource_type) queryParams.append('resource_type', params.resource_type);
       if (params?.start_date) queryParams.append('start_date', params.start_date);

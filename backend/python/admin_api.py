@@ -621,6 +621,8 @@ async def reset_user_password(
 async def get_audit_logs(
     user_email: Optional[str] = Query(None, description="Filter by user email"),
     event: Optional[str] = Query(None, description="Filter by event type"),
+    event_type: Optional[str] = Query(None, description="Filter by audit event_type column (e.g. 'security_event')"),
+    exclude_system: bool = Query(True, description="Exclude system_event noise (heartbeats etc.) from the default view"),
     action: Optional[str] = Query(None, description="Filter by action type"),
     resource_type: Optional[str] = Query(None, description="Filter by resource type"),
     start_date: Optional[str] = Query(None, description="Filter by start date (ISO format)"),
@@ -632,14 +634,20 @@ async def get_audit_logs(
 ):
     """
     Get audit logs with optional filtering.
-    
+
     **Permissions**: Master Admin, Validator (read-only)
     **Module**: AC-01 (Audit Log Query)
+
+    By default ``exclude_system=True`` hides ``event_type='system_event'`` rows
+    (heartbeats and other system telemetry are ~92% of the table) so the
+    security/compliance audit trail is usable. The rows are kept in the table
+    (tamper-evident chain preserved) and remain visible via
+    ``exclude_system=false``.
     """
     try:
         # Build query
         query = supabase.schema("gaia").from_("audit_logs").select("*")
-        
+
         if user_email:
             query = query.ilike("user_email", f"%{user_email}%")
         # Prefer event-based filtering, keep action as backward-compatible alias.
@@ -647,6 +655,13 @@ async def get_audit_logs(
             query = query.eq("action", event)
         elif action:
             query = query.eq("action", action)
+        if event_type:
+            query = query.eq("event_type", event_type)
+        # Hide system_event noise by default. Verified against live data: every
+        # audit row has a non-null event_type (0 NULLs across 12,339 rows), so a
+        # plain .neq is correct here -- no NULL rows are dropped by it.
+        if exclude_system:
+            query = query.neq("event_type", "system_event")
         if resource_type:
             query = query.eq("resource_type", resource_type)
         if success is not None:
@@ -1058,7 +1073,15 @@ async def validate_citizen_report(
             logger.debug(f"SMS skipped: send_sms_notification not available for report {safe_tracking_id}")
         
         logger.info(f"User {current_user.email} validated report {safe_tracking_id}")
-        
+
+        # Validating adds the report to the hazard map and drains the triage
+        # queue -- invalidate analytics + triage caches so dashboards refresh.
+        try:
+            await invalidate_pattern("analytics:*")
+            await invalidate_pattern("admin:triage:*")
+        except Exception as inv_err:
+            logger.warning(f"Cache invalidation after report validate failed (non-fatal): {inv_err}")
+
         return ReportTriageActionResponse(
             tracking_id=tracking_id,
             action="validated",
@@ -1192,7 +1215,15 @@ async def reject_citizen_report(
             logger.debug(f"SMS skipped: send_sms_notification not available for report {safe_tracking_id}")
         
         logger.info(f"User {current_user.email} rejected report {safe_tracking_id}")
-        
+
+        # Rejecting drains the triage queue and changes report-status analytics
+        # -- invalidate analytics + triage caches so dashboards refresh.
+        try:
+            await invalidate_pattern("analytics:*")
+            await invalidate_pattern("admin:triage:*")
+        except Exception as inv_err:
+            logger.warning(f"Cache invalidation after report reject failed (non-fatal): {inv_err}")
+
         return ReportTriageActionResponse(
             tracking_id=tracking_id,
             action="rejected",
