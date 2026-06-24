@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, ZoomControl, ScaleControl, LayersControl, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
-import { fetchValidatedHazards, HazardResponse, updateHazardLocation, mapApiResponseToHazard } from '../services/hazardsApi';
+import { fetchValidatedHazards, fetchHazardById, HazardResponse, updateHazardLocation, mapApiResponseToHazard, normalizeCommunityAssessment } from '../services/hazardsApi';
 import type { Hazard } from '../types/hazard';
+import type { InfrastructureType, CrisisSelections, DebrisStatus, DamageSeverity } from '../types/undpTypes';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { Alert } from '../components/ui/alert';
@@ -18,6 +19,7 @@ import { DamageReportSidebar } from '../components/map/DamageReportSidebar';
 import { FilterPanel } from '../components/filters/FilterPanel';
 import { BoundaryLayer } from '../components/map/BoundaryLayer';
 import { ReportGenerator } from '../components/reports/ReportGenerator';
+import { HazardExport } from '../components/reports/HazardExport';
 import { useHazardFilters } from '../hooks/useHazardFilters';
 import {
   SidebarSkeleton,
@@ -419,6 +421,9 @@ const PublicMap: React.FC = () => {
   const { applyFilters } = useHazardFilters();
 
   const isAdmin = user ? hasRole('master_admin') : false;
+  // RG-01: GeoJSON/CSV export is admin-only (master_admin or validator) to
+  // protect citizen-report details under RA 10173; backend re-enforces this.
+  const canExport = hasRole('master_admin', 'validator');
   const canAdjustPins = hasRole('master_admin', 'validator', 'lgu_responder');
   const isPinEditingActive = canAdjustPins && isPinEditEnabled;
 
@@ -555,6 +560,38 @@ const PublicMap: React.FC = () => {
 
   // Apply filters using hook (includes hazard type, time, source, and severity)
   const filteredHazards = applyFilters(hazards);
+
+  // GV-02: selecting a citizen-report hazard fetches its detail to JOIN-in the
+  // damage-assessment payload (description/UNDP/image are stored only on the
+  // citizen report, not duplicated onto the hazard) for DamageReportSidebar.
+  const handleSelectHazard = (hazard: Hazard) => {
+    setSelectedHazard(hazard);
+    if (hazard.source_type !== 'citizen_report') return;
+
+    fetchHazardById(hazard.id)
+      .then((detail) => {
+        const cr = detail.citizen_report;
+        if (!cr) return;
+        setSelectedHazard((prev) =>
+          prev && prev.id === hazard.id
+            ? {
+                ...prev,
+                source_content: cr.description ?? prev.source_content,
+                image_urls: cr.image_url ?? undefined,
+                infrastructure_types: (cr.infrastructure_types ?? undefined) as InfrastructureType[] | undefined,
+                infrastructure_details: cr.infrastructure_details ?? undefined,
+                crisis_categories: (cr.crisis_categories ?? undefined) as CrisisSelections | undefined,
+                debris_status: (cr.debris_status ?? undefined) as DebrisStatus | undefined,
+                damage_severity: (cr.damage_severity ?? undefined) as DamageSeverity | undefined,
+                community_assessment: normalizeCommunityAssessment(cr.community_assessment),
+              }
+            : prev
+        );
+      })
+      .catch(() => {
+        // Best-effort enrichment; the sidebar still shows base hazard info.
+      });
+  };
 
   const hazardTypeCountMap = useMemo(() => {
     const slice = applyFilters(hazards, { skipHazardTypes: true });
@@ -1012,6 +1049,19 @@ const PublicMap: React.FC = () => {
                   </div>
                 )}
 
+                {/* Compliance Export (RG-01) - GeoJSON/CSV for admins & validators */}
+                {canExport && (
+                  <div className="p-3 border-b border-border">
+                    <HazardExport
+                      hazards={filteredHazards}
+                      onExported={() => {
+                        setAnnouncement('Hazard export downloaded successfully.');
+                        setIsMobileControlsOpen(false);
+                      }}
+                    />
+                  </div>
+                )}
+
                 {/* Legend Section */}
                 <div className="p-3 sm:p-4 border-b border-border">
                   <div className="flex items-center justify-between">
@@ -1431,7 +1481,7 @@ const PublicMap: React.FC = () => {
                     options={{ hazardType: hazard.hazard_type }}
                     draggable={isPinEditingActive}
                     eventHandlers={{
-                      click: () => setSelectedHazard(hazard),
+                      click: () => handleSelectHazard(hazard),
                       ...(isPinEditingActive ? { dragend: handleMarkerDragEnd(hazard) } : {}),
                     }}
                   />
@@ -1446,7 +1496,7 @@ const PublicMap: React.FC = () => {
                   icon={getHazardMarkerIcon(hazard.hazard_type, hazard.severity)}
                   draggable={isPinEditingActive}
                   eventHandlers={{
-                    click: () => setSelectedHazard(hazard),
+                    click: () => handleSelectHazard(hazard),
                     ...(isPinEditingActive ? { dragend: handleMarkerDragEnd(hazard) } : {}),
                   }}
                 />

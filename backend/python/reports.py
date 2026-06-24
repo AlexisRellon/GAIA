@@ -25,6 +25,8 @@ import tempfile
 import io
 import base64
 import re
+import csv
+import json
 
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.units import inch, cm
@@ -45,8 +47,16 @@ from PIL import Image
 import os
 import logging
 
-from backend.python.middleware.rbac import get_current_user_optional, UserContext, UserRole, UserStatus, log_admin_action
+from backend.python.middleware.rbac import (
+    get_current_user_optional,
+    require_validator,
+    UserContext,
+    UserRole,
+    UserStatus,
+    log_admin_action,
+)
 from backend.python.middleware.activity_logger import ActivityLogger
+from backend.python.lib.supabase_client import supabase
 
 logger = logging.getLogger(__name__)
 
@@ -1038,6 +1048,386 @@ async def generate_report(
             status_code=500,
             detail=f"Failed to generate PDF report: {str(e)}"
         )
+
+# ============================================================================
+# COMPLIANCE EXPORT (RG-01): GeoJSON + CSV
+#
+# Provides machine-readable, interoperable exports of the currently filtered
+# hazards for integration with external geospatial / data-management systems.
+#
+# Standards:
+#   - RFC 7946 (GeoJSON) — coordinates are [longitude, latitude] in WGS 84.
+#   - PMP ISO 19115:2014 metadata header (aligned with PNSDI/NAMRIA, PhilSA).
+#   - UNDP "Build the Future of Crisis Mapping" must-have: structured export
+#     in standard interoperable formats (CSV / GeoJSON).
+#
+# Access: Admin-only (master_admin or validator) per RA 10173 — citizen
+# report descriptions and unverified details must not be publicly exportable.
+# PII (IP hashes, user agents, EXIF, captcha scores, reporter identity) is
+# never emitted.
+# ============================================================================
+
+# CC BY 4.0 keeps outputs reusable by other non-profits (UNDP open-source intent).
+EXPORT_DATA_LICENSE = "Creative Commons Attribution 4.0 International (CC BY 4.0)"
+EXPORT_STANDARD_COMPLIANCE = "PMP-ISO-19115:2014, RFC 7946"
+EXPORT_SPATIAL_REFERENCE = "EPSG:4326 (WGS 84)"
+
+
+class GeoJSONExportRequest(BaseModel):
+    """Request model for compliance exports (GeoJSON / CSV).
+
+    Accepts the same filtered hazard list the UI already holds so the export
+    matches the on-screen filtered state exactly.
+    """
+    hazards: List[HazardData]
+    metadata: Optional[ReportMetadata] = None
+
+
+def _fetch_undp_assessments(hazard_ids: List[str]) -> Dict[str, dict]:
+    """Fetch UNDP damage-assessment fields for citizen-report hazards.
+
+    Citizen reports link to their promoted hazard via
+    ``gaia.citizen_reports.promoted_to_hazard_id``. Returns a map of
+    ``hazard_id -> {undp fields}``. Fails soft (returns what it can) so a
+    logging/DB hiccup never blocks the export.
+    """
+    if not hazard_ids or supabase is None:
+        return {}
+
+    undp_fields = [
+        "promoted_to_hazard_id",
+        "infrastructure_types",
+        "infrastructure_details",
+        "crisis_categories",
+        "debris_status",
+        "damage_severity",
+    ]
+    result_map: Dict[str, dict] = {}
+    try:
+        response = (
+            supabase.schema("gaia")
+            .from_("citizen_reports")
+            .select(",".join(undp_fields))
+            .in_("promoted_to_hazard_id", hazard_ids)
+            .execute()
+        )
+        for row in (response.data or []):
+            haz_id = row.get("promoted_to_hazard_id")
+            if not haz_id:
+                continue
+            result_map[str(haz_id)] = {
+                "infrastructure_types": row.get("infrastructure_types"),
+                "infrastructure_details": row.get("infrastructure_details"),
+                "crisis_categories": row.get("crisis_categories"),
+                "debris_status": row.get("debris_status"),
+                "damage_severity": row.get("damage_severity"),
+            }
+    except Exception as fetch_error:  # noqa: BLE001 - export must not hard-fail
+        logger.warning(f"Failed to fetch UNDP assessments for export: {fetch_error}")
+    return result_map
+
+
+_PSGC_LEVELS = (
+    ("region", "region_name", "region_psgc"),
+    ("province", "province_name", "province_psgc"),
+    ("city_municipality", "city_municipality_name", "city_municipality_psgc"),
+    ("barangay", "barangay_name", "barangay_psgc"),
+)
+
+
+def _row_to_georef(row: dict) -> Optional[dict]:
+    """Convert a gaia.get_psgc_hierarchy_batch row into a nested ``ph_georef``
+    dict (only the levels that resolved), or None when nothing resolved."""
+    georef: Dict[str, dict] = {}
+    for key, name_col, psgc_col in _PSGC_LEVELS:
+        name, psgc = row.get(name_col), row.get(psgc_col)
+        if name or psgc:
+            georef[key] = {"name": name, "psgc": psgc}
+    return georef or None
+
+
+def _build_psgc_map(hazards: List[HazardData]) -> Dict[tuple, Optional[dict]]:
+    """Resolve the PSGC hierarchy for every DISTINCT coordinate in a SINGLE
+    batched RPC (gaia.get_psgc_hierarchy_batch) — one point-in-polygon join for
+    all points, instead of one round-trip per hazard (the old N+1). Fails soft so
+    the export never breaks."""
+    cache: Dict[tuple, Optional[dict]] = {}
+    if supabase is None:
+        return cache
+
+    # Deduplicate coordinates; `keys` preserves order so the RPC's 0-based idx
+    # maps straight back to a coordinate.
+    keys: List[tuple] = []
+    for h in hazards:
+        key = (round(h.latitude, 6), round(h.longitude, 6))
+        if key not in cache:
+            cache[key] = None
+            keys.append(key)
+    if not keys:
+        return cache
+
+    # ST_MakePoint expects (lng, lat).
+    points = [[lng, lat] for (lat, lng) in keys]
+    try:
+        resp = (
+            supabase.schema("gaia")
+            .rpc("get_psgc_hierarchy_batch", {"p_points": points})
+            .execute()
+        )
+        for row in (resp.data or []):
+            idx = row.get("idx")
+            if isinstance(idx, int) and 0 <= idx < len(keys):
+                cache[keys[idx]] = _row_to_georef(row)
+    except Exception as psgc_error:  # noqa: BLE001 - export must not hard-fail
+        logger.warning(f"Batch PSGC resolution failed: {psgc_error}")
+    return cache
+
+
+def _build_metadata_header(generated_by: str, total: int) -> dict:
+    """PMP ISO 19115 / RFC 7946 compliant metadata block for the FeatureCollection."""
+    return {
+        "agency_source": "AGAILA",
+        "generated_by": generated_by,
+        "export_timestamp": datetime.now(timezone.utc).isoformat(),
+        "spatial_reference": EXPORT_SPATIAL_REFERENCE,
+        "data_license": EXPORT_DATA_LICENSE,
+        "standard_compliance": EXPORT_STANDARD_COMPLIANCE,
+        "feature_count": total,
+        "geographic_scope": "Philippines",
+    }
+
+
+def _hazard_to_feature(h: HazardData, undp: Optional[dict], ph_georef: Optional[dict] = None) -> dict:
+    """Convert a hazard into a PII-scrubbed RFC 7946 Feature."""
+    properties: Dict[str, object] = {
+        "id": h.id,
+        "hazard_type": h.hazard_type,
+        "severity": h.severity,
+        "confidence_score": round(h.confidence_score, 4),
+        "source_type": h.source_type,
+        "status": h.status,
+        "validated": h.validated,
+        "location_name": h.location_name,
+        "admin_division": h.admin_division,
+        "created_at": h.created_at,
+        "source_title": h.source_title,
+        "source_url": h.source_url,
+    }
+    # Official PSGC hierarchy (PhilSA/NAMRIA interoperability) when resolvable.
+    if ph_georef:
+        properties["ph_georef"] = ph_georef
+    # Nest UNDP damage-assessment fields for citizen reports (when promoted).
+    if undp and any(v is not None for v in undp.values()):
+        properties["undp_damage_assessment"] = undp
+
+    return {
+        "type": "Feature",
+        "geometry": {
+            "type": "Point",
+            # RFC 7946: [longitude, latitude]
+            "coordinates": [round(h.longitude, 6), round(h.latitude, 6)],
+        },
+        "properties": properties,
+    }
+
+
+def _build_geojson(hazards: List[HazardData], generated_by: str) -> dict:
+    """Build an RFC 7946 FeatureCollection with PMP ISO 19115 metadata."""
+    citizen_ids = [h.id for h in hazards if h.source_type == "citizen_report"]
+    undp_map = _fetch_undp_assessments(citizen_ids)
+    psgc_map = _build_psgc_map(hazards)
+    features = [
+        _hazard_to_feature(
+            h,
+            undp_map.get(h.id),
+            psgc_map.get((round(h.latitude, 6), round(h.longitude, 6))),
+        )
+        for h in hazards
+    ]
+    return {
+        "type": "FeatureCollection",
+        "metadata": _build_metadata_header(generated_by, len(features)),
+        "features": features,
+    }
+
+
+# CSV column order — flat, GIS/spreadsheet-friendly.
+_CSV_COLUMNS = [
+    "id", "hazard_type", "severity", "confidence_score", "source_type",
+    "status", "validated", "latitude", "longitude", "location_name",
+    "admin_division", "created_at", "source_title", "source_url",
+    "ph_region", "ph_region_psgc", "ph_province", "ph_province_psgc",
+    "ph_city_municipality", "ph_city_municipality_psgc", "ph_barangay", "ph_barangay_psgc",
+    "undp_infrastructure_types", "undp_infrastructure_details",
+    "undp_debris_status", "undp_damage_severity", "undp_crisis_categories",
+]
+
+
+def _build_csv(hazards: List[HazardData], generated_by: str) -> str:
+    """Build a flat CSV string with the same data as the GeoJSON export."""
+    citizen_ids = [h.id for h in hazards if h.source_type == "citizen_report"]
+    undp_map = _fetch_undp_assessments(citizen_ids)
+    psgc_map = _build_psgc_map(hazards)
+
+    buffer = io.StringIO()
+    # Provenance comment line (ignored by most parsers, useful for traceability).
+    buffer.write(
+        f"# AGAILA hazard export | {EXPORT_SPATIAL_REFERENCE} | "
+        f"{EXPORT_DATA_LICENSE} | generated_by={generated_by} | "
+        f"timestamp={datetime.now(timezone.utc).isoformat()}\n"
+    )
+    writer = csv.DictWriter(buffer, fieldnames=_CSV_COLUMNS, extrasaction="ignore")
+    writer.writeheader()
+    for h in hazards:
+        undp = undp_map.get(h.id) or {}
+        infra = undp.get("infrastructure_types")
+        crisis = undp.get("crisis_categories")
+        georef = psgc_map.get((round(h.latitude, 6), round(h.longitude, 6))) or {}
+
+        def _g(level: str, field: str) -> str:
+            return (georef.get(level) or {}).get(field) or ""
+
+        writer.writerow({
+            "id": h.id,
+            "hazard_type": h.hazard_type,
+            "severity": h.severity,
+            "confidence_score": round(h.confidence_score, 4),
+            "source_type": h.source_type,
+            "status": h.status,
+            "validated": h.validated,
+            "latitude": round(h.latitude, 6),
+            "longitude": round(h.longitude, 6),
+            "location_name": h.location_name,
+            "admin_division": h.admin_division,
+            "created_at": h.created_at,
+            "source_title": h.source_title,
+            "source_url": h.source_url,
+            "ph_region": _g("region", "name"),
+            "ph_region_psgc": _g("region", "psgc"),
+            "ph_province": _g("province", "name"),
+            "ph_province_psgc": _g("province", "psgc"),
+            "ph_city_municipality": _g("city_municipality", "name"),
+            "ph_city_municipality_psgc": _g("city_municipality", "psgc"),
+            "ph_barangay": _g("barangay", "name"),
+            "ph_barangay_psgc": _g("barangay", "psgc"),
+            "undp_infrastructure_types": json.dumps(infra) if infra is not None else "",
+            "undp_infrastructure_details": undp.get("infrastructure_details") or "",
+            "undp_debris_status": undp.get("debris_status") or "",
+            "undp_damage_severity": undp.get("damage_severity") or "",
+            "undp_crisis_categories": json.dumps(crisis) if crisis is not None else "",
+        })
+    return buffer.getvalue()
+
+
+async def _log_export(
+    user: UserContext,
+    request: Request,
+    export_format: str,
+    total: int,
+):
+    """Audit + activity logging for a compliance export (data_exported)."""
+    try:
+        await ActivityLogger.log_activity(
+            user_context=user,
+            action="DATA_EXPORTED",
+            request=request,
+            resource_type="report",
+            resource_id=None,
+            details={"format": export_format, "total_hazards": total},
+        )
+    except Exception as log_error:  # noqa: BLE001
+        logger.warning(f"Failed to log export activity: {log_error}")
+    try:
+        await log_admin_action(
+            user=user,
+            action="data_exported",
+            action_description=f"Exported {total} hazards as {export_format.upper()}",
+            resource_type="reports",
+            resource_id=None,
+            old_values={},
+            new_values={"format": export_format, "total_hazards": total},
+            request=request,
+            event_type="DATA_EXPORTED",
+        )
+    except Exception as log_error:  # noqa: BLE001
+        logger.warning(f"Failed to log export audit: {log_error}")
+
+
+@router.post("/export/geojson", response_class=FileResponse)
+async def export_geojson(
+    export_request: GeoJSONExportRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_validator),
+):
+    """Export the filtered hazards as a compliant RFC 7946 GeoJSON file.
+
+    Admin-only (master_admin / validator). Includes a PMP ISO 19115 metadata
+    header and PII-scrubbed properties; citizen reports carry a nested
+    ``undp_damage_assessment`` block.
+    """
+    try:
+        generated_by = (
+            export_request.metadata.generated_by
+            if export_request.metadata else current_user.email
+        )
+        feature_collection = _build_geojson(export_request.hazards, generated_by)
+
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".geojson", mode="w", encoding="utf-8"
+        ) as tmp_file:
+            json.dump(feature_collection, tmp_file, ensure_ascii=False, indent=2)
+            output_path = Path(tmp_file.name)
+
+        await _log_export(current_user, request, "geojson", len(export_request.hazards))
+
+        filename = f"agaila_hazard_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.geojson"
+        return FileResponse(
+            path=str(output_path),
+            media_type="application/geo+json",
+            filename=filename,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"GeoJSON export error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export GeoJSON: {str(e)}")
+
+
+@router.post("/export/csv", response_class=FileResponse)
+async def export_csv(
+    export_request: GeoJSONExportRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_validator),
+):
+    """Export the filtered hazards as a flat CSV file (spreadsheet/GIS import).
+
+    Admin-only (master_admin / validator), PII-scrubbed.
+    """
+    try:
+        generated_by = (
+            export_request.metadata.generated_by
+            if export_request.metadata else current_user.email
+        )
+        csv_content = _build_csv(export_request.hazards, generated_by)
+
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".csv", mode="w", encoding="utf-8-sig", newline=""
+        ) as tmp_file:
+            tmp_file.write(csv_content)
+            output_path = Path(tmp_file.name)
+
+        await _log_export(current_user, request, "csv", len(export_request.hazards))
+
+        filename = f"agaila_hazard_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        return FileResponse(
+            path=str(output_path),
+            media_type="text/csv",
+            filename=filename,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"CSV export error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to export CSV: {str(e)}")
+
 
 @router.get("/health")
 async def health_check():

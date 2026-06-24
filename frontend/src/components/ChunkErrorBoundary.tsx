@@ -27,28 +27,64 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  isChunkError: boolean;
   isOfflineChunkError: boolean;
+}
+
+// Guard so an online auto-reload can never loop (e.g. a chunk that 404s even
+// after a fresh load). At most one reload per this window.
+const CHUNK_RELOAD_KEY = 'agaila:last-chunk-reload';
+const CHUNK_RELOAD_COOLDOWN_MS = 10_000;
+
+/**
+ * Detect the various shapes a code-split chunk-load failure can take across
+ * browsers/bundlers, including the stale-chunk case where the dev server / CDN
+ * returns index.html (text/html) for a renamed chunk ("Refused to execute
+ * script … MIME type ('text/html') is not executable").
+ */
+function isChunkLoadError(error: Error): boolean {
+  const msg = error?.message || '';
+  return (
+    error?.name === 'ChunkLoadError' ||
+    msg.includes('Loading chunk') ||
+    msg.includes('Loading CSS chunk') ||
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('error loading dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('Refused to execute script') ||
+    (msg.includes('MIME type') && msg.includes('executable'))
+  );
 }
 
 export class ChunkErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, isOfflineChunkError: false };
+    this.state = { hasError: false, isChunkError: false, isOfflineChunkError: false };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    const isChunkError =
-      error.name === 'ChunkLoadError' ||
-      error.message.includes('Loading chunk') ||
-      error.message.includes('Failed to fetch dynamically imported module');
+    const isChunkError = isChunkLoadError(error);
 
     return {
       hasError: true,
+      isChunkError,
       isOfflineChunkError: isChunkError && !navigator.onLine,
     };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // A chunk failed to load while ONLINE — almost always a stale chunk after a
+    // new deploy/recompile. Reload once to pull the fresh index.html + chunks
+    // (this is what a manual hard-refresh does). Throttled to avoid loops.
+    if (this.state.isChunkError && navigator.onLine) {
+      const last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || '0');
+      if (Date.now() - last > CHUNK_RELOAD_COOLDOWN_MS) {
+        sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
+        window.location.reload();
+        return;
+      }
+    }
+
     // Only log non-offline chunk errors; offline ones are expected
     if (!this.state.isOfflineChunkError) {
       console.error('[AGAILA] Unexpected chunk error:', error, info);
@@ -56,11 +92,30 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, isOfflineChunkError: false });
+    this.setState({ hasError: false, isChunkError: false, isOfflineChunkError: false });
   };
 
   render() {
-    const { hasError, isOfflineChunkError } = this.state;
+    const { hasError, isChunkError, isOfflineChunkError } = this.state;
+
+    // Online stale-chunk: componentDidCatch triggers a one-time reload. Render a
+    // minimal "updating" state (never the red overlay); if the reload was
+    // throttled, the manual button recovers.
+    if (hasError && isChunkError && !isOfflineChunkError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-8 bg-background font-sans">
+          <div className="text-center">
+            <p className="text-slate-500 text-sm mb-4">Updating to the latest version…</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-primary text-white border-none rounded-lg px-6 py-[0.6rem] text-sm font-semibold cursor-pointer font-sans"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     if (hasError && isOfflineChunkError) {
       return (
@@ -125,9 +180,9 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Non-offline errors: re-throw so existing error handling takes over
-    if (hasError && !isOfflineChunkError) {
-      throw new Error('ChunkErrorBoundary: non-offline error — re-throwing');
+    // Genuine (non-chunk) errors: re-throw so existing error handling takes over
+    if (hasError && !isChunkError) {
+      throw new Error('ChunkErrorBoundary: non-chunk error — re-throwing');
     }
 
     return this.props.children;
