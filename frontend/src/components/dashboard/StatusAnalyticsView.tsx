@@ -282,7 +282,7 @@ export default function StatusAnalyticsView() {
             ) : serviceHealthError ? (
               <div className="flex h-full items-center text-sm text-destructive">Unable to load uptime trend</div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minHeight={208}>
                 <AreaChart data={serviceHealthData?.uptime ?? []} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
                   <defs>
                     <linearGradient id="uptimeFill" x1="0" y1="0" x2="0" y2="1">
@@ -335,7 +335,7 @@ export default function StatusAnalyticsView() {
             ) : serviceHealthError ? (
               <div className="flex h-full items-center text-sm text-destructive">Unable to load response time</div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minHeight={208}>
                 <AreaChart data={serviceHealthData?.response_time ?? []} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
                   <defs>
                     <linearGradient id="responseFill" x1="0" y1="0" x2="0" y2="1">

@@ -1062,86 +1062,34 @@ async def get_service_health(
     cache_key = generate_cache_key("analytics:service-health", days=days)
 
     async def fetch_service_health():
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days - 1)
-        start_date_normalized = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Aggregate daily in Postgres via gaia.service_health_daily(p_days): one row
+        # per day over the window (incl. no-data gaps), computed in UTC. This avoids
+        # the PostgREST 1000-row cap that silently truncated raw-row fetches to the
+        # earliest ~1000 checks (~5 days), and is far cheaper than shipping every raw
+        # check across the network to bucket in Python.
+        resp = supabase.schema('gaia').rpc('service_health_daily', {'p_days': days}).execute()
+        series = resp.data or []
 
-        # Durable source of truth: gaia.service_health_checks (written per-check by
-        # the Celery heartbeat). Each row is one probe: status up/degraded/down and
-        # a measured response_time_ms (NULL when the probe failed or for backfilled
-        # historical rows). We aggregate raw rows into daily buckets at query time.
-        resp = supabase.schema('gaia').from_('service_health_checks') \
-            .select('checked_at, status, response_time_ms') \
-            .gte('checked_at', start_date_normalized.isoformat()) \
-            .lt('checked_at', end_date.isoformat()) \
-            .order('checked_at', desc=False) \
-            .execute()
-        rows = resp.data or []
+        # PostgREST serializes numeric as a JSON string to preserve precision; the
+        # frontend expects number | null, so coerce uptime/response to float.
+        def _num(value: Any) -> Optional[float]:
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
 
-        # Seed every day in the window so gaps are explicit (no-data days stay null).
-        daily_data: Dict[str, Dict] = {}
-        for i in range(days):
-            date_str = (start_date_normalized + timedelta(days=i)).strftime("%Y-%m-%d")
-            daily_data[date_str] = {'total': 0, 'down': 0, 'response_times': []}
-
-        for r in rows:
-            checked = r.get('checked_at', '')
-            if not checked:
-                continue
-
-            date_str = checked[:10]  # Extract YYYY-MM-DD
-            if date_str not in daily_data:
-                continue
-
-            daily_data[date_str]['total'] += 1
-            # Downtime = explicit 'down' probes only. 'degraded' counts as
-            # up-but-slow (the service responded), NOT downtime.
-            if (r.get('status') or '').lower() == 'down':
-                daily_data[date_str]['down'] += 1
-            rt = r.get('response_time_ms')
-            if rt is not None:
-                try:
-                    daily_data[date_str]['response_times'].append(float(rt))
-                except (ValueError, TypeError):
-                    pass
-
-        uptime_series = []
-        response_series = []
-        for date_str in sorted(daily_data.keys()):
-            metrics = daily_data[date_str]
-            total = metrics['total']
-            down_count = metrics['down']
-            response_times = metrics['response_times']
-
-            # No checks for this day -> honest gap (null metrics + 'no_data' status).
-            if total == 0:
-                uptime_percent = None
-                avg_response_ms = None
-                day_status = 'no_data'
-            else:
-                uptime_percent = round(100.0 * (total - down_count) / total, 2)
-                avg_response_ms = round(sum(response_times) / len(response_times), 2) if response_times else None
-                # Per-day rollup status for the chart/tooltip:
-                #   any down probe -> 'down'; all checks slow-but-up -> 'degraded'
-                #   when uptime is perfect but no response samples; else 'up'.
-                if down_count > 0:
-                    day_status = 'down'
-                elif uptime_percent < 100.0:
-                    day_status = 'degraded'
-                else:
-                    day_status = 'up'
-
-            point = {
-                "date": date_str,
-                "uptime_percent": uptime_percent,
-                "avg_response_ms": avg_response_ms,
-                "status": day_status,
+        points = [
+            {
+                "date": r.get("date"),
+                "uptime_percent": _num(r.get("uptime_percent")),
+                "avg_response_ms": _num(r.get("avg_response_ms")),
+                "status": r.get("status"),
             }
-
-            uptime_series.append(point)
-            response_series.append(dict(point))
-
-        return {"uptime": uptime_series, "response_time": response_series}
+            for r in series
+        ]
+        return {"uptime": points, "response_time": [dict(p) for p in points]}
 
     try:
         data = await get_or_set(cache_key, fetch_service_health, ttl=CACHE_TTLS.get("analytics:service-health", 30))
