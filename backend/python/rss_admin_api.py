@@ -1430,8 +1430,10 @@ async def delete_rss_article(
             event_type="RSS_ARTICLE_DELETED"
         )
 
-        # Invalidate hazards cache since an article (hazard) was deleted
+        # Invalidate hazards cache since an article (hazard) was deleted;
+        # analytics too so dashboards reflect the removal immediately.
         await invalidate_pattern("hazards:*")
+        await invalidate_pattern("analytics:*")
 
         return Response(status_code=status.HTTP_204_NO_CONTENT)
         
@@ -1506,9 +1508,11 @@ async def bulk_delete_rss_articles(
             event_type="RSS_ARTICLES_BULK_DELETED"
         )
 
-        # Invalidate hazards cache since articles (hazards) were deleted
+        # Invalidate hazards cache since articles (hazards) were deleted;
+        # analytics too so dashboards reflect the removals immediately.
         await invalidate_pattern("hazards:*")
-        
+        await invalidate_pattern("analytics:*")
+
         return {
             'deleted_count': deleted_count,
             'deleted_ids': found_ids,
@@ -1642,8 +1646,10 @@ async def update_rss_article(
             event_type="RSS_ARTICLE_UPDATED"
         )
 
-        # Invalidate hazards cache since an article (hazard) was updated
+        # Invalidate hazards cache since an article (hazard) was updated;
+        # analytics too so dashboards reflect the change immediately.
         await invalidate_pattern("hazards:*")
+        await invalidate_pattern("analytics:*")
 
         return updated_data
         

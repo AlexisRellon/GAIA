@@ -23,6 +23,9 @@ from lib.supabase_client import supabase
 # Rate limiting to prevent report spam (CR-03)
 from backend.python.middleware.redis_rate_limiter import get_redis
 
+# Cache invalidation so analytics dashboards refresh after a new report lands
+from backend.python.middleware.redis_cache import invalidate_pattern
+
 # Import ActivityLogger for comprehensive activity tracking
 from backend.python.middleware.activity_logger import ActivityLogger
 
@@ -623,6 +626,14 @@ async def submit_citizen_report(
                 redis_client.setex(cooldown_key, SUBMISSION_COOLDOWN_SECONDS, "1")
             except Exception as e:
                 logger.warning(f"Cooldown set failed (non-fatal): {e}")
+
+        # A new report changes analytics aggregates (source breakdown, stats,
+        # triage queue) -- invalidate so dashboards refresh on the next read.
+        try:
+            await invalidate_pattern("analytics:*")
+            await invalidate_pattern("admin:triage:*")
+        except Exception as inv_err:
+            logger.warning(f"Cache invalidation after report submit failed (non-fatal): {inv_err}")
 
         return ReportSubmissionResponse(
             tracking_id=tracking_id,

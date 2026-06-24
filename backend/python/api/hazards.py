@@ -456,8 +456,10 @@ async def update_hazard_location(
                 detail=f"Hazard not found: {hazard_id}"
             )
 
-        # Invalidate hazard caches so map refreshes quickly
+        # Invalidate hazard caches so map refreshes quickly, and analytics
+        # caches so dashboards reflect the change immediately (not after TTL).
         await invalidate_pattern("hazards:*")
+        await invalidate_pattern("analytics:*")
 
         # Log activity for audit trail
         try:
