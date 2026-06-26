@@ -115,36 +115,59 @@ interface SparklineProps {
 }
 
 /**
- * Tiny no-axis area sparkline of recent values. Renders nothing until there are
- * at least two finite points so a single reading does not draw a flat line.
+ * Refined no-axis line sparkline inspired by Supabase Status page.
+ *
+ * Key design differences from the previous area sparkline:
+ * - Pure line (no area fill) — cleaner, less visual noise in compact tiles
+ * - Thinner 1.2px stroke — feels precise and instrument-grade
+ * - Status-aware color: the `color` prop drives the line tint, letting the
+ *   parent pass green/amber/red based on service health
+ * - Subtle right-aligned min/max labels for at-a-glance scale awareness
+ * - connectNulls so transient gaps don't fracture a short sparkline
  */
-export const Sparkline = ({ data, color = CHART_COLORS.steel, gradientId, height = 36 }: SparklineProps) => {
-  const finiteCount = data.filter((d) => typeof d.value === 'number' && Number.isFinite(d.value)).length;
-  if (finiteCount < 2) return <div style={{ height }} className="flex items-center text-[10px] text-muted-foreground/70">—</div>;
+export const Sparkline = ({ data, color = CHART_COLORS.steelLight, gradientId, height = 36 }: SparklineProps) => {
+  const finitePoints = data.filter((d) => typeof d.value === 'number' && Number.isFinite(d.value));
+  if (finitePoints.length < 2) return <div style={{ height }} className="flex items-center text-[10px] text-muted-foreground/70">—</div>;
+
+  const values = finitePoints.map((d) => d.value as number);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.45} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <YAxis hide domain={['dataMin', 'dataMax']} />
-        <Area
-          type="monotone"
-          dataKey="value"
-          stroke={color}
-          strokeWidth={1.5}
-          fill={`url(#${gradientId})`}
-          isAnimationActive={!prefersReducedMotion()}
-          dot={false}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div className="relative" style={{ height }}>
+      <ResponsiveContainer width="100%" height={height}>
+        <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.12} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <YAxis hide domain={['dataMin', 'dataMax']} />
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={1.2}
+            fill={`url(#${gradientId})`}
+            isAnimationActive={!prefersReducedMotion()}
+            animationDuration={600}
+            dot={false}
+            connectNulls
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+      {/* Subtle min/max scale labels — only when there's meaningful range */}
+      {maxVal > minVal && (
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex flex-col justify-between py-0.5 text-[8px] tabular-nums leading-none text-muted-foreground/50">
+          <span>{maxVal >= 1000 ? `${(maxVal / 1000).toFixed(1)}s` : `${Math.round(maxVal)}`}</span>
+          <span>{minVal >= 1000 ? `${(minVal / 1000).toFixed(1)}s` : `${Math.round(minVal)}`}</span>
+        </div>
+      )}
+    </div>
   );
 };
+
 
 interface SegmentOption<T extends string | number> {
   label: string;

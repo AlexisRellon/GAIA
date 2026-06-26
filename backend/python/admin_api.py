@@ -113,6 +113,14 @@ class UserProfileResponse(BaseModel):
     created_at: str
     updated_at: Optional[str]  # Added: exists in database
 
+
+class PaginatedUsersResponse(BaseModel):
+    """Paginated response for user list"""
+    users: List[UserProfileResponse]
+    total: int
+    limit: int
+    offset: int
+
 # status = ANY (ARRAY['success'::text, 'failure'::text, 'pending'::text])
 
 class CreateUserRequest(BaseModel):
@@ -251,24 +259,25 @@ class TriageReportResponse(BaseModel):
 # User Management Endpoints (UM-01, UM-02, UM-03, AC-06)
 # ============================================================================
 
-@router.get("/users", response_model=List[UserProfileResponse])
+@router.get("/users", response_model=PaginatedUsersResponse)
 async def get_all_users(
     role: Optional[str] = Query(None, description="Filter by role"),
     status: Optional[str] = Query(None, description="Filter by status"),
     organization: Optional[str] = Query(None, description="Filter by organization"),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: UserContext = Depends(require_validator, )
 ):
     """
-    Get all user accounts with optional filtering.
+    Get all user accounts with optional filtering and pagination.
+    Returns paginated response with total count for proper pagination UI.
     
     **Permissions**: Master Admin, Validator (read-only)
     **Module**: UM-03 (User Profile Management)
     """
     try:
-        # Build query
-        query = supabase.schema("gaia").from_("user_profiles").select("*")
+        # Build query with exact count for pagination
+        query = supabase.schema("gaia").from_("user_profiles").select("*", count="exact")
         
         if role:
             query = query.eq("role", role)
@@ -280,8 +289,14 @@ async def get_all_users(
         # Execute query with pagination
         response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
         
-        logger.info(f"User {current_user.email} retrieved {len(response.data)} user profiles")
-        return response.data
+        total = response.count if response.count is not None else len(response.data)
+        logger.info(f"User {current_user.email} retrieved {len(response.data)}/{total} user profiles")
+        return {
+            "users": response.data,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
         
     except Exception as e:
         logger.error(f"Error fetching users: {str(e)}")

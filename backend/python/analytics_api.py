@@ -1047,7 +1047,7 @@ async def get_system_health(current_user: UserContext = Depends(require_admin)):
 async def get_service_health(
     days: int = Query(30, ge=7, le=90, description="Number of days to retrieve (7-90)"),
     current_user: Optional[UserContext] = Depends(get_current_user_optional)
-) -> Dict[str, List[Dict]]:
+) -> Dict[str, Any]:
     """
     Return time-series service health metrics for the last `days` days.
 
@@ -1089,7 +1089,27 @@ async def get_service_health(
             }
             for r in series
         ]
-        return {"uptime": points, "response_time": [dict(p) for p in points]}
+
+        # Per-service response sparklines from recent checks' metadata. Intraday
+        # raw points (last ~24 checks) so the per-service trends populate within
+        # ~15 min instead of needing multiple days of daily aggregates. Bounded
+        # row count, so the PostgREST 1000-row cap is irrelevant here.
+        sparklines: Dict[str, List[Optional[float]]] = {}
+        try:
+            spark_resp = supabase.schema('gaia').from_('service_health_checks') \
+                .select('response_time_ms, metadata') \
+                .eq('service_name', 'system') \
+                .order('checked_at', desc=True).limit(24).execute()
+            for row in reversed(spark_resp.data or []):
+                meta = row.get('metadata') if isinstance(row.get('metadata'), dict) else {}
+                svc_map = meta.get('services') if isinstance(meta.get('services'), dict) else {}
+                for name, rt in svc_map.items():
+                    sparklines.setdefault(name, []).append(_num(rt))
+                sparklines.setdefault('System', []).append(_num(row.get('response_time_ms')))
+        except Exception:
+            logger.debug("Service-health sparkline fetch failed; returning empty sparklines")
+
+        return {"uptime": points, "response_time": [dict(p) for p in points], "sparklines": sparklines}
 
     try:
         data = await get_or_set(cache_key, fetch_service_health, ttl=CACHE_TTLS.get("analytics:service-health", 30))

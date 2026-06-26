@@ -93,21 +93,47 @@ def system_heartbeat_task(self):
     start_time = datetime.utcnow()
 
     try:
+        import asyncio
         from backend.python.lib.supabase_client import supabase
 
-        # Measure a real DB response time with a lightweight ping. Time only the
-        # round-trip to the database (perf_counter for monotonic wall-clock ms).
-        ping_start = perf_counter()
+        # Capture real per-service response times by reusing the live status
+        # aggregate (Backend API, DB, Realtime, AI, Geo-NER, RSS); the per-service
+        # map powers the per-service trend sparklines. Drive the 'system'
+        # uptime/latency from the Supabase Database check specifically (a real DB
+        # query, process-independent) so a worker that hasn't warmed the AI models
+        # can't skew overall uptime. Falls back to a lightweight DB ping.
+        status_map = {'operational': 'up', 'degraded': 'degraded', 'down': 'down', 'maintenance': 'degraded'}
+        services_rt = {}
+        check_status = 'up'
+        response_time_ms = None
+        used_aggregate = False
         try:
-            supabase.schema('gaia').from_('system_config').select('config_key').limit(1).execute()
-            response_time_ms = round((perf_counter() - ping_start) * 1000, 2)
-            check_status = 'up'
-        except Exception as ping_err:
-            # Probe failed: the database/check is down. Leave response_time NULL
-            # (unknown on a failed probe) rather than recording a fake value.
-            response_time_ms = None
-            check_status = 'down'
-            logger.warning(f"Heartbeat DB ping failed (status=down): {ping_err}")
+            from backend.python.status_api import get_system_status
+            status = asyncio.run(get_system_status())
+            svc_list = status.get('services', []) if isinstance(status, dict) else []
+            for svc in svc_list:
+                rt = svc.get('response_time_ms')
+                if rt is not None and svc.get('name'):
+                    services_rt[svc['name']] = rt
+            db_svc = next((s for s in svc_list if s.get('name') == 'Supabase Database'), None)
+            if db_svc is not None:
+                check_status = status_map.get(db_svc.get('status', 'operational'), 'up')
+                response_time_ms = db_svc.get('response_time_ms')
+                used_aggregate = True
+        except Exception as agg_err:
+            logger.warning(f"Heartbeat status aggregate unavailable, using DB ping: {agg_err}")
+
+        if not used_aggregate:
+            # Fallback: time a lightweight DB round-trip (perf_counter = monotonic ms).
+            ping_start = perf_counter()
+            try:
+                supabase.schema('gaia').from_('system_config').select('config_key').limit(1).execute()
+                response_time_ms = round((perf_counter() - ping_start) * 1000, 2)
+                check_status = 'up'
+            except Exception as ping_err:
+                response_time_ms = None
+                check_status = 'down'
+                logger.warning(f"Heartbeat DB ping failed (status=down): {ping_err}")
 
         timestamp = datetime.utcnow().isoformat()
         health_row = {
@@ -118,6 +144,7 @@ def system_heartbeat_task(self):
             'metadata': {
                 'task_id': self.request.id,
                 'source': 'celery_beat',
+                'services': services_rt,
             },
             'created_at': timestamp,
         }

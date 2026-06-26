@@ -68,11 +68,14 @@ export const adminApi = {
       if (params?.role) queryParams.append('role', params.role);
       if (params?.status) queryParams.append('status', params.status);
       if (params?.organization) queryParams.append('organization', params.organization);
-      if (params?.limit) queryParams.append('limit', params.limit.toString());
-      if (params?.offset) queryParams.append('offset', params.offset.toString());
+      // Always send limit and offset for consistent server-side pagination
+      queryParams.append('limit', String(params?.limit ?? 10));
+      queryParams.append('offset', String(params?.offset ?? 0));
 
       const queryString = queryParams.toString();
-      return apiRequest(`/api/v1/admin/users${queryString ? `?${queryString}` : ''}`);
+      return apiRequest<{ users: unknown[]; total: number; limit: number; offset: number }>(
+        `/api/v1/admin/users${queryString ? `?${queryString}` : ''}`
+      );
     },
 
     create: (userData: {

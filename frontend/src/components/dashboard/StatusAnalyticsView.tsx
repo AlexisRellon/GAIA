@@ -52,6 +52,8 @@ interface ServiceHealthPoint {
 interface ServiceHealthResponse {
   uptime: ServiceHealthPoint[];
   response_time: ServiceHealthPoint[];
+  // Per-service recent response-time points (intraday) keyed by service name.
+  sparklines?: Record<string, (number | null)[]>;
 }
 
 const RANGE_OPTIONS = [
@@ -187,10 +189,11 @@ export default function StatusAnalyticsView() {
     ];
   }, [serviceHealthData, systemStatusData]);
 
-  // Recent response-time tail, reused as a per-service sparkline (system-wide signal).
-  const responseSparkData = useMemo(() => {
-    const series = serviceHealthData?.response_time ?? [];
-    return series.slice(-14).map((p) => ({ value: p.avg_response_ms }));
+  // Per-service response sparklines (intraday raw points from the backend),
+  // keyed by service name. Falls back to the system-wide trend for unknown names.
+  const sparklineFor = useMemo(() => {
+    const map = serviceHealthData?.sparklines ?? {};
+    return (name: string) => (map[name] ?? map['System'] ?? []).map((value) => ({ value }));
   }, [serviceHealthData]);
 
   const handleRefresh = () => {
@@ -259,7 +262,7 @@ export default function StatusAnalyticsView() {
             <ServiceTile
               key={service.name}
               service={service}
-              sparkData={responseSparkData}
+              sparkData={sparklineFor(service.name)}
               lastCheckedLabel={formatRelative(service.last_checked)}
               index={index}
             />
@@ -282,39 +285,40 @@ export default function StatusAnalyticsView() {
             ) : serviceHealthError ? (
               <div className="flex h-full items-center text-sm text-destructive">Unable to load uptime trend</div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%" minHeight={208}>
+              <ResponsiveContainer width="100%" height={224}>
                 <AreaChart data={serviceHealthData?.uptime ?? []} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
                   <defs>
                     <linearGradient id="uptimeFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={CHART_COLORS.steel} stopOpacity={0.55} />
-                      <stop offset="100%" stopColor={CHART_COLORS.teal} stopOpacity={0.05} />
+                      <stop offset="0%" stopColor={CHART_COLORS.steel} stopOpacity={0.12} />
+                      <stop offset="100%" stopColor={CHART_COLORS.teal} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} tickLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" strokeOpacity={0.4} vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis
                     domain={[0, 100]}
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                     tickLine={false}
-                    width={40}
+                    axisLine={false}
+                    width={36}
                   />
                   <Tooltip {...chartTooltipStyle} formatter={uptimeTooltipFormatter} />
                   <ReferenceLine
                     y={99.9}
                     stroke={CHART_COLORS.accent}
                     strokeDasharray="5 4"
-                    strokeWidth={1.5}
-                    label={{ value: 'SLA 99.9%', position: 'insideTopRight', fill: CHART_COLORS.accent, fontSize: 10 }}
+                    strokeWidth={1}
+                    label={{ value: 'SLA 99.9%', position: 'insideTopRight', fill: CHART_COLORS.accent, fontSize: 9, fontWeight: 600 }}
                   />
                   {/* No connectNulls -> null days render as honest gaps */}
                   <Area
                     type="monotone"
                     dataKey="uptime_percent"
-                    stroke={CHART_COLORS.steel}
-                    strokeWidth={2}
+                    stroke={CHART_COLORS.steelLight}
+                    strokeWidth={1.5}
                     fill="url(#uptimeFill)"
                     dot={false}
-                    activeDot={{ r: 4, fill: CHART_COLORS.steel }}
+                    activeDot={{ r: 3, fill: CHART_COLORS.steelLight, strokeWidth: 0 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -334,32 +338,51 @@ export default function StatusAnalyticsView() {
               <Skeleton className="h-full w-full" />
             ) : serviceHealthError ? (
               <div className="flex h-full items-center text-sm text-destructive">Unable to load response time</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%" minHeight={208}>
-                <AreaChart data={serviceHealthData?.response_time ?? []} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
-                  <defs>
-                    <linearGradient id="responseFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={CHART_COLORS.accent} stopOpacity={0.5} />
-                      <stop offset="100%" stopColor={CHART_COLORS.amber} stopOpacity={0.04} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} tickLine={false} />
-                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} tickLine={false} width={40} />
-                  <Tooltip {...chartTooltipStyle} formatter={responseTooltipFormatter} />
-                  {/* No connectNulls -> honest gaps for no-data days */}
-                  <Area
-                    type="monotone"
-                    dataKey="avg_response_ms"
-                    stroke={CHART_COLORS.accent}
-                    strokeWidth={2}
-                    fill="url(#responseFill)"
-                    dot={false}
-                    activeDot={{ r: 4, fill: CHART_COLORS.accent }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
+            ) : (() => {
+              // Only render points that actually have timing data; historical rows
+              // backfilled from audit_logs have null avg_response_ms (no source timing).
+              const responsePoints = (serviceHealthData?.response_time ?? []).filter(
+                (p) => p.avg_response_ms !== null && p.avg_response_ms !== undefined
+              );
+              if (responsePoints.length < 2) {
+                const firstDate = responsePoints[0]?.date;
+                return (
+                  <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {firstDate
+                        ? `Response time tracking started ${firstDate}. More data will appear over the coming days.`
+                        : 'Response time data is being collected. Check back shortly.'}
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <ResponsiveContainer width="100%" height={224}>
+                  <AreaChart data={responsePoints} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+                    <defs>
+                      <linearGradient id="responseFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={CHART_COLORS.accent} stopOpacity={0.12} />
+                        <stop offset="100%" stopColor={CHART_COLORS.amber} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" strokeOpacity={0.4} vertical={false} />
+                    <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                    <Tooltip {...chartTooltipStyle} formatter={responseTooltipFormatter} />
+                    <Area
+                      type="monotone"
+                      dataKey="avg_response_ms"
+                      stroke={CHART_COLORS.accent}
+                      strokeWidth={1.5}
+                      fill="url(#responseFill)"
+                      dot={false}
+                      connectNulls
+                      activeDot={{ r: 3, fill: CHART_COLORS.accent, strokeWidth: 0 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
