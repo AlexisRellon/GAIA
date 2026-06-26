@@ -132,13 +132,31 @@ async def check_supabase_database() -> ServiceStatusResponse:
         )
 
 
+# The Realtime HTTP health probe is slow on Supabase's free tier (~4s) and its
+# state rarely changes, so the /status aggregate would otherwise be gated on it
+# every 15s cache-miss. Cache a *successful* (reachable) result in-process for a
+# few minutes; failures are never cached so a real outage still surfaces promptly.
+_realtime_probe_cache: dict = {"result": None, "ts": 0.0}
+_REALTIME_PROBE_TTL_S = 300.0
+
+
 async def check_supabase_realtime() -> ServiceStatusResponse:
     """Check Supabase Realtime connectivity with an actual HTTP probe.
 
     Hits the Realtime REST health-like endpoint on the project's Supabase URL.
     Any response below HTTP 500 means the Realtime server is reachable and
     responding (even a 401/404 indicates the service is up).
+
+    Free-tier probe latency is ~4s, so a reachable result is cached in-process
+    (see _REALTIME_PROBE_TTL_S) to keep /status responsive.
     """
+    import time
+    if (
+        _realtime_probe_cache["result"] is not None
+        and (time.monotonic() - _realtime_probe_cache["ts"]) < _REALTIME_PROBE_TTL_S
+    ):
+        return _realtime_probe_cache["result"]
+
     start_time = datetime.now()
     supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
     anon_key = os.getenv("SUPABASE_ANON_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -161,7 +179,7 @@ async def check_supabase_realtime() -> ServiceStatusResponse:
             response_time = (datetime.now() - start_time).total_seconds() * 1000
 
             if response.status_code < 500:
-                return ServiceStatusResponse(
+                result = ServiceStatusResponse(
                     name="Supabase Realtime",
                     status=ServiceStatus.OPERATIONAL,
                     message=f"Realtime service reachable (HTTP {response.status_code})",
@@ -172,6 +190,9 @@ async def check_supabase_realtime() -> ServiceStatusResponse:
                         "http_status": response.status_code,
                     },
                 )
+                _realtime_probe_cache["result"] = result
+                _realtime_probe_cache["ts"] = time.monotonic()
+                return result
             return ServiceStatusResponse(
                 name="Supabase Realtime",
                 status=ServiceStatus.DEGRADED,

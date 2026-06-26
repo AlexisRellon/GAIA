@@ -78,7 +78,7 @@ const triggerBrowserDownload = (blob: Blob, filename: string) => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  window.URL.revokeObjectURL(url);
+  setTimeout(() => window.URL.revokeObjectURL(url), 100);
 };
 
 export const HazardExport = ({ hazards, onExported }: HazardExportProps) => {

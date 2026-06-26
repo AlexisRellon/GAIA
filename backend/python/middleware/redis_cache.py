@@ -50,21 +50,36 @@ MAX_TTL = 3600  # 1 hour max
 COMPRESSION_THRESHOLD = 1024  # Compress if > 1KB
 
 # Cache TTLs for different data types (seconds)
+#
+# Analytics entries are now invalidation-backed: hazard/report writes call
+# invalidate_pattern("analytics:*"), and the heartbeat invalidates the health
+# keys. The TTLs below are therefore safety-net backstops (bounding any
+# unhandled write path), not the primary freshness mechanism -- so the
+# aggregate analytics views are raised to 300-600s to serve from droplet-local
+# Redis across the no-change window. Genuinely near-real-time feeds
+# (analytics:alerts, hazards:nearby) stay short on purpose. MAX_TTL caps all.
 CACHE_TTLS = {
-    "analytics:stats": 30,        # Dashboard stats - refresh every 30s
-    "analytics:trends": 120,      # Trend data - 2 minutes
-    "analytics:regions": 180,     # Region data - 3 minutes (rarely changes)
-    "analytics:distribution": 120, # Distribution - 2 minutes
-    "analytics:alerts": 15,       # Recent alerts - 15 seconds
-    "admin:activity": 30,         # Activity logs - 30 seconds
-    "admin:audit": 60,            # Audit logs - 1 minute
-    "admin:users": 60,            # User list - 1 minute
-    "admin:triage": 30,           # Triage queue - 30 seconds
-    "hazards:list": 15,           # Hazard list - 15 seconds (real-time important)
-    "hazards:detail": 30,         # Single hazard - 30 seconds
-    "hazards:nearby": 10,         # Nearby hazards - 10 seconds (location-sensitive)
-    "rss:feeds": 60,              # RSS feeds - 1 minute
-    "config:system": 300,         # System config - 5 minutes
+    "analytics:stats": 300,            # Dashboard stats - changes only on hazard/report writes (invalidated)
+    "analytics:trends": 600,           # Trend data - slow-moving, invalidated on writes
+    "analytics:regions": 600,          # Region data - rarely changes, invalidated on writes
+    "analytics:distribution": 300,     # Distribution - invalidated on writes
+    "analytics:source-breakdown": 300, # Source breakdown - invalidated on writes
+    "analytics:confidence-by-type": 600, # Confidence by type - slow-moving, invalidated on writes
+    "analytics:source-accuracy": 600,  # Source accuracy - slow-moving, invalidated on writes
+    "analytics:processing-rate": 300,  # Processing rate - invalidated on writes
+    "analytics:duplicate-rate": 300,   # Duplicate rate - invalidated on writes
+    "analytics:service-health": 300,   # Service health - heartbeat invalidates on each new check
+    "analytics:system-health": 60,     # System health snapshot - lightweight, short backstop
+    "analytics:alerts": 15,            # Recent alerts - intentionally near-real-time
+    "admin:activity": 30,              # Activity logs - 30 seconds
+    "admin:audit": 60,                 # Audit logs - 1 minute
+    "admin:users": 60,                 # User list - 1 minute
+    "admin:triage": 30,                # Triage queue - 30 seconds
+    "hazards:list": 15,                # Hazard list - 15 seconds (real-time important)
+    "hazards:detail": 30,              # Single hazard - 30 seconds
+    "hazards:nearby": 10,              # Nearby hazards - 10 seconds (location-sensitive)
+    "rss:feeds": 60,                   # RSS feeds - 1 minute
+    "config:system": 300,              # System config - 5 minutes
 }
 
 # =============================================================================

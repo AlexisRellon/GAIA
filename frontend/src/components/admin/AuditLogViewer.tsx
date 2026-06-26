@@ -33,6 +33,8 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Checkbox } from '../ui/checkbox';
+import { Label } from '../ui/label';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { TableSkeleton } from '../dashboard/AnalyticsSkeleton';
@@ -115,6 +117,8 @@ const AuditLogViewer: React.FC = () => {
   const [resourceTypeFilter, setResourceTypeFilter] = useState('all');
   const [successFilter, setSuccessFilter] = useState<boolean | null>(null);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  // Default OFF: system_event heartbeats are ~92% of rows and are hidden by default.
+  const [showSystem, setShowSystem] = useState(false);
 
   // Details dialog state
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
@@ -127,11 +131,12 @@ const AuditLogViewer: React.FC = () => {
 
   // Fetch audit logs with React Query
   const { data: rawLogs, isLoading, error: queryError } = useQuery({
-    queryKey: ['admin', 'auditLogs', { emailFilter, actionFilter, resourceTypeFilter, successFilter, dateRange }],
+    queryKey: ['admin', 'auditLogs', { emailFilter, actionFilter, resourceTypeFilter, successFilter, dateRange, showSystem }],
     queryFn: async () => {
       const params: Record<string, string | number | boolean> = {
         limit: 500,
         offset: 0,
+        exclude_system: !showSystem,
       };
 
       if (emailFilter) params.user_email = emailFilter;
@@ -146,6 +151,7 @@ const AuditLogViewer: React.FC = () => {
     staleTime: 30000,
     refetchOnMount: true,
     refetchOnWindowFocus: false,
+    placeholderData: (prev: AuditLog[] | undefined) => prev,
   });
 
   const logs = useMemo(() => rawLogs ?? [], [rawLogs]);
@@ -307,9 +313,24 @@ const AuditLogViewer: React.FC = () => {
       <CardContent>
         {/* Filters */}
         <div className="space-y-4 mb-6">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Filters</span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filters</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-system-events"
+                checked={showSystem}
+                onCheckedChange={(checked) => {
+                  setShowSystem(checked === true);
+                  setPagination(prev => ({ ...prev, pageIndex: 0 }));
+                }}
+              />
+              <Label htmlFor="show-system-events" className="cursor-pointer text-sm font-normal text-muted-foreground">
+                Show system events
+              </Label>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -419,7 +440,7 @@ const AuditLogViewer: React.FC = () => {
           </div>
 
           {/* Clear Filters */}
-          {(emailFilter || actionFilter !== 'all' || resourceTypeFilter !== 'all' || successFilter !== null || dateRange.from || dateRange.to) && (
+          {(emailFilter || actionFilter !== 'all' || resourceTypeFilter !== 'all' || successFilter !== null || dateRange.from || dateRange.to || showSystem) && (
             <Button
               variant="ghost"
               size="sm"
@@ -429,6 +450,7 @@ const AuditLogViewer: React.FC = () => {
                 setResourceTypeFilter('all');
                 setSuccessFilter(null);
                 setDateRange({});
+                setShowSystem(false);
               }}
             >
               Clear all filters

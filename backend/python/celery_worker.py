@@ -15,9 +15,8 @@ import os
 import logging
 from celery import Celery
 from celery.schedules import crontab
-from datetime import datetime, timedelta
-
-from backend.python.middleware.audit_integrity import compute_checksum_for_log, GENESIS_HASH
+from datetime import datetime, timedelta, timezone
+from time import perf_counter
 
 # Configure logging
 logging.basicConfig(
@@ -80,75 +79,107 @@ logger.info(f"Celery configured: RSS feeds will be processed every {RSS_UPDATE_I
 
 @celery_app.task(name='celery_worker.system_heartbeat_task', bind=True)
 def system_heartbeat_task(self):
-    """Write a tamper-evident heartbeat entry to audit_logs.
+    """Record a durable service-health snapshot in gaia.service_health_checks.
 
-    This keeps the service-health dashboard populated even on days when no
-    other system telemetry is generated.
+    Measures a REAL database response time by timing a lightweight
+    gaia.system_config ping (mirrors status_api.check_supabase_database), then
+    persists one row to the dedicated health table. This is the source of truth
+    for the uptime/response-time dashboard and survives restarts, downtime and
+    audit pruning. It no longer writes to audit_logs (keeps the audit trail
+    clean and preserves its tamper-evident checksum chain untouched).
     """
     logger.info(f"Starting system heartbeat (Task ID: {self.request.id})")
 
-    start_time = datetime.utcnow()
+    start_time = datetime.now(timezone.utc)
 
     try:
+        import asyncio
         from backend.python.lib.supabase_client import supabase
 
-        timestamp = datetime.utcnow().isoformat()
-        metadata = {
-            'task_id': self.request.id,
-            'heartbeat_type': 'system',
-            'source': 'celery_beat',
-            'response_time_ms': 0,
-        }
+        async def _run_heartbeat():
+            status_map = {'operational': 'up', 'degraded': 'degraded', 'down': 'down', 'maintenance': 'degraded'}
+            services_rt = {}
+            check_status = 'up'
+            response_time_ms = None
+            used_aggregate = False
+            try:
+                from backend.python.status_api import get_system_status
+                status = await get_system_status()
+                svc_list = status.get('services', []) if isinstance(status, dict) else []
+                for svc in svc_list:
+                    rt = svc.get('response_time_ms')
+                    if rt is not None and svc.get('name'):
+                        services_rt[svc['name']] = rt
+                db_svc = next((s for s in svc_list if s.get('name') == 'Supabase Database'), None)
+                if db_svc is not None:
+                    check_status = status_map.get(db_svc.get('status', 'operational'), 'up')
+                    response_time_ms = db_svc.get('response_time_ms')
+                    used_aggregate = True
+            except Exception as agg_err:
+                logger.warning(f"Heartbeat status aggregate unavailable, using DB ping: {agg_err}")
 
-        log_entry = {
-            'event_type': 'system_event',
-            'severity': 'INFO',
-            'action': 'system_heartbeat',
-            'action_description': 'Scheduled system heartbeat',
-            'resource_type': 'system',
-            'resource_id': 'heartbeat',
-            'user_id': None,
-            'user_email': 'system@agaila.local',
-            'user_role': 'system',
-            'ip_address': None,
-            'user_agent': 'celery-beat',
-            'created_at': timestamp,
-            'first_occurred_at': timestamp,
-            'last_occurred_at': timestamp,
-            'occurrence_count': 1,
-            'status': 'success',
-            'success': True,
-            'context': metadata,
-            'metadata': metadata,
-            'old_values': {},
-            'new_values': {},
-        }
+            if not used_aggregate:
+                # Fallback: time a lightweight DB round-trip (perf_counter = monotonic ms).
+                ping_start = perf_counter()
+                try:
+                    supabase.schema('gaia').from_('system_config').select('config_key').limit(1).execute()
+                    response_time_ms = round((perf_counter() - ping_start) * 1000, 2)
+                    check_status = 'up'
+                except Exception as ping_err:
+                    response_time_ms = None
+                    check_status = 'down'
+                    logger.warning(f"Heartbeat DB ping failed (status=down): {ping_err}")
 
-        previous_log_response = supabase.schema('gaia').from_('audit_logs').select('checksum').order('created_at', desc=True).order('id', desc=True).limit(1).execute()
-        previous_hash = previous_log_response.data[0]['checksum'] if previous_log_response.data and previous_log_response.data[0].get('checksum') else GENESIS_HASH
+            timestamp = datetime.now(timezone.utc).isoformat()
+            health_row = {
+                'checked_at': timestamp,
+                'service_name': 'system',
+                'status': check_status,
+                'response_time_ms': response_time_ms,
+                'metadata': {
+                    'task_id': self.request.id,
+                    'source': 'celery_beat',
+                    'services': services_rt,
+                },
+                'created_at': timestamp,
+            }
 
-        log_entry['checksum'] = compute_checksum_for_log(
-            action=log_entry['action'],
-            user_id=log_entry['user_id'],
-            user_email=log_entry['user_email'],
-            user_role=log_entry['user_role'],
-            resource_type=log_entry['resource_type'],
-            resource_id=log_entry['resource_id'],
-            ip_address=log_entry['ip_address'],
-            details=log_entry['metadata'],
-            timestamp=timestamp,
-            previous_hash=previous_hash,
+            response = supabase.schema('gaia').from_('service_health_checks').insert(health_row).execute()
+            if not response.data:
+                raise RuntimeError('service_health_checks insert returned no data')
+
+            # Retention: prune snapshots older than 120 days (gives headroom over the
+            # 90-day dashboard read window). No separate scheduler needed.
+            try:
+                cutoff = (datetime.now(timezone.utc) - timedelta(days=120)).isoformat()
+                supabase.schema('gaia').from_('service_health_checks').delete().lt('checked_at', cutoff).execute()
+            except Exception as prune_err:
+                logger.warning(f"Heartbeat retention prune failed (non-fatal): {prune_err}")
+
+            # Change-based cache invalidation: the freshly written check makes the
+            # service-health charts refresh on the next read, then serve from Redis
+            # across the 5-minute gap until the next heartbeat.
+            try:
+                from backend.python.middleware.redis_cache import invalidate_pattern
+                await invalidate_pattern("analytics:service-health:*")
+                await invalidate_pattern("analytics:system-health:*")
+            except Exception as inv_err:
+                logger.warning(f"Heartbeat cache invalidation failed (non-fatal): {inv_err}")
+
+            return check_status, response_time_ms
+
+        check_status, response_time_ms = asyncio.run(_run_heartbeat())
+
+        duration_ms = round((datetime.now(timezone.utc) - start_time).total_seconds() * 1000, 2)
+        logger.info(
+            f"System heartbeat recorded (status={check_status}, "
+            f"response_time_ms={response_time_ms}) in {duration_ms} ms"
         )
-
-        response = supabase.schema('gaia').from_('audit_logs').insert(log_entry).execute()
-        if not response.data:
-            raise RuntimeError('heartbeat insert returned no data')
-
-        duration_ms = round((datetime.utcnow() - start_time).total_seconds() * 1000, 2)
-        logger.info(f"System heartbeat logged successfully in {duration_ms} ms")
         return {
             'status': 'success',
             'task_id': self.request.id,
+            'check_status': check_status,
+            'response_time_ms': response_time_ms,
             'duration_ms': duration_ms,
         }
     except Exception as exc:

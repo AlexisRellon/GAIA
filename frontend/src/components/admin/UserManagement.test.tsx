@@ -165,7 +165,12 @@ describe('UserManagement Component', () => {
     (supabase.channel as unknown as ReturnType<typeof vi.fn>).mockReturnValue(mockChannel);
 
     // Mock adminApi.users.list
-    const listFn: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(mockUsers);
+    const listFn: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({
+      users: mockUsers,
+      total: mockUsers.length,
+      limit: 10,
+      offset: 0,
+    });
     adminApi.users.list = listFn as never;
   });
 
