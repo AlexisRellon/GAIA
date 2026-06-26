@@ -1430,8 +1430,13 @@ async def delete_rss_article(
             event_type="RSS_ARTICLE_DELETED"
         )
 
-        # Invalidate hazards cache since an article (hazard) was deleted
-        await invalidate_pattern("hazards:*")
+        # Invalidate hazards cache since an article (hazard) was deleted;
+        # analytics too so dashboards reflect the removal immediately.
+        try:
+            await invalidate_pattern("hazards:*")
+            await invalidate_pattern("analytics:*")
+        except Exception as cache_err:
+            logger.warning(f"Cache invalidation failed after RSS article deletion: {cache_err}")
 
         return Response(status_code=status.HTTP_204_NO_CONTENT)
         
@@ -1506,9 +1511,14 @@ async def bulk_delete_rss_articles(
             event_type="RSS_ARTICLES_BULK_DELETED"
         )
 
-        # Invalidate hazards cache since articles (hazards) were deleted
-        await invalidate_pattern("hazards:*")
-        
+        # Invalidate hazards cache since articles (hazards) were deleted;
+        # analytics too so dashboards reflect the removals immediately.
+        try:
+            await invalidate_pattern("hazards:*")
+            await invalidate_pattern("analytics:*")
+        except Exception as cache_err:
+            logger.warning(f"Cache invalidation failed after RSS bulk deletion: {cache_err}")
+
         return {
             'deleted_count': deleted_count,
             'deleted_ids': found_ids,
@@ -1642,8 +1652,13 @@ async def update_rss_article(
             event_type="RSS_ARTICLE_UPDATED"
         )
 
-        # Invalidate hazards cache since an article (hazard) was updated
-        await invalidate_pattern("hazards:*")
+        # Invalidate hazards cache since an article (hazard) was updated;
+        # analytics too so dashboards reflect the change immediately.
+        try:
+            await invalidate_pattern("hazards:*")
+            await invalidate_pattern("analytics:*")
+        except Exception as cache_err:
+            logger.warning(f"Cache invalidation failed after RSS article update: {cache_err}")
 
         return updated_data
         

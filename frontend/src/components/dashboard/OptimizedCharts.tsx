@@ -161,15 +161,25 @@ export const OptimizedTrendsChart = memo<OptimizedTrendsChartProps>(
     return (
       <div>
         <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+          <AreaChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+            <defs>
+              {hazardTypes.map((item) => (
+                <linearGradient key={`grad-${item.hazard_type}`} id={`trend-${item.hazard_type}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={item.color} stopOpacity={0.7} />
+                  <stop offset="100%" stopColor={item.color} stopOpacity={0.08} />
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
             <XAxis
               dataKey="date"
               className="text-xs"
+              tickLine={false}
               tick={{ fill: 'hsl(var(--muted-foreground))' }}
             />
             <YAxis
               className="text-xs"
+              tickLine={false}
               tick={{ fill: 'hsl(var(--muted-foreground))' }}
             >
               <Label
@@ -194,8 +204,8 @@ export const OptimizedTrendsChart = memo<OptimizedTrendsChartProps>(
                 dataKey={item.hazard_type}
                 stackId="1"
                 stroke={item.color}
-                fill={item.color}
-                fillOpacity={0.6}
+                strokeWidth={1.5}
+                fill={`url(#trend-${item.hazard_type})`}
               />
             ))}
           </AreaChart>
@@ -331,7 +341,7 @@ export const OptimizedDistributionBarChart = memo<OptimizedDistributionBarChartP
               formatter={(value) => [value ?? 0, 'Count']}
               labelFormatter={formatLabelForTooltip}
             />
-            <Bar dataKey="count">
+            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
               {data.map((entry, index) => (
                 <Cell
                   key={`bar-${index}`}
@@ -399,7 +409,7 @@ export const OptimizedRegionChart = memo<OptimizedRegionChartProps>(
               }}
             />
             <Bar dataKey="active_count" name="Active" stackId="region" fill={REGION_COLORS.active} />
-            <Bar dataKey="resolved_count" name="Resolved" stackId="region" fill={REGION_COLORS.resolved} />
+            <Bar dataKey="resolved_count" name="Resolved" stackId="region" fill={REGION_COLORS.resolved} radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
         {renderColorLegend(regionLegend)}
@@ -539,7 +549,7 @@ export const OptimizedSourceBarChart = memo<OptimizedSourceBarChartProps>(
               formatter={(value) => [value ?? 0, 'Count']}
               labelFormatter={(label) => formatSourceType(String(label))}
             />
-            <Bar dataKey="count">
+            <Bar dataKey="count" radius={[4, 4, 0, 0]}>
               {data.map((entry, index) => (
                 <Cell
                   key={`src-bar-${index}`}

@@ -1,28 +1,38 @@
-import React, { useState } from 'react';
+/**
+ * Service Health Analytics (CD-01) — ops command console
+ *
+ * Mission-control redesign on the GAIA brand: navy/steel status hero with a live
+ * pulse + count-up KPIs, compact service tiles with response sparklines, and
+ * gradient-filled area charts that render gaps honestly (null days break the line
+ * instead of being drawn to 0/100). Range control lives in the view header.
+ */
+
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '../ui/card';
-import { Badge } from '../ui/badge';
+  Area,
+  AreaChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+  ResponsiveContainer,
+} from 'recharts';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Activity, RefreshCw, AlertCircle, Pause, Play } from 'lucide-react';
 import { apiRequest, API_BASE_URL } from '../../lib/api';
-import { Activity, RefreshCw, AlertCircle, CheckCircle2, AlertTriangle, Wrench } from 'lucide-react';
 import { useAdaptiveRefetchInterval, usePageVisibility } from '../../hooks/useAnalytics';
-
-interface ServiceStatus {
-  name: string;
-  status: 'operational' | 'degraded' | 'down' | 'maintenance';
-  message: string;
-  last_checked: string;
-  response_time_ms?: number;
-  details?: Record<string, unknown>;
-}
+import { CHART_COLORS, SectionHeader, SegmentedControl } from './chartTheme';
+import {
+  StatusHero,
+  ServiceTile,
+  ServiceTilesSkeleton,
+  getStatusVisual,
+  type ServiceStatus,
+} from './StatusHealthPanels';
 
 interface SystemStatusResponse {
   overall_status: 'operational' | 'degraded' | 'down' | 'maintenance';
@@ -35,56 +45,96 @@ interface ServiceHealthPoint {
   date: string;
   uptime_percent: number | null;
   avg_response_ms: number | null;
+  // Stream A adds this opportunistically; never assume non-null.
+  status?: 'up' | 'degraded' | 'down' | 'no_data';
 }
 
 interface ServiceHealthResponse {
   uptime: ServiceHealthPoint[];
   response_time: ServiceHealthPoint[];
+  // Per-service recent response-time points (intraday) keyed by service name.
+  sparklines?: Record<string, (number | null)[]>;
 }
 
-const fetchServiceHealth = async (days: number) => {
-  return apiRequest<ServiceHealthResponse>(`/api/v1/analytics/service-health?days=${days}`);
-};
+const RANGE_OPTIONS = [
+  { label: '7d', value: 7 },
+  { label: '30d', value: 30 },
+  { label: '90d', value: 90 },
+];
+
+const fetchServiceHealth = (days: number) =>
+  apiRequest<ServiceHealthResponse>(`/api/v1/analytics/service-health?days=${days}`);
 
 const fetchSystemStatus = async (): Promise<SystemStatusResponse> => {
   const response = await fetch(`${API_BASE_URL}/api/v1/status`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch system status');
-  }
+  if (!response.ok) throw new Error('Failed to fetch system status');
   return response.json();
 };
 
-/** Recharts default tooltip uses a white panel while inheriting theme label color — invisible in dark mode. */
-const serviceHealthChartTooltip = {
+/** Themed Recharts tooltip; surfaces "No data" for honest gaps (status === 'no_data'). */
+const chartTooltipStyle = {
   contentStyle: {
     backgroundColor: 'hsl(var(--popover))',
     border: '1px solid hsl(var(--border))',
     borderRadius: 'var(--radius)',
     boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
   },
-  labelStyle: {
-    color: 'hsl(var(--popover-foreground))',
-    fontWeight: 600,
-    marginBottom: 4,
-  },
+  labelStyle: { color: 'hsl(var(--popover-foreground))', fontWeight: 600, marginBottom: 4 },
+};
+
+const formatRelative = (timestamp: string): string => {
+  try {
+    const diffSec = Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000);
+    if (diffSec < 60) return `${diffSec}s ago`;
+    if (diffSec < 3600) {
+      const m = Math.floor(diffSec / 60);
+      return `${m}m ago`;
+    }
+    if (diffSec < 86400) {
+      const h = Math.floor(diffSec / 3600);
+      return `${h}h ago`;
+    }
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return timestamp;
+  }
+};
+
+// Use recharts' own formatter type so params are contextually typed (recharts v3).
+// We read the metric off the typed datum (item.payload) rather than the loosely
+// typed `value`, so null/no-data days render as "No data" instead of 0.
+type TooltipFormatter = NonNullable<React.ComponentProps<typeof Tooltip>['formatter']>;
+
+const uptimeTooltipFormatter: TooltipFormatter = (_value, _name, item) => {
+  const point = item?.payload as ServiceHealthPoint | undefined;
+  if (!point || point.status === 'no_data' || point.uptime_percent == null) return ['No data', 'Uptime'];
+  return [`${point.uptime_percent.toFixed(2)}%`, 'Uptime'];
+};
+
+const responseTooltipFormatter: TooltipFormatter = (_value, _name, item) => {
+  const point = item?.payload as ServiceHealthPoint | undefined;
+  if (!point || point.status === 'no_data' || point.avg_response_ms == null) return ['No data', 'Avg response'];
+  return [`${Math.round(point.avg_response_ms)} ms`, 'Avg response'];
 };
 
 export default function StatusAnalyticsView() {
   const [days, setDays] = useState<number>(30);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
 
-  const refreshInterval = 30000;
+  // D3-lite: lengthen the blind fallback poll (was 30s) now that backend invalidation
+  // drives freshness. Realtime-channel wiring deferred (would require hook changes).
+  const baseInterval = 120000;
   const isPageVisible = usePageVisibility();
   const pollingEnabled = autoRefresh && isPageVisible;
   const serviceHealthRefetchInterval = useAdaptiveRefetchInterval({
     enabled: pollingEnabled,
-    baseInterval: refreshInterval,
+    baseInterval,
     maxInterval: 5 * 60 * 1000,
     backoffMultiplier: 1.5,
   });
   const systemStatusRefetchInterval = useAdaptiveRefetchInterval({
     enabled: pollingEnabled,
-    baseInterval: refreshInterval,
+    baseInterval,
     maxInterval: 5 * 60 * 1000,
     backoffMultiplier: 1.5,
   });
@@ -92,6 +142,7 @@ export default function StatusAnalyticsView() {
   const {
     data: serviceHealthData,
     isLoading: isServiceHealthLoading,
+    isFetching: isServiceHealthFetching,
     error: serviceHealthError,
     refetch: refetchServiceHealth,
   } = useQuery<ServiceHealthResponse, Error>({
@@ -105,6 +156,7 @@ export default function StatusAnalyticsView() {
   const {
     data: systemStatusData,
     isLoading: isSystemStatusLoading,
+    isFetching: isSystemStatusFetching,
     error: systemStatusError,
     refetch: refetchSystemStatus,
   } = useQuery<SystemStatusResponse, Error>({
@@ -115,286 +167,236 @@ export default function StatusAnalyticsView() {
     refetchInterval: systemStatusRefetchInterval,
   });
 
-  const formatUptime = (seconds?: number): string => {
-    if (seconds === undefined || seconds === null) return 'N/A';
-    const dayCount = Math.floor(seconds / 86400);
-    const hourCount = Math.floor((seconds % 86400) / 3600);
-    const minuteCount = Math.floor((seconds % 3600) / 60);
+  const isFetching = isServiceHealthFetching || isSystemStatusFetching;
 
-    if (dayCount > 0) return `${dayCount}d ${hourCount}h ${minuteCount}m`;
-    if (hourCount > 0) return `${hourCount}h ${minuteCount}m`;
-    return `${minuteCount}m`;
-  };
+  // Latest non-null uptime / response readings drive the hero count-up.
+  const heroMetrics = useMemo(() => {
+    const uptimeSeries = serviceHealthData?.uptime ?? [];
+    const responseSeries = serviceHealthData?.response_time ?? [];
+    const lastDefined = <T extends ServiceHealthPoint>(arr: T[], key: 'uptime_percent' | 'avg_response_ms') =>
+      [...arr].reverse().find((p) => p[key] !== null && p[key] !== undefined)?.[key] ?? null;
 
-  const formatLastChecked = (timestamp: string): string => {
-    try {
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffSec = Math.floor(diffMs / 1000);
+    const latestUptime = lastDefined(uptimeSeries, 'uptime_percent');
+    const latestResponse = lastDefined(responseSeries, 'avg_response_ms');
+    const services = systemStatusData?.services ?? [];
+    const servicesUp = services.filter((s) => s.status === 'operational').length;
 
-      if (diffSec < 60) {
-        return `${diffSec} seconds ago`;
-      }
-      if (diffSec < 3600) {
-        const minuteCount = Math.floor(diffSec / 60);
-        return `${minuteCount} minute${minuteCount !== 1 ? 's' : ''} ago`;
-      }
-      return date.toLocaleString();
-    } catch {
-      return timestamp;
-    }
-  };
+    return [
+      { label: 'Latest Uptime', value: latestUptime ?? 0, decimals: 1, suffix: '%', available: latestUptime !== null },
+      { label: 'Avg Response', value: latestResponse ?? 0, decimals: 0, suffix: ' ms', available: latestResponse !== null },
+      { label: 'Services Up', value: servicesUp, decimals: 0, available: services.length > 0 },
+      { label: 'Total Services', value: services.length, decimals: 0, available: services.length > 0 },
+    ];
+  }, [serviceHealthData, systemStatusData]);
 
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case 'operational':
-        return {
-          color: 'bg-green-500',
-          textColor: 'text-green-700 dark:text-green-300',
-          bgColor: 'bg-green-50 dark:bg-green-950/40',
-          borderColor: 'border-green-200 dark:border-green-800',
-          icon: CheckCircle2,
-          label: 'Operational',
-        };
-      case 'degraded':
-        return {
-          color: 'bg-yellow-500',
-          textColor: 'text-yellow-800 dark:text-yellow-200',
-          bgColor: 'bg-yellow-50 dark:bg-yellow-950/35',
-          borderColor: 'border-yellow-200 dark:border-yellow-800',
-          icon: AlertTriangle,
-          label: 'Degraded',
-        };
-      case 'down':
-        return {
-          color: 'bg-red-500',
-          textColor: 'text-red-700 dark:text-red-300',
-          bgColor: 'bg-red-50 dark:bg-red-950/40',
-          borderColor: 'border-red-200 dark:border-red-900',
-          icon: AlertCircle,
-          label: 'Down',
-        };
-      case 'maintenance':
-        return {
-          color: 'bg-blue-500',
-          textColor: 'text-blue-700 dark:text-blue-300',
-          bgColor: 'bg-blue-50 dark:bg-blue-950/40',
-          borderColor: 'border-blue-200 dark:border-blue-800',
-          icon: Wrench,
-          label: 'Under Maintenance',
-        };
-      default:
-        return {
-          color: 'bg-gray-500',
-          textColor: 'text-muted-foreground',
-          bgColor: 'bg-muted/60 dark:bg-muted/40',
-          borderColor: 'border-border',
-          icon: AlertCircle,
-          label: 'Unknown',
-        };
-    }
-  };
-
-  const overallConfig = systemStatusData ? getStatusConfig(systemStatusData.overall_status) : null;
+  // Per-service response sparklines (intraday raw points from the backend),
+  // keyed by service name.
+  const sparklineFor = useMemo(() => {
+    const map = serviceHealthData?.sparklines ?? {};
+    return (name: string) => (map[name] ?? []).map((value) => ({ value }));
+  }, [serviceHealthData]);
 
   const handleRefresh = () => {
     refetchServiceHealth();
     refetchSystemStatus();
   };
 
+  const rangeControls = (
+    <>
+      <SegmentedControl
+        options={RANGE_OPTIONS}
+        value={days}
+        onChange={setDays}
+        ariaLabel="Select time range for service health charts"
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setAutoRefresh((prev) => !prev)}
+        className="gap-1.5"
+        aria-pressed={autoRefresh}
+      >
+        {autoRefresh ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+        <span className="hidden sm:inline">{autoRefresh ? 'Live' : 'Paused'}</span>
+      </Button>
+      <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-1.5" disabled={isFetching}>
+        <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+        <span className="hidden sm:inline">Refresh</span>
+      </Button>
+    </>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Activity className="h-5 w-5 dark:text-white text-primary" />
-          <h2 className="text-2xl font-semibold dark:text-white text-primary">Service Health Analytics</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setAutoRefresh(!autoRefresh)}>
-            Auto-refresh: {autoRefresh ? 'ON' : 'OFF'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleRefresh}>
-            <RefreshCw className={`h-4 w-4`} />
-            <span className="ml-2">Refresh</span>
-          </Button>
-        </div>
-      </div>
+      <SectionHeader
+        title="Service Health Analytics"
+        description="Live availability, response latency, and per-service status across the GAIA pipeline."
+        icon={<Activity className="h-5 w-5 text-accent" />}
+        actions={rangeControls}
+      />
 
-      {overallConfig && (
-        <Card className={`${overallConfig.bgColor} ${overallConfig.borderColor} border-2`}>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4 flex-wrap">
-              <overallConfig.icon className={`h-8 w-8 ${overallConfig.textColor}`} />
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <span className="font-semibold text-base sm:text-lg text-foreground">Overall System Status:</span>
-                  <Badge variant="outline" className={`${overallConfig.textColor} border-current/40`}>
-                    {overallConfig.label}
-                  </Badge>
-                </div>
-                {systemStatusData?.uptime_seconds != null && (
-                  <p className="text-sm text-muted-foreground">
-                    Uptime: {formatUptime(systemStatusData.uptime_seconds)}
-                  </p>
-                )}
-                {systemStatusData?.timestamp && (
-                  <p className="text-xs text-muted-foreground sm:hidden mt-1">
-                    Last updated: {formatLastChecked(systemStatusData.timestamp)}
-                  </p>
-                )}
-              </div>
-              {systemStatusData?.timestamp && (
-                <p className="hidden sm:block text-sm text-muted-foreground">
-                  Last updated: {formatLastChecked(systemStatusData.timestamp)}
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
+      {/* Status hero */}
       {isSystemStatusLoading ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Card key={i}>
-              <CardHeader>
-                <Skeleton className="h-6 w-32" />
-                <Skeleton className="h-4 w-48 mt-2" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4 mt-2" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Skeleton className="h-44 w-full rounded-xl" />
       ) : systemStatusError ? (
-        <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/35">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
-              <AlertCircle className="h-5 w-5" />
-              <span>Failed to load system status. Please try again later.</span>
-            </div>
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="flex items-center gap-2 pt-6 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            <span>Failed to load system status. Please try again later.</span>
           </CardContent>
         </Card>
       ) : systemStatusData ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {systemStatusData.services.map((service) => {
-            const config = getStatusConfig(service.status);
+        <StatusHero
+          overallStatus={systemStatusData.overall_status}
+          metrics={heroMetrics}
+          lastChecked={systemStatusData.timestamp ? formatRelative(systemStatusData.timestamp) : '—'}
+        />
+      ) : null}
 
-            return (
-              <Card
-                key={service.name}
-                className={`${config.bgColor} ${config.borderColor} border`}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{service.name}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <div className={`h-3 w-3 rounded-full ${config.color}`} />
-                      <Badge variant="outline" className={config.textColor}>
-                        {config.label}
-                      </Badge>
-                    </div>
-                  </div>
-                  <CardDescription className="mt-2">
-                    {service.message}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 text-sm">
-                    {service.response_time_ms !== undefined && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Response Time:</span>
-                        <span className="font-medium">{service.response_time_ms} ms</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Last Checked:</span>
-                      <span className="font-medium">{formatLastChecked(service.last_checked)}</span>
-                    </div>
-                    {service.details && Object.keys(service.details).length > 0 && (
-                      <div className="mt-3 pt-3 border-t">
-                        <details className="cursor-pointer">
-                          <summary className="text-muted-foreground hover:text-foreground">
-                            View Details
-                          </summary>
-                          <pre className="mt-2 text-xs bg-background p-2 rounded overflow-auto max-h-32">
-                            {JSON.stringify(service.details, null, 2)}
-                          </pre>
-                        </details>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+      {/* Service tiles */}
+      {isSystemStatusLoading ? (
+        <ServiceTilesSkeleton />
+      ) : systemStatusData ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {systemStatusData.services.map((service, index) => (
+            <ServiceTile
+              key={service.name}
+              service={service}
+              sparkData={sparklineFor(service.name)}
+              lastCheckedLabel={formatRelative(service.last_checked)}
+              index={index}
+            />
+          ))}
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Uptime Trend</CardTitle>
-            <CardDescription>Daily availability percentage over the selected period</CardDescription>
+      {/* Charts */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="animate-fade-in" style={{ animationDelay: '120ms' }}>
+          <CardHeader className="pb-2">
+            <CardTitle className="font-lato text-base font-bold tracking-tight text-primary dark:text-white">
+              Uptime Trend
+            </CardTitle>
+            <CardDescription>Daily availability with a 99.9% SLA reference</CardDescription>
           </CardHeader>
           <CardContent className="h-64">
             {isServiceHealthLoading ? (
-              <Skeleton className="h-64 w-full" />
+              <Skeleton className="h-full w-full" />
             ) : serviceHealthError ? (
-              <div className="text-sm text-destructive">Unable to load uptime trend</div>
+              <div className="flex h-full items-center text-sm text-destructive">Unable to load uptime trend</div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={serviceHealthData?.uptime || []}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip {...serviceHealthChartTooltip} />
-                  <Legend />
-                  <Line type="monotone" dataKey="uptime_percent" name="Uptime %" stroke="#16a34a" dot={false} />
-                </LineChart>
+              <ResponsiveContainer width="100%" height={224}>
+                <AreaChart data={serviceHealthData?.uptime ?? []} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+                  <defs>
+                    <linearGradient id="uptimeFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={CHART_COLORS.steel} stopOpacity={0.12} />
+                      <stop offset="100%" stopColor={CHART_COLORS.teal} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" strokeOpacity={0.4} vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={36}
+                  />
+                  <Tooltip {...chartTooltipStyle} formatter={uptimeTooltipFormatter} />
+                  <ReferenceLine
+                    y={99.9}
+                    stroke={CHART_COLORS.accent}
+                    strokeDasharray="5 4"
+                    strokeWidth={1}
+                    label={{ value: 'SLA 99.9%', position: 'insideTopRight', fill: CHART_COLORS.accent, fontSize: 9, fontWeight: 600 }}
+                  />
+                  {/* No connectNulls -> null days render as honest gaps */}
+                  <Area
+                    type="monotone"
+                    dataKey="uptime_percent"
+                    stroke={CHART_COLORS.steelLight}
+                    strokeWidth={1.5}
+                    fill="url(#uptimeFill)"
+                    dot={false}
+                    activeDot={{ r: 3, fill: CHART_COLORS.steelLight, strokeWidth: 0 }}
+                  />
+                </AreaChart>
               </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Avg Response Time</CardTitle>
-            <CardDescription>Average API response time (ms)</CardDescription>
+        <Card className="animate-fade-in" style={{ animationDelay: '180ms' }}>
+          <CardHeader className="pb-2">
+            <CardTitle className="font-lato text-base font-bold tracking-tight text-primary dark:text-white">
+              Avg Response Time
+            </CardTitle>
+            <CardDescription>Average API response latency (ms)</CardDescription>
           </CardHeader>
           <CardContent className="h-64">
             {isServiceHealthLoading ? (
-              <Skeleton className="h-64 w-full" />
+              <Skeleton className="h-full w-full" />
             ) : serviceHealthError ? (
-              <div className="text-sm text-destructive">Unable to load response time</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={serviceHealthData?.response_time || []}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip {...serviceHealthChartTooltip} />
-                  <Legend />
-                  <Line type="monotone" dataKey="avg_response_ms" name="Avg ms" stroke="#2563eb" dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
+              <div className="flex h-full items-center text-sm text-destructive">Unable to load response time</div>
+            ) : (() => {
+              // Only render points that actually have timing data; historical rows
+              // backfilled from audit_logs have null avg_response_ms (no source timing).
+              const responsePoints = (serviceHealthData?.response_time ?? []).filter(
+                (p) => p.avg_response_ms !== null && p.avg_response_ms !== undefined
+              );
+              if (responsePoints.length < 2) {
+                const firstDate = responsePoints[0]?.date;
+                return (
+                  <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {firstDate
+                        ? `Response time tracking started ${firstDate}. More data will appear over the coming days.`
+                        : 'Response time data is being collected. Check back shortly.'}
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <ResponsiveContainer width="100%" height={224}>
+                  <AreaChart data={responsePoints} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+                    <defs>
+                      <linearGradient id="responseFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={CHART_COLORS.accent} stopOpacity={0.12} />
+                        <stop offset="100%" stopColor={CHART_COLORS.amber} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" strokeOpacity={0.4} vertical={false} />
+                    <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+                    <Tooltip {...chartTooltipStyle} formatter={responseTooltipFormatter} />
+                    <Area
+                      type="monotone"
+                      dataKey="avg_response_ms"
+                      stroke={CHART_COLORS.accent}
+                      strokeWidth={1.5}
+                      fill="url(#responseFill)"
+                      dot={false}
+                      connectNulls
+                      activeDot={{ r: 3, fill: CHART_COLORS.accent, strokeWidth: 0 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Button variant={days === 7 ? 'default' : 'outline'} size="sm" onClick={() => setDays(7)}>7d</Button>
-        <Button variant={days === 30 ? 'default' : 'outline'} size="sm" onClick={() => setDays(30)}>30d</Button>
-        <Button variant={days === 90 ? 'default' : 'outline'} size="sm" onClick={() => setDays(90)}>90d</Button>
-      </div>
-
-      <div className="text-center text-sm text-muted-foreground">
-        Status panel automatically refreshes{autoRefresh ? '' : ' (paused)'}.
-      </div>
+      <p className="text-center text-xs text-muted-foreground">
+        {autoRefresh ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="status-pulse h-1.5 w-1.5 rounded-full" style={{ background: getStatusVisual('operational').color }} />
+            Live — refreshes automatically
+          </span>
+        ) : (
+          'Auto-refresh paused'
+        )}
+      </p>
     </div>
   );
 }

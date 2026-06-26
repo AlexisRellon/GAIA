@@ -1047,7 +1047,7 @@ async def get_system_health(current_user: UserContext = Depends(require_admin)):
 async def get_service_health(
     days: int = Query(30, ge=7, le=90, description="Number of days to retrieve (7-90)"),
     current_user: Optional[UserContext] = Depends(get_current_user_optional)
-) -> Dict[str, List[Dict]]:
+) -> Dict[str, Any]:
     """
     Return time-series service health metrics for the last `days` days.
 
@@ -1062,166 +1062,54 @@ async def get_service_health(
     cache_key = generate_cache_key("analytics:service-health", days=days)
 
     async def fetch_service_health():
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days - 1)
-        start_date_normalized = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Aggregate daily in Postgres via gaia.service_health_daily(p_days): one row
+        # per day over the window (incl. no-data gaps), computed in UTC. This avoids
+        # the PostgREST 1000-row cap that silently truncated raw-row fetches to the
+        # earliest ~1000 checks (~5 days), and is far cheaper than shipping every raw
+        # check across the network to bucket in Python.
+        resp = supabase.schema('gaia').rpc('service_health_daily', {'p_days': days}).execute()
+        series = resp.data or []
 
-        def extract_response_time_ms(metadata: Any) -> Optional[float]:
-            if not isinstance(metadata, dict):
+        # PostgREST serializes numeric as a JSON string to preserve precision; the
+        # frontend expects number | null, so coerce uptime/response to float.
+        def _num(value: Any) -> Optional[float]:
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
                 return None
 
-            for key in (
-                "response_time_ms",
-                "avg_response_time_ms",
-                "duration_ms",
-                "responseTimeMs",
-            ):
-                value = metadata.get(key)
-                if value is None:
-                    continue
-                try:
-                    return float(value)
-                except (TypeError, ValueError):
-                    continue
-            return None
-
-        # Fetch audit log rows in the window. Do not rely solely on a single
-        # `user_role='system'` filter because many system-origin rows (e.g.
-        # from Celery or notification workers) may omit that field. Retrieve
-        # additional columns and perform robust filtering in Python below.
-        resp = supabase.schema('gaia').from_('audit_logs') \
-            .select('created_at, severity, status, metadata, user_role, event_type, action, resource_type, resource') \
-            .gte('created_at', start_date_normalized.isoformat()) \
-            .lt('created_at', end_date.isoformat()) \
-            .execute()
-        rows = resp.data or []
-
-        # Group by date in Python
-        daily_data: Dict[str, Dict] = {}
-        for i in range(days):
-            date_str = (start_date_normalized + timedelta(days=i)).strftime("%Y-%m-%d")
-            daily_data[date_str] = {'total': 0, 'errors': 0, 'response_times': []}
-
-        for r in rows:
-            created = r.get('created_at', '')
-            if not created:
-                continue
-
-            date_str = created[:10]  # Extract YYYY-MM-DD
-            if date_str not in daily_data:
-                continue
-
-            # Determine whether this audit row should be considered a
-            # "system" telemetry record. We accept a variety of indicators
-            # because different writers set different fields.
-            user_role_val = (r.get('user_role') or '').lower()
-            resource_type_val = (r.get('resource_type') or '').lower()
-            event_type_val = (r.get('event_type') or '').lower()
-            action_val = (r.get('action') or '').lower()
-            resource_val = (r.get('resource') or '').lower()
-
-            is_system_row = (
-                user_role_val == 'system'
-                or resource_type_val == 'system'
-                or event_type_val.startswith('system')
-                or action_val.startswith('system_')
-                or resource_val == 'system'
-            )
-
-            if not is_system_row:
-                # Skip rows that are not system-origin telemetry
-                continue
-
-            daily_data[date_str]['total'] += 1
-            sev = (r.get('severity') or '').upper()
-            status = (r.get('status') or '').lower()
-            if sev in ('CRITICAL', 'ERROR') or status == 'failure':
-                daily_data[date_str]['errors'] += 1
-            rt = extract_response_time_ms(r.get('metadata'))
-            if rt is not None:
-                try:
-                    daily_data[date_str]['response_times'].append(float(rt))
-                except (ValueError, TypeError):
-                    pass
-
-        uptime_series = []
-        response_series = []
-        for date_str in sorted(daily_data.keys()):
-            metrics = daily_data[date_str]
-            total = metrics['total']
-            error_count = metrics['errors']
-            response_times = metrics['response_times']
-
-            # If there were no telemetry rows for this day, surface unknowns instead of perfect metrics
-            if total == 0:
-                uptime_percent = None
-                avg_response_ms = None
-            else:
-                uptime_percent = max(0.0, 100.0 - (error_count / total * 100.0))
-                avg_response_ms = round(sum(response_times) / len(response_times), 2) if response_times else None
-
-            point = {
-                "date": date_str,
-                "uptime_percent": round(uptime_percent, 2) if uptime_percent is not None else None,
-                "avg_response_ms": avg_response_ms
+        points = [
+            {
+                "date": r.get("date"),
+                "uptime_percent": _num(r.get("uptime_percent")),
+                "avg_response_ms": _num(r.get("avg_response_ms")),
+                "status": r.get("status"),
             }
+            for r in series
+        ]
 
-            uptime_series.append(point)
-            response_series.append(dict(point))
-        # If many days have no direct audit telemetry, try fallback sources
-        # (activity_logs and rss_processing_logs) to infer system activity.
-        # This helps when certain subsystems write to other tables but not
-        # the audit_logs.user_role field.
-        missing_dates = [d for d in daily_data.keys() if daily_data[d]['total'] == 0]
-        if missing_dates:
-            try:
-                act_resp = supabase.schema('gaia').from_('activity_logs') \
-                    .select('created_at, user_role, event_type, resource_type, action') \
-                    .gte('created_at', start_date_normalized.isoformat()) \
-                    .lt('created_at', end_date.isoformat()) \
-                    .execute()
-                act_rows = act_resp.data or []
+        # Per-service response sparklines from recent checks' metadata. Intraday
+        # raw points (last ~24 checks) so the per-service trends populate within
+        # ~15 min instead of needing multiple days of daily aggregates. Bounded
+        # row count, so the PostgREST 1000-row cap is irrelevant here.
+        sparklines: Dict[str, List[Optional[float]]] = {}
+        try:
+            spark_resp = supabase.schema('gaia').from_('service_health_checks') \
+                .select('response_time_ms, metadata') \
+                .eq('service_name', 'system') \
+                .order('checked_at', desc=True).limit(24).execute()
+            for row in reversed(spark_resp.data or []):
+                meta = row.get('metadata') if isinstance(row.get('metadata'), dict) else {}
+                svc_map = meta.get('services') if isinstance(meta.get('services'), dict) else {}
+                for name, rt in svc_map.items():
+                    sparklines.setdefault(name, []).append(_num(rt))
+                sparklines.setdefault('System', []).append(_num(row.get('response_time_ms')))
+        except Exception:
+            logger.exception("Service-health sparkline fetch failed; returning empty sparklines")
 
-                rss_resp = supabase.schema('gaia').from_('rss_processing_logs') \
-                    .select('created_at, status, metadata') \
-                    .gte('created_at', start_date_normalized.isoformat()) \
-                    .lt('created_at', end_date.isoformat()) \
-                    .execute()
-                rss_rows = rss_resp.data or []
-
-                # Map activity rows by date
-                act_by_date: Dict[str, int] = {}
-                for r in act_rows:
-                    ca = r.get('created_at')
-                    if not ca:
-                        continue
-                    ds = ca[:10]
-                    act_by_date[ds] = act_by_date.get(ds, 0) + 1
-
-                rss_by_date: Dict[str, int] = {}
-                for r in rss_rows:
-                    ca = r.get('created_at')
-                    if not ca:
-                        continue
-                    ds = ca[:10]
-                    rss_by_date[ds] = rss_by_date.get(ds, 0) + 1
-
-                # Update series for missing dates if fallbacks exist
-                for i, p in enumerate(uptime_series):
-                    if p['uptime_percent'] is None:
-                        d = p['date']
-                        act_count = act_by_date.get(d, 0)
-                        rss_count = rss_by_date.get(d, 0)
-                        inferred_total = act_count + rss_count
-                        if inferred_total > 0:
-                            # If we only have fallback entries, assume uptime unless explicit failures
-                            # Note: this is an inference and should be treated cautiously.
-                            uptime_series[i]['uptime_percent'] = 100.0
-                            response_series[i]['uptime_percent'] = 100.0
-            except Exception:
-                # Non-fatal: fall back to original behavior (leave nulls)
-                logger.debug("Service-health fallback aggregation failed; leaving nulls where no telemetry exists")
-        return {"uptime": uptime_series, "response_time": response_series}
+        return {"uptime": points, "response_time": [dict(p) for p in points], "sparklines": sparklines}
 
     try:
         data = await get_or_set(cache_key, fetch_service_health, ttl=CACHE_TTLS.get("analytics:service-health", 30))

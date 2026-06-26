@@ -42,7 +42,18 @@ ISLAND_GROUPS = {'Luzon', 'Visayas', 'Mindanao'}
 
 # Philippine bounding box (lat 4-22°N, lng 116-127°E) — shared validation.
 def _within_philippines(lat: float, lng: float) -> bool:
-    return 4.0 <= lat <= 22.0 and 116.0 <= lng <= 127.0
+    if not (4.0 <= lat <= 22.0 and 116.0 <= lng <= 127.0):
+        return False
+    try:
+        from backend.python.lib.supabase_client import supabase
+        resp = supabase.schema("gaia").rpc("get_psgc_hierarchy_batch", {"p_points": [[lng, lat]]}).execute()
+        return bool(resp.data)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "PostGIS boundary check failed; rejecting coordinates"
+        )
+        return False
 
 
 class GeoNER:
@@ -494,6 +505,10 @@ class GeoNER:
         
         for loc in locations:
             loc_key = loc['location_name'].lower().strip()
+            # Explicit coordinates should not be collapsed by name alone
+            if loc.get('location_type') == 'coordinates':
+                loc_key = f"{loc_key}_{loc.get('latitude')}_{loc.get('longitude')}"
+                
             if loc_key not in seen:
                 seen.add(loc_key)
                 unique_locations.append(loc)
@@ -510,7 +525,7 @@ class GeoNER:
         r"(?<![\d.])(\d{1,2}\.\d{3,})\s*[, ]\s*(1[12]\d\.\d{3,})(?![\d.])"
     )
 
-    def _best_named_label(self, named_locations: Optional[List[Dict]]) -> Optional[str]:
+    def _best_named_location(self, named_locations: Optional[List[Dict]]) -> Optional[Dict]:
         """Label explicit coordinates with the most specific named place in the text."""
         if not named_locations:
             return None
@@ -521,7 +536,7 @@ class GeoNER:
         )
         for loc in ranked:
             if loc.get('location_type') != 'region' and loc.get('location_name'):
-                return loc['location_name']
+                return loc
         return None
 
     def _extract_explicit_coordinates(
@@ -543,14 +558,19 @@ class GeoNER:
             if key in seen:
                 return
             seen.add(key)
+            best_loc = self._best_named_location(named_locations)
             results.append({
-                'location_name': self._best_named_label(named_locations) or f"{lat:.4f}, {lng:.4f}",
+                'location_name': best_loc['location_name'] if best_loc else f"{lat:.4f}, {lng:.4f}",
                 'location_type': 'coordinates',
                 'confidence': 0.99,
                 'source': 'explicit_coords',
                 'latitude': lat,
                 'longitude': lng,
                 'country': 'Philippines',
+                'city': best_loc.get('city') if best_loc else None,
+                'province': best_loc.get('province') if best_loc else None,
+                'region': best_loc.get('region') if best_loc else None,
+                'region_name': best_loc.get('region_name') if best_loc else None,
             })
 
         for m in self._COORD_DIRECTIONAL.finditer(text):

@@ -163,9 +163,16 @@ const UserManagement: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+  const [totalUsers, setTotalUsers] = useState(0);
 
   const isMasterAdmin = hasRole('master_admin');
   const canViewUsers = isMasterAdmin || hasRole('validator');
+
+  const emailFilter = columnFilters.find(f => f.id === 'email')?.value as string;
+
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, pageIndex: 0 }));
+  }, [emailFilter]);
 
   // Create user form
   const createForm = useForm<CreateUserFormData>({
@@ -188,11 +195,12 @@ const UserManagement: React.FC = () => {
 
   // Fetch users using React Query for better caching
   const { data: usersData, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['admin', 'users', { pagination, roleFilter, statusFilter }],
+    queryKey: ['admin', 'users', { pagination, roleFilter, statusFilter, emailFilter }],
     queryFn: async () => {
       const params: {
         role?: string;
         status?: string;
+        email?: string;
         limit: number;
         offset: number;
       } = {
@@ -202,14 +210,11 @@ const UserManagement: React.FC = () => {
 
       if (roleFilter !== 'all') params.role = roleFilter;
       if (statusFilter !== 'all') params.status = statusFilter;
+      if (emailFilter) params.email = emailFilter;
 
       const response = await adminApi.users.list(params);
-      // eslint-disable-next-line
-      console.log('[UserManagement] API response:', response);
-      // eslint-disable-next-line
-      console.log('[UserManagement] Is array?', Array.isArray(response));
-      // Backend returns array directly, not wrapped in {users: []}
-      if (!Array.isArray(response)) {
+      // Backend now returns {users: [], total: N, limit: N, offset: N}
+      if (!response || !Array.isArray(response.users)) {
         throw new Error('Invalid response format from server');
       }
       return response;
@@ -223,9 +228,15 @@ const UserManagement: React.FC = () => {
   // Set users from query data
   useEffect(() => {
     if (usersData) {
-      setUsers(usersData);
+      setUsers(usersData.users as UserData[]);
+      setTotalUsers(usersData.total);
+      
+      const maxPageIndex = Math.max(0, Math.ceil(usersData.total / pagination.pageSize) - 1);
+      if (pagination.pageIndex > maxPageIndex) {
+        setPagination(prev => ({ ...prev, pageIndex: maxPageIndex }));
+      }
     }
-  }, [usersData]);
+  }, [usersData, pagination.pageSize, pagination.pageIndex, setPagination]);
 
   // Subscribe to Realtime changes for user_profiles table
   useEffect(() => {
@@ -519,7 +530,12 @@ const UserManagement: React.FC = () => {
     getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    onPaginationChange: setPagination,
+    onPaginationChange: (updater) => {
+      const newPagination = typeof updater === 'function' ? updater(pagination) : updater;
+      setPagination(newPagination);
+    },
+    manualPagination: true, // Server-side pagination
+    pageCount: Math.ceil(totalUsers / pagination.pageSize),
     state: {
       sorting,
       columnFilters,
@@ -578,7 +594,7 @@ const UserManagement: React.FC = () => {
                   className="pl-9"
                 />
               </div>
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <Select value={roleFilter} onValueChange={(val) => { setRoleFilter(val); setPagination(p => ({ ...p, pageIndex: 0 })); }}>
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Filter by role" />
                 </SelectTrigger>
@@ -590,7 +606,7 @@ const UserManagement: React.FC = () => {
                   <SelectItem value="citizen">Citizen</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPagination(p => ({ ...p, pageIndex: 0 })); }}>
                 <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
@@ -654,12 +670,18 @@ const UserManagement: React.FC = () => {
             {/* Pagination */}
             <div className="flex flex-wrap items-center justify-between gap-y-2 py-4">
               <div className="text-sm text-muted-foreground">
-                Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
-                {Math.min(
-                  (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                  users.length
-                )}{' '}
-                of {users.length} users
+                {totalUsers > 0 ? (
+                  <>
+                    Showing {pagination.pageIndex * pagination.pageSize + 1} to{' '}
+                    {Math.min(
+                      (pagination.pageIndex + 1) * pagination.pageSize,
+                      totalUsers
+                    )}{' '}
+                    of {totalUsers} users
+                  </>
+                ) : (
+                  'No users found'
+                )}
               </div>
               <div className="flex gap-2">
                 <Button

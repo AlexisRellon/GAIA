@@ -113,6 +113,14 @@ class UserProfileResponse(BaseModel):
     created_at: str
     updated_at: Optional[str]  # Added: exists in database
 
+
+class PaginatedUsersResponse(BaseModel):
+    """Paginated response for user list"""
+    users: List[UserProfileResponse]
+    total: int
+    limit: int
+    offset: int
+
 # status = ANY (ARRAY['success'::text, 'failure'::text, 'pending'::text])
 
 class CreateUserRequest(BaseModel):
@@ -251,24 +259,26 @@ class TriageReportResponse(BaseModel):
 # User Management Endpoints (UM-01, UM-02, UM-03, AC-06)
 # ============================================================================
 
-@router.get("/users", response_model=List[UserProfileResponse])
+@router.get("/users", response_model=PaginatedUsersResponse)
 async def get_all_users(
     role: Optional[str] = Query(None, description="Filter by role"),
     status: Optional[str] = Query(None, description="Filter by status"),
     organization: Optional[str] = Query(None, description="Filter by organization"),
-    limit: int = Query(50, ge=1, le=100),
+    email: Optional[str] = Query(None, description="Filter by email"),
+    limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: UserContext = Depends(require_validator, )
 ):
     """
-    Get all user accounts with optional filtering.
+    Get all user accounts with optional filtering and pagination.
+    Returns paginated response with total count for proper pagination UI.
     
     **Permissions**: Master Admin, Validator (read-only)
     **Module**: UM-03 (User Profile Management)
     """
     try:
-        # Build query
-        query = supabase.schema("gaia").from_("user_profiles").select("*")
+        # Build query with exact count for pagination
+        query = supabase.schema("gaia").from_("user_profiles").select("*", count="exact")
         
         if role:
             query = query.eq("role", role)
@@ -276,12 +286,20 @@ async def get_all_users(
             query = query.eq("status", status)
         if organization:
             query = query.ilike("organization", f"%{organization}%")
+        if email:
+            query = query.ilike("email", f"%{email}%")
         
         # Execute query with pagination
         response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
         
-        logger.info(f"User {current_user.email} retrieved {len(response.data)} user profiles")
-        return response.data
+        total = response.count if response.count is not None else len(response.data)
+        logger.info(f"Retrieved {len(response.data)}/{total} user profiles")
+        return {
+            "users": response.data,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
         
     except Exception as e:
         logger.error(f"Error fetching users: {str(e)}")
@@ -621,6 +639,8 @@ async def reset_user_password(
 async def get_audit_logs(
     user_email: Optional[str] = Query(None, description="Filter by user email"),
     event: Optional[str] = Query(None, description="Filter by event type"),
+    event_type: Optional[str] = Query(None, description="Filter by audit event_type column (e.g. 'security_event')"),
+    exclude_system: bool = Query(True, description="Exclude system_event noise (heartbeats etc.) from the default view"),
     action: Optional[str] = Query(None, description="Filter by action type"),
     resource_type: Optional[str] = Query(None, description="Filter by resource type"),
     start_date: Optional[str] = Query(None, description="Filter by start date (ISO format)"),
@@ -632,14 +652,20 @@ async def get_audit_logs(
 ):
     """
     Get audit logs with optional filtering.
-    
+
     **Permissions**: Master Admin, Validator (read-only)
     **Module**: AC-01 (Audit Log Query)
+
+    By default ``exclude_system=True`` hides ``event_type='system_event'`` rows
+    (heartbeats and other system telemetry are ~92% of the table) so the
+    security/compliance audit trail is usable. The rows are kept in the table
+    (tamper-evident chain preserved) and remain visible via
+    ``exclude_system=false``.
     """
     try:
         # Build query
         query = supabase.schema("gaia").from_("audit_logs").select("*")
-        
+
         if user_email:
             query = query.ilike("user_email", f"%{user_email}%")
         # Prefer event-based filtering, keep action as backward-compatible alias.
@@ -647,6 +673,13 @@ async def get_audit_logs(
             query = query.eq("action", event)
         elif action:
             query = query.eq("action", action)
+        if event_type:
+            query = query.eq("event_type", event_type)
+        # Hide system_event noise by default. Verified against live data: every
+        # audit row has a non-null event_type (0 NULLs across 12,339 rows), so a
+        # plain .neq is correct here -- no NULL rows are dropped by it.
+        if exclude_system and event_type != "system_event":
+            query = query.neq("event_type", "system_event")
         if resource_type:
             query = query.eq("resource_type", resource_type)
         if success is not None:
@@ -962,16 +995,24 @@ async def validate_citizen_report(
                 detail="Report has already been validated"
             )
 
-        # 3. Validate optional corrected coordinates (Philippine bounds: 4-21°N, 116-127°E)
+        # 3. Validate optional corrected coordinates against Philippine boundaries
         coordinate_updates: Dict[str, Any] = {}
         corrected_lat = request_body.latitude
         corrected_lng = request_body.longitude
+        
         if corrected_lat is not None and corrected_lng is not None:
-            if not (4 <= corrected_lat <= 21 and 116 <= corrected_lng <= 127):
+            # Exact PostGIS boundary check
+            boundary_resp = supabase.schema("gaia").rpc(
+                "get_psgc_hierarchy_batch", 
+                {"p_points": [[corrected_lng, corrected_lat]]}
+            ).execute()
+            
+            if not boundary_resp.data:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Corrected coordinates are outside Philippine boundaries"
+                    detail="Updated coordinates are not within Philippine bounds."
                 )
+            
             coordinate_updates = {"latitude": corrected_lat, "longitude": corrected_lng}
             logger.info(f"Admin corrected coordinates for report {safe_tracking_id}")
 
@@ -1000,6 +1041,17 @@ async def validate_citizen_report(
             )
 
         hazard_id = promote_response.data
+        if isinstance(hazard_id, list) and len(hazard_id) > 0:
+            hazard_id = hazard_id[0]
+        if isinstance(hazard_id, dict):
+            hazard_id = hazard_id.get("id", hazard_id.get("hazard_id", list(hazard_id.values())[0] if hazard_id else None))
+            
+        if not hazard_id or not isinstance(hazard_id, (str, int)):
+            logger.error(f"Failed to promote report {safe_tracking_id}: missing or malformed hazard_id {promote_response.data}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to validate report and create hazard record"
+            )
         logger.info(f"Promoted report {safe_tracking_id} to hazard {hazard_id}")
         
         # 5. Log activity (fire and forget)
@@ -1058,7 +1110,15 @@ async def validate_citizen_report(
             logger.debug(f"SMS skipped: send_sms_notification not available for report {safe_tracking_id}")
         
         logger.info(f"User {current_user.email} validated report {safe_tracking_id}")
-        
+
+        # Validating adds the report to the hazard map and drains the triage
+        # queue -- invalidate analytics + triage caches so dashboards refresh.
+        try:
+            await invalidate_pattern("analytics:*")
+            await invalidate_pattern("admin:triage:*")
+        except Exception as inv_err:
+            logger.warning(f"Cache invalidation after report validate failed (non-fatal): {inv_err}")
+
         return ReportTriageActionResponse(
             tracking_id=tracking_id,
             action="validated",
@@ -1192,7 +1252,15 @@ async def reject_citizen_report(
             logger.debug(f"SMS skipped: send_sms_notification not available for report {safe_tracking_id}")
         
         logger.info(f"User {current_user.email} rejected report {safe_tracking_id}")
-        
+
+        # Rejecting drains the triage queue and changes report-status analytics
+        # -- invalidate analytics + triage caches so dashboards refresh.
+        try:
+            await invalidate_pattern("analytics:*")
+            await invalidate_pattern("admin:triage:*")
+        except Exception as inv_err:
+            logger.warning(f"Cache invalidation after report reject failed (non-fatal): {inv_err}")
+
         return ReportTriageActionResponse(
             tracking_id=tracking_id,
             action="rejected",

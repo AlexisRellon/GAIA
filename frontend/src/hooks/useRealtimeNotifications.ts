@@ -15,6 +15,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { queryKeys } from '../lib/queryClient';
 import { supabase } from '../lib/supabase';
 import { fetchLatestValidatedHazards } from '../services/hazardsApi';
 import { toast } from 'sonner';
@@ -184,6 +185,7 @@ export function useRealtimeHazards() {
 
             lastSeenRef.current = newest.created_at;
             queryClient.invalidateQueries({ queryKey: ['hazards'] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
           }
         } catch (err) {
           console.error('[Realtime Poll] Error while polling hazards:', err);
@@ -232,6 +234,9 @@ export function useRealtimeHazards() {
             queryClient.invalidateQueries({ queryKey: ['hazards'] });
             queryClient.invalidateQueries({ queryKey: ['rss', 'statistics'] });
             queryClient.invalidateQueries({ queryKey: ['map', 'markers'] });
+            // Refresh dashboard analytics off the existing channel (no new
+            // Realtime connection); backend already invalidated the analytics cache.
+            queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
           })
           .on<HazardRecord>(
             'postgres_changes',
@@ -265,6 +270,7 @@ export function useRealtimeHazards() {
               // Refresh UI
               queryClient.invalidateQueries({ queryKey: ['hazards'] });
               queryClient.invalidateQueries({ queryKey: ['reports'] });
+              queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all() });
             }
           })
           .subscribe((status, err) => {

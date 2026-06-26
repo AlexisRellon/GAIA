@@ -98,6 +98,19 @@ class RSSProcessor:
         logger.info(f"Processing RSS feed: {feed_url}")
         
         try:
+            from backend.python.utils.url_safety import is_safe_public_url
+            if not is_safe_public_url(feed_url):
+                logger.error(f"Feed URL {feed_url} failed SSRF safety check at fetch time.")
+                return {
+                    'feed_url': feed_url,
+                    'status': 'error',
+                    'items_processed': 0,
+                    'items_added': 0,
+                    'hazards_found': [],
+                    'processing_time': time.time() - start_time,
+                    'error_message': 'Unsafe feed URL detected.'
+                }
+            
             # Parse RSS feed (run in thread pool to avoid blocking)
             loop = asyncio.get_event_loop()
             feed = await loop.run_in_executor(None, feedparser.parse, feed_url)

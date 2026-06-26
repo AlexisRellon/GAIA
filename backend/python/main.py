@@ -162,7 +162,46 @@ app = FastAPI(
 
 # (ENV is determined above, before the FastAPI() init.)
 
-# Configure CORS with environment-based whitelist
+# --------------------------------------------------------------------------
+# Middleware registration order
+# --------------------------------------------------------------------------
+# Starlette processes middleware in REVERSE registration order: the LAST
+# middleware added via app.add_middleware() becomes the OUTERMOST layer.
+# CORSMiddleware MUST be outermost so it can always inject CORS headers —
+# even when an inner middleware or exception handler returns an error response.
+#
+# Registration order (first = innermost, last = outermost):
+#   1. Rate limit headers  (innermost — simple header injection)
+#   2. Request logging
+#   3. Security headers
+#   4. CORSMiddleware       (outermost — always adds CORS headers)
+# --------------------------------------------------------------------------
+
+# PATCH-2: Add rate limit headers middleware (innermost)
+from backend.python.middleware.redis_rate_limiter import add_rate_limit_headers
+app.middleware("http")(add_rate_limit_headers)
+
+# PATCH-1: Add request logging middleware (Critical Security Fixes)
+# Log all requests for security audit (disabled in production for performance)
+log_requests = ENV == "development"  # Set to True for debugging, False for production
+app.add_middleware(
+    RequestLoggingMiddleware,
+    log_request_body=log_requests,
+    log_response_body=log_requests,
+    exclude_paths=["/health", "/docs", "/openapi.json", "/favicon.ico", "/metrics"]
+)
+
+# Add security headers middleware (SECURITY_AUDIT.md #5)
+# Use ENV variable defined above - enable HSTS only in production
+enable_hsts = ENV == "production"
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    enable_hsts=enable_hsts,
+    frame_options="DENY",
+    hsts_seconds=31536000  # 1 year
+)
+
+# Configure CORS with environment-based whitelist (OUTERMOST — registered last)
 # Support for Vercel + Railway deployment, localhost development, and future custom domains
 if ENV == "production":
     # Production: Explicit Vercel frontend + Digital Ocean backend domains
@@ -212,30 +251,6 @@ app.add_middleware(
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
     max_age=3600,  # Cache preflight requests for 1 hour
 )
-
-# Add security headers middleware (SECURITY_AUDIT.md #5)
-# Use ENV variable defined above - enable HSTS only in production
-enable_hsts = ENV == "production"
-app.add_middleware(
-    SecurityHeadersMiddleware,
-    enable_hsts=enable_hsts,
-    frame_options="DENY",
-    hsts_seconds=31536000  # 1 year
-)
-
-# PATCH-1: Add request logging middleware (Critical Security Fixes)
-# Log all requests for security audit (disabled in production for performance)
-log_requests = ENV == "development"  # Set to True for debugging, False for production
-app.add_middleware(
-    RequestLoggingMiddleware,
-    log_request_body=log_requests,
-    log_response_body=log_requests,
-    exclude_paths=["/health", "/docs", "/openapi.json", "/favicon.ico", "/metrics"]
-)
-
-# PATCH-2: Add rate limit headers middleware
-from backend.python.middleware.redis_rate_limiter import add_rate_limit_headers
-app.middleware("http")(add_rate_limit_headers)
 
 # Attach rate limiter (SECURITY_AUDIT.md #1)
 app.state.limiter = limiter
