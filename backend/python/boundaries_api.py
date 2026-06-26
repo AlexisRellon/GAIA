@@ -51,22 +51,29 @@ def _validate_location_name(raw: str) -> str:
 
 @router.get("/health")
 @limiter.limit("60/minute")
-async def health_check(request: Request):
-    """Health check — reports whether the boundary data source is configured."""
+async def health_check(request: Request) -> dict:
+    """Health check — reports whether the boundary data source is configured.
+    
+    This endpoint remains public to support open dashboard map visualization
+    and system status checks without requiring authentication.
+    """
     return {
         "status": "healthy" if supabase is not None else "degraded",
         "source": "postgis:gaia.get_boundary_geojson",
     }
 
 
-@router.get("/{location_name}")
+@router.get("/{location_name:path}")
 @limiter.limit("30/minute")
-async def get_location_boundary(location_name: str, request: Request):
+async def get_location_boundary(location_name: str, request: Request) -> dict:
     """Return the GeoJSON boundary for a location name (any admin level).
 
     Resolution prefers an exact larger-unit match (e.g. "Cavite" -> province,
     "Quezon City" -> city), bridges affix differences ("Imus" -> "City of
     Imus"), and falls back to barangay only when nothing larger matches.
+    
+    This endpoint remains public to support the open dashboard map visualization
+    without requiring an active session.
     """
     clean = _validate_location_name(location_name)
 
@@ -88,7 +95,7 @@ async def get_location_boundary(location_name: str, request: Request):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Boundary lookup failed",
-        )
+        ) from exc
 
     feature: Optional[dict] = response.data if isinstance(response.data, dict) else None
     if not feature:

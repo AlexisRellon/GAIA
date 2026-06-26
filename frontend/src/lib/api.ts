@@ -61,6 +61,7 @@ export const adminApi = {
       role?: string;
       status?: string;
       organization?: string;
+      email?: string;
       limit?: number;
       offset?: number;
     }) => {
@@ -68,6 +69,7 @@ export const adminApi = {
       if (params?.role) queryParams.append('role', params.role);
       if (params?.status) queryParams.append('status', params.status);
       if (params?.organization) queryParams.append('organization', params.organization);
+      if (params?.email) queryParams.append('email', params.email);
       // Always send limit and offset for consistent server-side pagination
       queryParams.append('limit', String(params?.limit ?? 10));
       queryParams.append('offset', String(params?.offset ?? 0));

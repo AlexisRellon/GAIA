@@ -47,16 +47,17 @@ const prefersReducedMotion = (): boolean => {
  */
 export function useCountUp(target: number, durationMs = 900): number {
   const [display, setDisplay] = useState(0);
-  const fromRef = useRef(0);
+  const currentRef = useRef(0);
   const frameRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (prefersReducedMotion()) {
       setDisplay(target);
+      currentRef.current = target;
       return;
     }
 
-    const from = fromRef.current;
+    const from = currentRef.current;
     const start = performance.now();
 
     const tick = (now: number) => {
@@ -65,19 +66,16 @@ export function useCountUp(target: number, durationMs = 900): number {
       const eased = 1 - Math.pow(1 - progress, 3);
       const next = from + (target - from) * eased;
       setDisplay(next);
+      currentRef.current = next;
 
       if (progress < 1) {
         frameRef.current = requestAnimationFrame(tick);
-      } else {
-        fromRef.current = target;
       }
     };
 
     frameRef.current = requestAnimationFrame(tick);
-
     return () => {
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-      fromRef.current = target;
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
   }, [target, durationMs]);
 
@@ -193,10 +191,26 @@ export function SegmentedControl<T extends string | number>({
   ariaLabel,
   className,
 }: SegmentedControlProps<T>) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const currentIndex = options.findIndex((o) => o.value === value);
+    let nextIndex = currentIndex;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      nextIndex = (currentIndex + 1) % options.length;
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      nextIndex = (currentIndex - 1 + options.length) % options.length;
+    }
+    if (nextIndex !== currentIndex) {
+      onChange(options[nextIndex].value);
+    }
+  };
+
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
+      onKeyDown={handleKeyDown}
       className={cn(
         'inline-flex items-center gap-0.5 rounded-lg border border-primary/15 bg-muted/60 p-0.5 dark:border-white/10 dark:bg-white/5',
         className,
@@ -211,6 +225,7 @@ export function SegmentedControl<T extends string | number>({
             type="button"
             role="radio"
             aria-checked={selected}
+            tabIndex={selected ? 0 : -1}
             onClick={() => onChange(option.value)}
             className={cn(
               'cursor-pointer rounded-md px-3 py-1 text-xs font-semibold tracking-tight tabular-nums transition-colors duration-200',

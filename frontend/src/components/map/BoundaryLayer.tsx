@@ -14,14 +14,12 @@ import { useBoundaryData } from '../../hooks/useBoundaryData';
  *
  * @param enabled - Whether to display the boundary
  * @param locationName - Location to highlight (e.g., "Imus", "Calabarzon")
- * @param highlightColor - Color for the boundary outline (default: blue)
  * @param onBoundsCalculated - Receives the boundary bounds (for map fitBounds)
  */
 
 interface BoundaryLayerProps {
   enabled: boolean;
   locationName: string | null;
-  highlightColor?: string;
   onBoundsCalculated?: (bounds: LatLngBoundsExpression, boundaryLevel: string) => void;
 }
 
@@ -35,7 +33,7 @@ const WORLD_RING: number[][] = [
  * Build the "spotlight" mask: one polygon = world ring minus the boundary's
  * exterior rings (as holes). Filling it dims everything outside the boundary.
  */
-function buildSpotlightMask(fc: GeoJSON.FeatureCollection): GeoJSON.Feature {
+function buildSpotlightMask(fc: GeoJSON.FeatureCollection): GeoJSON.Feature | null {
   const holes: number[][][] = [];
   for (const feature of fc.features) {
     const geom = feature.geometry;
@@ -47,6 +45,9 @@ function buildSpotlightMask(fc: GeoJSON.FeatureCollection): GeoJSON.Feature {
       }
     }
   }
+  // Return null if no holes are parsed so we don't render a solid black overlay.
+  if (holes.length === 0) return null;
+
   return {
     type: 'Feature',
     properties: {},
@@ -57,7 +58,6 @@ function buildSpotlightMask(fc: GeoJSON.FeatureCollection): GeoJSON.Feature {
 export const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
   enabled,
   locationName,
-  highlightColor = '#3b82f6',
   onBoundsCalculated,
 }) => {
   const { data, loading, error, metadata } = useBoundaryData(locationName, enabled);
@@ -65,8 +65,8 @@ export const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
 
   // Notify the parent of the boundary bounds once per location (for fitBounds).
   useEffect(() => {
-    if (error) {
-      console.error('[BoundaryLayer] Error:', error);
+    if (loading || error) {
+      if (error) console.error('[BoundaryLayer] Error:', error);
       return;
     }
     if (data && data.features.length > 0 && onBoundsCalculated) {
@@ -78,7 +78,7 @@ export const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
         boundsCalculatedRef.current = locationKey;
       }
     }
-  }, [data, locationName, metadata, onBoundsCalculated, error]);
+  }, [data, loading, locationName, metadata, onBoundsCalculated, error]);
 
   const mask = useMemo(() => (data ? buildSpotlightMask(data) : null), [data]);
 
@@ -90,19 +90,17 @@ export const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
   // outside the boundary, and a non-interactive outline has no browser focus
   // outline (this is what removes the stray bounding-box rectangle).
   const maskStyle = (): PathOptions => ({
-    fillColor: '#0f172a',  // slate-900 dim over the surrounding area
-    fillOpacity: 0.4,
+    fillColor: 'hsl(var(--background))',
+    fillOpacity: 0.6,
     weight: 0,
     stroke: false,
-    interactive: false,
   });
 
   const outlineStyle = (): PathOptions => ({
-    color: highlightColor,
+    color: 'hsl(var(--primary))',
     weight: 3,
     opacity: 0.95,
     fill: false,
-    interactive: false,
   });
 
   // key forces a remount when the searched location changes — react-leaflet sets
@@ -111,8 +109,8 @@ export const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
 
   return (
     <>
-      <GeoJSON key={`mask-${key}`} data={mask} style={maskStyle} pane="overlayPane" />
-      <GeoJSON key={`outline-${key}`} data={data} style={outlineStyle} pane="overlayPane" />
+      <GeoJSON key={`mask-${key}`} data={mask} style={maskStyle} pane="overlayPane" interactive={false} />
+      <GeoJSON key={`outline-${key}`} data={data} style={outlineStyle} pane="overlayPane" interactive={false} />
     </>
   );
 };

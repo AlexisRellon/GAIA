@@ -264,6 +264,7 @@ async def get_all_users(
     role: Optional[str] = Query(None, description="Filter by role"),
     status: Optional[str] = Query(None, description="Filter by status"),
     organization: Optional[str] = Query(None, description="Filter by organization"),
+    email: Optional[str] = Query(None, description="Filter by email"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: UserContext = Depends(require_validator, )
@@ -285,12 +286,14 @@ async def get_all_users(
             query = query.eq("status", status)
         if organization:
             query = query.ilike("organization", f"%{organization}%")
+        if email:
+            query = query.ilike("email", f"%{email}%")
         
         # Execute query with pagination
         response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
         
         total = response.count if response.count is not None else len(response.data)
-        logger.info(f"User {current_user.email} retrieved {len(response.data)}/{total} user profiles")
+        logger.info(f"Retrieved {len(response.data)}/{total} user profiles")
         return {
             "users": response.data,
             "total": total,
@@ -675,7 +678,7 @@ async def get_audit_logs(
         # Hide system_event noise by default. Verified against live data: every
         # audit row has a non-null event_type (0 NULLs across 12,339 rows), so a
         # plain .neq is correct here -- no NULL rows are dropped by it.
-        if exclude_system:
+        if exclude_system and event_type != "system_event":
             query = query.neq("event_type", "system_event")
         if resource_type:
             query = query.eq("resource_type", resource_type)
@@ -992,16 +995,24 @@ async def validate_citizen_report(
                 detail="Report has already been validated"
             )
 
-        # 3. Validate optional corrected coordinates (Philippine bounds: 4-21°N, 116-127°E)
+        # 3. Validate optional corrected coordinates against Philippine boundaries
         coordinate_updates: Dict[str, Any] = {}
         corrected_lat = request_body.latitude
         corrected_lng = request_body.longitude
+        
         if corrected_lat is not None and corrected_lng is not None:
-            if not (4 <= corrected_lat <= 21 and 116 <= corrected_lng <= 127):
+            # Exact PostGIS boundary check
+            boundary_resp = supabase.schema("gaia").rpc(
+                "get_psgc_hierarchy_batch", 
+                {"p_points": [[corrected_lng, corrected_lat]]}
+            ).execute()
+            
+            if not boundary_resp.data:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Corrected coordinates are outside Philippine boundaries"
+                    detail="Updated coordinates are not within Philippine bounds."
                 )
+            
             coordinate_updates = {"latitude": corrected_lat, "longitude": corrected_lng}
             logger.info(f"Admin corrected coordinates for report {safe_tracking_id}")
 
@@ -1030,6 +1041,18 @@ async def validate_citizen_report(
             )
 
         hazard_id = promote_response.data
+        if isinstance(hazard_id, list) and len(hazard_id) > 0:
+            hazard_id = hazard_id[0]
+        if isinstance(hazard_id, dict):
+            hazard_id = hazard_id.get("id", hazard_id.get("hazard_id", list(hazard_id.values())[0] if hazard_id else None))
+            
+        if not hazard_id or not isinstance(hazard_id, (str, int)):
+            logger.error(f"Failed to promote report {safe_tracking_id}: missing or malformed hazard_id {promote_response.data}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to validate report and create hazard record"
+            )
+
         logger.info(f"Promoted report {safe_tracking_id} to hazard {hazard_id}")
         
         # 5. Log activity (fire and forget)

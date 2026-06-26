@@ -185,6 +185,20 @@ class RSSProcessorEnhanced:
                     'error_message': str (optional)
                 }
         """
+        from backend.python.utils.url_safety import is_safe_public_url
+        if not is_safe_public_url(feed_url):
+            logger.error(f"Feed URL failed safety check during fetch: {feed_url}")
+            return {
+                'feed_url': feed_url,
+                'status': 'error',
+                'items_processed': 0,
+                'items_added': 0,
+                'duplicates_detected': 0,
+                'hazards_saved': [],
+                'processing_time': 0,
+                'error_message': 'Feed URL failed safety check (SSRF protection)'
+            }
+
         start_time = time.time()
         items_processed = 0
         items_added = 0

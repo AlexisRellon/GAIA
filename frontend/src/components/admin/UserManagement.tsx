@@ -168,6 +168,12 @@ const UserManagement: React.FC = () => {
   const isMasterAdmin = hasRole('master_admin');
   const canViewUsers = isMasterAdmin || hasRole('validator');
 
+  const emailFilter = columnFilters.find(f => f.id === 'email')?.value as string;
+
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, pageIndex: 0 }));
+  }, [emailFilter]);
+
   // Create user form
   const createForm = useForm<CreateUserFormData>({
     resolver: zodResolver(createUserSchema),
@@ -189,11 +195,12 @@ const UserManagement: React.FC = () => {
 
   // Fetch users using React Query for better caching
   const { data: usersData, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['admin', 'users', { pagination, roleFilter, statusFilter }],
+    queryKey: ['admin', 'users', { pagination, roleFilter, statusFilter, emailFilter }],
     queryFn: async () => {
       const params: {
         role?: string;
         status?: string;
+        email?: string;
         limit: number;
         offset: number;
       } = {
@@ -203,10 +210,9 @@ const UserManagement: React.FC = () => {
 
       if (roleFilter !== 'all') params.role = roleFilter;
       if (statusFilter !== 'all') params.status = statusFilter;
+      if (emailFilter) params.email = emailFilter;
 
       const response = await adminApi.users.list(params);
-      // eslint-disable-next-line
-      console.log('[UserManagement] API response:', response);
       // Backend now returns {users: [], total: N, limit: N, offset: N}
       if (!response || !Array.isArray(response.users)) {
         throw new Error('Invalid response format from server');
@@ -224,8 +230,13 @@ const UserManagement: React.FC = () => {
     if (usersData) {
       setUsers(usersData.users as UserData[]);
       setTotalUsers(usersData.total);
+      
+      const maxPageIndex = Math.max(0, Math.ceil(usersData.total / pagination.pageSize) - 1);
+      if (pagination.pageIndex > maxPageIndex) {
+        setPagination(prev => ({ ...prev, pageIndex: maxPageIndex }));
+      }
     }
-  }, [usersData]);
+  }, [usersData, pagination.pageSize, pagination.pageIndex, setPagination]);
 
   // Subscribe to Realtime changes for user_profiles table
   useEffect(() => {

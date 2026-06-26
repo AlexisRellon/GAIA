@@ -35,7 +35,7 @@ const VALIDATED_HAZARDS_REFRESH_INTERVAL_MS = 30_000;
  * PII (reporter name/email/phone, captcha, IP) is intentionally excluded.
  */
 export interface CitizenReportJoin {
-  tracking_id: string;
+  tracking_id?: string;
   description: string | null;
   infrastructure_types: string[] | null;
   infrastructure_details: string | null;

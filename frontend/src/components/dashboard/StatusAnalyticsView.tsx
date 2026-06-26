@@ -190,10 +190,10 @@ export default function StatusAnalyticsView() {
   }, [serviceHealthData, systemStatusData]);
 
   // Per-service response sparklines (intraday raw points from the backend),
-  // keyed by service name. Falls back to the system-wide trend for unknown names.
+  // keyed by service name.
   const sparklineFor = useMemo(() => {
     const map = serviceHealthData?.sparklines ?? {};
-    return (name: string) => (map[name] ?? map['System'] ?? []).map((value) => ({ value }));
+    return (name: string) => (map[name] ?? []).map((value) => ({ value }));
   }, [serviceHealthData]);
 
   const handleRefresh = () => {

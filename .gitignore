@@ -116,6 +116,12 @@ QUICK_TEST_GUIDE*.md
 # Graphify knowledge graph outputs
 graphify-out/
 
+# Kiro
+.kiro/
+
+# Lean-ctx
+.lean-ctx/
+
 # Root level package files (should be in frontend/)
 /package-lock.json
 /node_modules/

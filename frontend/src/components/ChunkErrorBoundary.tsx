@@ -19,20 +19,23 @@
  *   </ChunkErrorBoundary>
  */
 
-import React from 'react';
+import React, { ReactNode } from 'react';
+import { Button } from './ui/button';
 
 interface Props {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 interface State {
   hasError: boolean;
   isChunkError: boolean;
   isOfflineChunkError: boolean;
+  originalError: Error | null;
 }
 
 // Guard so an online auto-reload can never loop (e.g. a chunk that 404s even
 // after a fresh load). At most one reload per this window.
+let hasInMemoryReloaded = false;
 const CHUNK_RELOAD_KEY = 'agaila:last-chunk-reload';
 const CHUNK_RELOAD_COOLDOWN_MS = 10_000;
 
@@ -51,15 +54,15 @@ function isChunkLoadError(error: Error): boolean {
     msg.includes('Failed to fetch dynamically imported module') ||
     msg.includes('error loading dynamically imported module') ||
     msg.includes('Importing a module script failed') ||
-    msg.includes('Refused to execute script') ||
-    (msg.includes('MIME type') && msg.includes('executable'))
+    (msg.includes('MIME type') && msg.includes('text/html')) ||
+    msg.includes('not executable')
   );
 }
 
 export class ChunkErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, isChunkError: false, isOfflineChunkError: false };
+    this.state = { hasError: false, isChunkError: false, isOfflineChunkError: false, originalError: null };
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -69,19 +72,29 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
       hasError: true,
       isChunkError,
       isOfflineChunkError: isChunkError && !navigator.onLine,
+      originalError: error,
     };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // A chunk failed to load while ONLINE — almost always a stale chunk after a
-    // new deploy/recompile. Reload once to pull the fresh index.html + chunks
+    // If it's a chunk error AND we are online, force a hard reload of the window
     // (this is what a manual hard-refresh does). Throttled to avoid loops.
     if (this.state.isChunkError && navigator.onLine) {
-      const last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || '0');
-      if (Date.now() - last > CHUNK_RELOAD_COOLDOWN_MS) {
-        sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
-        window.location.reload();
-        return;
+      try {
+        const last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || '0');
+        if (Date.now() - last > CHUNK_RELOAD_COOLDOWN_MS) {
+          sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
+          window.location.reload();
+          return;
+        }
+      } catch (storageError) {
+        // Fallback if sessionStorage is disabled (e.g. Safari incognito)
+        if (!hasInMemoryReloaded) {
+          hasInMemoryReloaded = true;
+          console.warn('sessionStorage disabled, proceeding with single in-memory reload', storageError);
+          window.location.reload();
+          return;
+        }
       }
     }
 
@@ -92,7 +105,7 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, isChunkError: false, isOfflineChunkError: false });
+    this.setState({ hasError: false, isChunkError: false, isOfflineChunkError: false, originalError: null });
   };
 
   render() {
@@ -101,17 +114,21 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
     // Online stale-chunk: componentDidCatch triggers a one-time reload. Render a
     // minimal "updating" state (never the red overlay); if the reload was
     // throttled, the manual button recovers.
-    if (hasError && isChunkError && !isOfflineChunkError) {
+      if (hasError && isChunkError && !isOfflineChunkError) {
       return (
-        <div className="min-h-screen flex items-center justify-center p-8 bg-background font-sans">
+        <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-background font-sans">
           <div className="text-center">
             <p className="text-slate-500 text-sm mb-4">Updating to the latest version…</p>
-            <button
+            <Button
               onClick={() => window.location.reload()}
-              className="bg-primary text-white border-none rounded-lg px-6 py-[0.6rem] text-sm font-semibold cursor-pointer font-sans"
             >
               Reload
-            </button>
+            </Button>
+            {this.state.originalError && (
+              <p className="text-xs text-slate-400 mt-4 opacity-50 max-w-md break-all">
+                {this.state.originalError.message}
+              </p>
+            )}
           </div>
         </div>
       );
@@ -182,7 +199,7 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
 
     // Genuine (non-chunk) errors: re-throw so existing error handling takes over
     if (hasError && !isChunkError) {
-      throw new Error('ChunkErrorBoundary: non-chunk error — re-throwing');
+      throw this.state.originalError || new Error('ChunkErrorBoundary: non-chunk error — re-throwing');
     }
 
     return this.props.children;

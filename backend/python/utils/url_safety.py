@@ -29,14 +29,7 @@ def _ip_is_blocked(ip_str: str) -> bool:
         addr = ipaddress.ip_address(ip_str)
     except ValueError:
         return True  # not a parseable IP -> reject
-    return (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_reserved
-        or addr.is_multicast
-        or addr.is_unspecified
-    )
+    return not addr.is_global or addr.is_multicast
 
 
 def is_safe_public_url(url: str) -> bool:
@@ -56,6 +49,13 @@ def is_safe_public_url(url: str) -> bool:
     if not host:
         return False
 
+    try:
+        port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
+        if not (1 <= port <= 65535):
+            return False
+    except ValueError:
+        return False
+
     # An IP literal must itself be public.
     try:
         ipaddress.ip_address(host)
@@ -64,7 +64,6 @@ def is_safe_public_url(url: str) -> bool:
         pass  # hostname, resolve below
 
     try:
-        port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except Exception:
         return False  # unresolvable -> reject

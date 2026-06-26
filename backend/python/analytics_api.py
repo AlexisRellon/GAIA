@@ -1106,8 +1106,8 @@ async def get_service_health(
                 for name, rt in svc_map.items():
                     sparklines.setdefault(name, []).append(_num(rt))
                 sparklines.setdefault('System', []).append(_num(row.get('response_time_ms')))
-        except Exception:
-            logger.debug("Service-health sparkline fetch failed; returning empty sparklines")
+        except Exception as e:
+            logger.exception("Service-health sparkline fetch failed; returning empty sparklines")
 
         return {"uptime": points, "response_time": [dict(p) for p in points], "sparklines": sparklines}
 

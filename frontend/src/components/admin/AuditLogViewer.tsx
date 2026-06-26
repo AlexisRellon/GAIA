@@ -151,6 +151,7 @@ const AuditLogViewer: React.FC = () => {
     staleTime: 30000,
     refetchOnMount: true,
     refetchOnWindowFocus: false,
+    placeholderData: (prev: AuditLog[] | undefined) => prev,
   });
 
   const logs = useMemo(() => rawLogs ?? [], [rawLogs]);
@@ -321,7 +322,10 @@ const AuditLogViewer: React.FC = () => {
               <Checkbox
                 id="show-system-events"
                 checked={showSystem}
-                onCheckedChange={(checked) => setShowSystem(checked === true)}
+                onCheckedChange={(checked) => {
+                  setShowSystem(checked === true);
+                  setPagination(prev => ({ ...prev, pageIndex: 0 }));
+                }}
               />
               <Label htmlFor="show-system-events" className="cursor-pointer text-sm font-normal text-muted-foreground">
                 Show system events

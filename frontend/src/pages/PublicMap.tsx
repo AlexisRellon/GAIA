@@ -1429,7 +1429,6 @@ const PublicMap: React.FC = () => {
             <BoundaryLayer
               enabled={searchedLocationName !== null}
               locationName={searchedLocationName}
-              highlightColor="#3b82f6" // Tailwind blue-500
               onBoundsCalculated={(bounds, level) => {
                 setBoundaryBounds(bounds);
                 setBoundaryLevel(level);

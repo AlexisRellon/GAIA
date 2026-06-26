@@ -1432,8 +1432,11 @@ async def delete_rss_article(
 
         # Invalidate hazards cache since an article (hazard) was deleted;
         # analytics too so dashboards reflect the removal immediately.
-        await invalidate_pattern("hazards:*")
-        await invalidate_pattern("analytics:*")
+        try:
+            await invalidate_pattern("hazards:*")
+            await invalidate_pattern("analytics:*")
+        except Exception as cache_err:
+            logger.warning(f"Cache invalidation failed after RSS article deletion: {cache_err}")
 
         return Response(status_code=status.HTTP_204_NO_CONTENT)
         
@@ -1510,8 +1513,11 @@ async def bulk_delete_rss_articles(
 
         # Invalidate hazards cache since articles (hazards) were deleted;
         # analytics too so dashboards reflect the removals immediately.
-        await invalidate_pattern("hazards:*")
-        await invalidate_pattern("analytics:*")
+        try:
+            await invalidate_pattern("hazards:*")
+            await invalidate_pattern("analytics:*")
+        except Exception as cache_err:
+            logger.warning(f"Cache invalidation failed after RSS bulk deletion: {cache_err}")
 
         return {
             'deleted_count': deleted_count,
@@ -1648,8 +1654,11 @@ async def update_rss_article(
 
         # Invalidate hazards cache since an article (hazard) was updated;
         # analytics too so dashboards reflect the change immediately.
-        await invalidate_pattern("hazards:*")
-        await invalidate_pattern("analytics:*")
+        try:
+            await invalidate_pattern("hazards:*")
+            await invalidate_pattern("analytics:*")
+        except Exception as cache_err:
+            logger.warning(f"Cache invalidation failed after RSS article update: {cache_err}")
 
         return updated_data
         
