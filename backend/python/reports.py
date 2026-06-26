@@ -1367,10 +1367,7 @@ async def export_geojson(
     ``undp_damage_assessment`` block.
     """
     try:
-        generated_by = (
-            export_request.metadata.generated_by
-            if export_request.metadata else current_user.email
-        )
+        generated_by = current_user.email
         feature_collection = _build_geojson(export_request.hazards, generated_by)
 
         with tempfile.NamedTemporaryFile(
@@ -1415,10 +1412,7 @@ async def export_csv(
     Admin-only (master_admin / validator), PII-scrubbed.
     """
     try:
-        generated_by = (
-            export_request.metadata.generated_by
-            if export_request.metadata else current_user.email
-        )
+        generated_by = current_user.email
         csv_content = _build_csv(export_request.hazards, generated_by)
 
         with tempfile.NamedTemporaryFile(
