@@ -59,6 +59,31 @@ function isChunkLoadError(error: Error): boolean {
   );
 }
 
+// Guard so an online auto-reload can never loop (e.g. a chunk that 404s even
+// after a fresh load). At most one reload per this window.
+const CHUNK_RELOAD_KEY = 'agaila:last-chunk-reload';
+const CHUNK_RELOAD_COOLDOWN_MS = 10_000;
+
+/**
+ * Detect the various shapes a code-split chunk-load failure can take across
+ * browsers/bundlers, including the stale-chunk case where the dev server / CDN
+ * returns index.html (text/html) for a renamed chunk ("Refused to execute
+ * script … MIME type ('text/html') is not executable").
+ */
+function isChunkLoadError(error: Error): boolean {
+  const msg = error?.message || '';
+  return (
+    error?.name === 'ChunkLoadError' ||
+    msg.includes('Loading chunk') ||
+    msg.includes('Loading CSS chunk') ||
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('error loading dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('Refused to execute script') ||
+    (msg.includes('MIME type') && msg.includes('executable'))
+  );
+}
+
 export class ChunkErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -77,7 +102,8 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // If it's a chunk error AND we are online, force a hard reload of the window
+    // A chunk failed to load while ONLINE — almost always a stale chunk after a
+    // new deploy/recompile. Reload once to pull the fresh index.html + chunks
     // (this is what a manual hard-refresh does). Throttled to avoid loops.
     if (this.state.isChunkError && navigator.onLine) {
       try {
@@ -114,7 +140,7 @@ export class ChunkErrorBoundary extends React.Component<Props, State> {
     // Online stale-chunk: componentDidCatch triggers a one-time reload. Render a
     // minimal "updating" state (never the red overlay); if the reload was
     // throttled, the manual button recovers.
-      if (hasError && isChunkError && !isOfflineChunkError) {
+    if (hasError && isChunkError && !isOfflineChunkError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-background font-sans">
           <div className="text-center">

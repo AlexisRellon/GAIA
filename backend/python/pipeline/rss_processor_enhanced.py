@@ -23,7 +23,7 @@ from urllib.parse import urlparse, parse_qs, urlencode
 
 # Import AI models
 from backend.python.models.classifier import classifier
-from backend.python.models.geo_ner import geo_ner
+from backend.python.models.geo_ner import geo_ner, _within_philippines
 
 # Import Supabase client
 from backend.python.lib.supabase_client import supabase
@@ -185,9 +185,12 @@ class RSSProcessorEnhanced:
                     'error_message': str (optional)
                 }
         """
+        start_time = time.time()
+
         from backend.python.utils.url_safety import is_safe_public_url
         if not is_safe_public_url(feed_url):
             logger.error(f"Feed URL failed safety check during fetch: {feed_url}")
+            self.stats['errors'] += 1
             return {
                 'feed_url': feed_url,
                 'status': 'error',
@@ -195,11 +198,10 @@ class RSSProcessorEnhanced:
                 'items_added': 0,
                 'duplicates_detected': 0,
                 'hazards_saved': [],
-                'processing_time': 0,
+                'processing_time': time.time() - start_time,
                 'error_message': 'Feed URL failed safety check (SSRF protection)'
             }
 
-        start_time = time.time()
         items_processed = 0
         items_added = 0
         duplicates_detected = 0
@@ -709,12 +711,26 @@ class RSSProcessorEnhanced:
                 logger.error(f"No valid location coordinates for: {content_data['title']}")
                 return None
             
-            # Validate coordinates are within Philippines
-            lat = primary_location['latitude']
-            lng = primary_location['longitude']
+            # Validate coordinates exist and are within Philippines
+            lat = primary_location.get('latitude')
+            lng = primary_location.get('longitude')
+            
+            if lat is None or lng is None:
+                logger.warning(
+                    "Primary location missing coordinates for: %s (location: %s)",
+                    content_data['title'], primary_location.get('location_name')
+                )
+                return None
             
             if not (4.0 <= lat <= 22.0 and 116.0 <= lng <= 127.0):
                 logger.warning(f"Location outside Philippines for: {content_data['title']}")
+                return None
+            
+            if not _within_philippines(lat, lng):
+                logger.warning(
+                    "Location failed PostGIS boundary check for: %s (%.4f, %.4f)",
+                    content_data['title'], lat, lng
+                )
                 return None
             
             # Generate content hash for duplicate detection

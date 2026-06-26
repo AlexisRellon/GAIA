@@ -1052,7 +1052,6 @@ async def validate_citizen_report(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to validate report and create hazard record"
             )
-
         logger.info(f"Promoted report {safe_tracking_id} to hazard {hazard_id}")
         
         # 5. Log activity (fire and forget)

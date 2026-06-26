@@ -5,6 +5,10 @@ sys.path.insert(0, '/app')
 import psycopg2
 
 database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    print("ERROR: DATABASE_URL not set. Run this inside the backend container.")
+    sys.exit(1)
+
 conn = psycopg2.connect(database_url)
 cur = conn.cursor()
 

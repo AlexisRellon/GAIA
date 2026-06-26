@@ -14,12 +14,14 @@ import { useBoundaryData } from '../../hooks/useBoundaryData';
  *
  * @param enabled - Whether to display the boundary
  * @param locationName - Location to highlight (e.g., "Imus", "Calabarzon")
+ * @param highlightColor - Color for the boundary outline (default: primary CSS var)
  * @param onBoundsCalculated - Receives the boundary bounds (for map fitBounds)
  */
 
 interface BoundaryLayerProps {
   enabled: boolean;
   locationName: string | null;
+  highlightColor?: string;
   onBoundsCalculated?: (bounds: LatLngBoundsExpression, boundaryLevel: string) => void;
 }
 
@@ -48,6 +50,7 @@ function buildSpotlightMask(fc: GeoJSON.FeatureCollection): GeoJSON.Feature | nu
   // Return null if no holes are parsed so we don't render a solid black overlay.
   if (holes.length === 0) return null;
 
+
   return {
     type: 'Feature',
     properties: {},
@@ -58,6 +61,7 @@ function buildSpotlightMask(fc: GeoJSON.FeatureCollection): GeoJSON.Feature | nu
 export const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
   enabled,
   locationName,
+  highlightColor,
   onBoundsCalculated,
 }) => {
   const { data, loading, error, metadata } = useBoundaryData(locationName, enabled);
@@ -94,13 +98,15 @@ export const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
     fillOpacity: 0.6,
     weight: 0,
     stroke: false,
+    interactive: false,
   });
 
   const outlineStyle = (): PathOptions => ({
-    color: 'hsl(var(--primary))',
+    color: highlightColor || 'hsl(var(--primary))',
     weight: 3,
     opacity: 0.95,
     fill: false,
+    interactive: false,
   });
 
   // key forces a remount when the searched location changes — react-leaflet sets

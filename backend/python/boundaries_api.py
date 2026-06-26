@@ -48,6 +48,10 @@ def _validate_location_name(raw: str) -> str:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid location name")
     return clean
 
+def _safe_for_log(value: str) -> str:
+    """Sanitize untrusted text before logging to prevent log injection."""
+    return (value or "").replace("\r", "").replace("\n", "")
+
 
 @router.get("/health")
 @limiter.limit("60/minute")
@@ -91,7 +95,8 @@ async def get_location_boundary(location_name: str, request: Request) -> dict:
         ).execute()
     except Exception as exc:  # noqa: BLE001
         # Log internally; return a generic message to the client.
-        logger.error("Boundary lookup failed for %r: %s", clean, exc)
+        safe_clean = _safe_for_log(clean)
+        logger.error("Boundary lookup failed for %r: %s", safe_clean, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Boundary lookup failed",

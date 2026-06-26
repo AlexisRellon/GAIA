@@ -356,7 +356,7 @@ async def get_hazard_by_id(
             select_cols = (
                 "*, citizen_report:citizen_reports!promoted_to_hazard_id("
                 "tracking_id, description, infrastructure_types, infrastructure_details, "
-                "crisis_categories, debris_status, damage_severity, image_url)"
+                "crisis_categories, debris_status, damage_severity, community_assessment, image_url)"
             )
             response = await asyncio.to_thread(
                 lambda: supabase.schema("gaia")

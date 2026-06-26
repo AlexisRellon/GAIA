@@ -64,6 +64,7 @@ def is_safe_public_url(url: str) -> bool:
         pass  # hostname, resolve below
 
     try:
+
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except Exception:
         return False  # unresolvable -> reject

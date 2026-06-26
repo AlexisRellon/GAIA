@@ -49,8 +49,11 @@ def _within_philippines(lat: float, lng: float) -> bool:
         resp = supabase.schema("gaia").rpc("get_psgc_hierarchy_batch", {"p_points": [[lng, lat]]}).execute()
         return bool(resp.data)
     except Exception:
-        # Fall back to True if the boundary check fails
-        return True
+        import logging
+        logging.getLogger(__name__).exception(
+            "PostGIS boundary check failed for (%s, %s); rejecting coordinates", lat, lng
+        )
+        return False
 
 
 class GeoNER:

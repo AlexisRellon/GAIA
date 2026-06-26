@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, ZoomControl, ScaleControl, LayersControl, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import { OpenStreetMapProvider } from 'leaflet-geosearch';
-import { fetchValidatedHazards, fetchHazardById, HazardResponse, updateHazardLocation, mapApiResponseToHazard } from '../services/hazardsApi';
+import { fetchValidatedHazards, fetchHazardById, HazardResponse, updateHazardLocation, mapApiResponseToHazard, normalizeCommunityAssessment } from '../services/hazardsApi';
 import type { Hazard } from '../types/hazard';
 import type { InfrastructureType, CrisisSelections, DebrisStatus, DamageSeverity } from '../types/undpTypes';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -583,6 +583,7 @@ const PublicMap: React.FC = () => {
                 crisis_categories: (cr.crisis_categories ?? undefined) as CrisisSelections | undefined,
                 debris_status: (cr.debris_status ?? undefined) as DebrisStatus | undefined,
                 damage_severity: (cr.damage_severity ?? undefined) as DamageSeverity | undefined,
+                community_assessment: normalizeCommunityAssessment(cr.community_assessment),
               }
             : prev
         );
