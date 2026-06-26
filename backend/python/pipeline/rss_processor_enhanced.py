@@ -728,8 +728,8 @@ class RSSProcessorEnhanced:
             
             if not _within_philippines(lat, lng):
                 logger.warning(
-                    "Location failed PostGIS boundary check for: %s (%.4f, %.4f)",
-                    content_data['title'], lat, lng
+                    "Location failed PostGIS boundary check for: %s",
+                    content_data['title']
                 )
                 return None
             

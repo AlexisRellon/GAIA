@@ -51,7 +51,7 @@ def _within_philippines(lat: float, lng: float) -> bool:
     except Exception:
         import logging
         logging.getLogger(__name__).exception(
-            "PostGIS boundary check failed for (%s, %s); rejecting coordinates", lat, lng
+            "PostGIS boundary check failed; rejecting coordinates"
         )
         return False
 
