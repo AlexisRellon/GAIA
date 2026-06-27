@@ -107,7 +107,7 @@ class ConfigManager:
                             retry_on_timeout=True
                         )
                         await cls._redis_client.ping()
-                        logger.info(f"✓ Config manager Redis connected: {REDIS_URL}")
+                        logger.info("✓ Config manager Redis connected successfully")
                     except Exception as e:
                         logger.warning(f"Redis connection failed for config manager: {str(e)} - will use database-only mode")
                         cls._redis_client = None

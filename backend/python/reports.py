@@ -1043,10 +1043,11 @@ async def generate_report(
         )
         
     except Exception as e:
-        print(f"PDF generation error: {e}")
+        from backend.python.middleware.error_logger import log_system_error
+        await log_system_error(request, e, context="pdf_generation")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate PDF report: {str(e)}"
+            detail="Failed to generate PDF report. Please try again later."
         )
 
 # ============================================================================
@@ -1439,7 +1440,7 @@ async def export_csv(
         await log_system_error(request, e, context="csv_export")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate CSV export",
+            detail="Failed to generate CSV export. Please try again later.",
         )
 
 

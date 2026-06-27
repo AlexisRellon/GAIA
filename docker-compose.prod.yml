@@ -24,6 +24,7 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-https://agaila-ph.vercel.app,https://agaila.me}
       - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - RSS_FEEDS=${RSS_FEEDS:-https://www.gmanetwork.com/news/rss/news/}
       # Field Encryption (RA 10173 - Philippine Data Protection Act)
       - GAIA_ENCRYPTION_KEY=${GAIA_ENCRYPTION_KEY}
@@ -37,6 +38,8 @@ services:
       - ai-models:/app/models  # Named volume for AI models cache
     networks:
       - gaia-network
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -52,7 +55,7 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: gaia-frontend-prod
     ports:
-      - "3000:80"  # Nginx serves on port 80 internally
+      - "3000:8080"  # Nginx serves on port 8080 internally
     environment:
       - REACT_APP_API_URL=${REACT_APP_API_URL:-http://backend:8000}
       - REACT_APP_SUPABASE_URL=${SUPABASE_URL}
@@ -60,12 +63,14 @@ services:
       - REACT_APP_RECAPTCHA_SITE_KEY=${REACT_APP_RECAPTCHA_SITE_KEY}
     networks:
       - gaia-network
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -74,16 +79,16 @@ services:
   redis:
     image: redis:7-alpine
     container_name: gaia-redis-prod
-    ports:
-      - "6379:6379"
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - redis-data:/data
     networks:
       - gaia-network
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -100,6 +105,7 @@ services:
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - ENV=production
       - CLIMATE_NLI_MODEL_PATH=${CLIMATE_NLI_MODEL_PATH:-MoritzLaurer/deberta-v3-base-zeroshot-v1.1-all-33}
       - GEO_NER_MODEL_PATH=${GEO_NER_MODEL_PATH:-dslim/bert-base-NER}
@@ -113,6 +119,8 @@ services:
       - ai-models:/app/models
     networks:
       - gaia-network
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       redis:
         condition: service_healthy
@@ -132,6 +140,7 @@ services:
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - ENV=production
       # SMS Notification (CR-06)
       - AWS_SNS_REGION=${AWS_SNS_REGION:-ap-southeast-1}
@@ -140,6 +149,8 @@ services:
       - AWS_SNS_TOPIC_ARN=${AWS_SNS_TOPIC_ARN}
     networks:
       - gaia-network
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       redis:
         condition: service_healthy
