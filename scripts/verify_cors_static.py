@@ -87,7 +87,7 @@ def verify_cors_in_source():
         print("CORS is correctly configured for:")
         print("  • Frontend: https://agaila-ph.vercel.app")
         print("  • Custom domain: https://agaila.me")
-        print("  • Backend: https://gaia-production-2294.up.railway.app")
+        print("  • Backend: https://agaila.me")
         print("  • PATCH method: Enabled")
         print("\nThe CORS error on /api/v1/admin/users/{id}/deactivate")
         print("should now be resolved in production.")

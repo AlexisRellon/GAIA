@@ -301,26 +301,25 @@ npm run build
 docker build -f Dockerfile.frontend --target production -t gaia-frontend:prod .
 ```
 
-### Railway Deployment
+### DigitalOcean Deployment
 
-The project is deployed on Railway using Docker containers. For complete deployment instructions, see [`docs/guides/RAILWAY_DEPLOYMENT.md`](../docs/guides/RAILWAY_DEPLOYMENT.md).
+The project is deployed on DigitalOcean App Platform using Docker containers. For complete deployment instructions, see [`docs/guides/DIGITALOCEAN_DEPLOYMENT.md`](../docs/guides/DIGITALOCEAN_DEPLOYMENT.md).
 
 ```bash
-# Install Railway CLI
-npm i -g @railway/cli
+# Install doctl CLI and authenticate
+doctl auth init
 
-# Login and deploy
-railway login
-railway up --service frontend
+# Deploy
+doctl apps create --spec ../.do/app.yaml
 
 # View logs
-railway logs --service frontend
+doctl apps logs <app-id> --type run
 ```
 
-**Environment Variables** (set in Railway Dashboard or `railway.toml`):
+**Environment Variables** (set in DigitalOcean App Platform Dashboard):
 - `REACT_APP_SUPABASE_URL` - Supabase project URL
 - `REACT_APP_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `REACT_APP_API_URL` - Backend API URL (e.g., `https://backend.up.railway.app`)
+- `REACT_APP_API_URL` - Backend API URL (e.g., `https://agaila-backend-xyz.ondigitalocean.app`)
 - `REACT_APP_MAPBOX_TOKEN` - Mapbox access token (for maps, future)
 - `REACT_APP_RECAPTCHA_SITE_KEY` - reCAPTCHA site key
 

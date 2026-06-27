@@ -57,8 +57,9 @@ ENV PATH=/root/.local/bin:$PATH
 # Expose port
 EXPOSE 8000
 
-# Health check for Railway deployment
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:$PORT/health')" || exit 1
+# Health check for DigitalOcean App Platform deployment
+# The app platform will use this to ensure the container is ready
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/api/status || exit 1
 
-# Railway uses startCommand from railway.toml - no CMD needed here
+# DigitalOcean App Platform uses startCommand from app.yaml - no CMD needed here

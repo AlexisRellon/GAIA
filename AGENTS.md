@@ -21,34 +21,34 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 # Antigravity Global Rules
 
-## Context Architecture: Graphify + lean-ctx (MCP)
+## Context Architecture: Graphify CLI + lean-ctx (MCP)
 
-Antigravity MUST utilize a dual-context strategy to navigate and modify this full-stack React, FastAPI, and Supabase workspace efficiently. Default to **Graphify MCP** tools for system-wide architectural mapping and **lean-ctx MCP** tools for token-efficient file inspection, knowledge tracking, and shell execution. Never rely on native, uncompressed terminal commands or basic file readers.
+Antigravity MUST utilize a dual-context strategy to navigate and modify this full-stack React, FastAPI, and Supabase workspace efficiently. Default to the **Graphify CLI** (`graphify query`) for system-wide architectural mapping and **lean-ctx MCP** tools for token-efficient file inspection, knowledge tracking, and shell execution. Never rely on native, uncompressed terminal commands or basic file readers.
 
 ### Context Routing Strategy
 
-1. **Map Before Reading (Graphify MCP):** ALWAYS query Graphify (`query_graph`, `get_node`, `get_impact_radius`) to understand cross-file dependencies, database schemas, and blast radius *before* opening any files. Never read a file blindly if its relationship to the broader system is unknown.
-2. **File Inspection (lean-ctx MCP):** Once targets are identified via Graphify, use the `lean_ctx_read` tool to inspect them.
-    * Use the `signatures` or `map` read mode for reviewing API surfaces and dependency structures.
+1. **Map Before Reading (Graphify CLI):** ALWAYS query Graphify using `run_command` (e.g., `graphify query "..."`) to understand cross-file dependencies, database schemas, and blast radius *before* opening any files. Never read a file blindly if its relationship to the broader system is unknown.
+2. **File Inspection (lean-ctx MCP):** Once targets are identified via Graphify, use the `ctx_read` tool to inspect them.
+    * Use the `sigs` or `map` read mode for reviewing API surfaces and dependency structures.
     * Use the `full` read mode **only** immediately before making file edits to ensure the latest content is cached in the context buffer.
     * Use the `lines:N-M` read mode for targeted reading when the exact location is already known.
-3. **Boundary Crossing:** When modifying API contracts (e.g., updating a FastAPI route that queries Supabase), use Graphify to identify the exact frontend React components affected, then use `lean_ctx_read` (mode: `full`) exclusively on those specific files to implement changes.
+3. **Boundary Crossing:** When modifying API contracts (e.g., updating a FastAPI route that queries Supabase), use Graphify to identify the exact frontend React components affected, then use `ctx_read` (mode: `full`) exclusively on those specific files to implement changes.
 
 ### Tool Mappings
 
 | Objective | Instead of | Use | Example / Syntax |
 | :--- | :--- | :--- | :--- |
-| **System Discovery & Architecture** | Grepping for imports, guessing relationships | **Graphify MCP Tools** | `query_graph(query="trace connection between React LoginForm and Supabase auth")` |
-| **Reading Code / File Inspection** | Native file readers (`view_file`, `cat`) | **`lean_ctx_read`** | `lean_ctx_read(file="api/routes.py", mode="signatures")` |
-| **Targeted Text Search** | Native `grep_search` | **`lean_ctx_grep`** | `lean_ctx_grep(pattern="def process_hazard", path="src/")` |
-| **Shell Execution / Build Tools** | Native `run_command` or terminal | **`lean_ctx_shell`** | `lean_ctx_shell(command="npm run build")` |
+| **System Discovery & Architecture** | Grepping for imports, guessing relationships | **Graphify CLI** | `graphify query "trace connection between React LoginForm and Supabase auth"` |
+| **Reading Code / File Inspection** | Native file readers (`view_file`, `cat`) | **`ctx_read`** | `ctx_read(path="api/routes.py", mode="sigs")` |
+| **Targeted Text Search** | Native `grep_search` | **`ctx_search`** | `ctx_search(pattern="def process_hazard", path="src/")` |
+| **Shell Execution / Build Tools** | Native `run_command` or terminal | **`ctx_shell`** | `ctx_shell(command="npm run build")` |
 
 ### Session Lifecycle Management
 
-- **Start:** Begin every task by calling `lean_ctx_session_status` and using Graphify to retrieve the overarching project architecture related to the goal.
-- **Workflow:** Set active task focus using `lean_ctx_session_task` and record tactical discoveries via `lean_ctx_session_finding`.
-- **Sync:** If the workflow adds new files, alters database schemas, or changes endpoint structures, ensure the graph is updated (e.g., via `lean_ctx_shell` running `graphify index`) to keep the property graph synchronized.
-- **Permanent Knowledge:** Persist immutable architectural facts and system constraints using `lean_ctx_knowledge_remember` and retrieve them using `lean_ctx_knowledge_search`.
+- **Start:** Begin every task by calling `ctx_session(action="status")` and using Graphify to retrieve the overarching project architecture related to the goal.
+- **Workflow:** Set active task focus using `ctx_overview(task="...")` and record tactical discoveries via `ctx_session(action="finding", content="...")`.
+- **Sync:** If the workflow adds new files, alters database schemas, or changes endpoint structures, ensure the graph is updated (e.g., via `ctx_shell` running `graphify . --update`) to keep the property graph synchronized.
+- **Permanent Knowledge:** Persist immutable architectural facts and system constraints using `ctx_knowledge(action="remember", content="...")` and retrieve them using `ctx_knowledge(action="recall")`.
 
 <!-- GLOBAL RULESET:END -->
 

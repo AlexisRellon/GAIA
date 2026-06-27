@@ -115,14 +115,12 @@ cd frontend && npm run lint
 ### Deployment
 
 ```bash
-# Railway deployment
-railway login
-railway init
-railway up
-railway logs --service backend
+# DigitalOcean deployment
+doctl auth init
+doctl apps create --spec .do/app.yaml
 
-# View Railway environment
-railway environment
+# View DigitalOcean logs
+doctl apps logs <app-id> --type run
 ```
 
 ## Architecture
@@ -190,7 +188,7 @@ Frontend (React PWA) ──▶ Backend (FastAPI) ──▶ Supabase (PostGIS)
 
 **Deployment**
 - Docker + Docker Compose (local dev)
-- Railway or Vercel + Railway (production)
+- DigitalOcean App Platform or Vercel + DigitalOcean (production)
 - GitHub Actions (CI/CD)
 
 ## Key File Locations
@@ -532,31 +530,25 @@ Frontend error handling:
 
 ## Deployment
 
-### Railway (Production)
+### DigitalOcean (Production)
 
 ```bash
-# One-time setup
-npm i -g @railway/cli
-railway login
-railway init
+# One-time setup (Install doctl CLI first)
+doctl auth init
 
 # Deploy
-railway up
+doctl apps create --spec .do/app.yaml
 
 # View logs
-railway logs --service backend
-railway logs --service frontend
-
-# View environment
-railway environment
+doctl apps logs <app-id> --type run
 ```
 
-**Cost Estimate**: ~$65-105/month (Railway: $40-80 + Supabase Pro: $25)
+**Cost Estimate**: ~$65-105/month (DigitalOcean: $40-80 + Supabase Pro: $25)
 
-### Vercel + Railway (Recommended)
+### Vercel + DigitalOcean (Recommended)
 
 **Frontend**: Vercel (Global CDN)
-**Backend**: Railway (AI/ML workloads)
+**Backend**: DigitalOcean App Platform (AI/ML workloads)
 **Database**: Supabase (managed PostgreSQL + PostGIS)
 
 ```bash
@@ -564,15 +556,14 @@ railway environment
 cd frontend
 vercel --prod
 
-# Deploy backend to Railway
-railway login
-railway init
-railway up
+# Deploy backend to DigitalOcean
+doctl auth init
+doctl apps create --spec .do/backend-app.yaml
 ```
 
-**Cost Estimate**: ~$25-65/month (Vercel: Free + Railway: $25-65 + Supabase Pro: $25)
+**Cost Estimate**: ~$25-65/month (Vercel: Free + DigitalOcean: $25-65 + Supabase Pro: $25)
 
-See `docs/guides/RAILWAY_DEPLOYMENT.md` for complete deployment instructions.
+See `docs/guides/DIGITALOCEAN_DEPLOYMENT.md` for complete deployment instructions.
 
 ## Related Documentation
 
@@ -584,6 +575,6 @@ See `docs/guides/RAILWAY_DEPLOYMENT.md` for complete deployment instructions.
 - **[MODULE_CHECKLIST.md](MODULE_CHECKLIST.md)** - Implementation status tracker
 - **[docs/README.md](docs/README.md)** - Complete documentation index
 - **[docs/AGAILA_Project-Thesis_Paper.md](docs/AGAILA_Project-Thesis_Paper.md)** - Thesis paper with full methodology and evaluation
-- **[docs/guides/RAILWAY_DEPLOYMENT.md](docs/guides/RAILWAY_DEPLOYMENT.md)** - Production deployment guide
+- **[docs/guides/DIGITALOCEAN_DEPLOYMENT.md](docs/guides/DIGITALOCEAN_DEPLOYMENT.md)** - Production deployment guide
 - **[docs/guides/DOCKER_GUIDE.md](docs/guides/DOCKER_GUIDE.md)** - Local development setup
 - **[docs/security/STACKHAWK_TESTING_GUIDE.md](docs/security/STACKHAWK_TESTING_GUIDE.md)** - Security scanning guide
