@@ -260,7 +260,7 @@ def process_rss_feeds_task(self):
                 # This happens when task is triggered automatically, not via API
                 logger.info("No existing job record found - creating new job for auto-processing")
                 job_data = {
-                    'started_by': '00000000-0000-0000-0000-000000000000',  # System user UUID
+                    'started_by': None,  # System user UUID
                     'started_by_email': 'system@agaila.local',
                     'status': 'running',
                     'total_feeds': 0,  # Will be updated when feeds are fetched
