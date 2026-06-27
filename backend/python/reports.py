@@ -1043,7 +1043,7 @@ async def generate_report(
         )
         
     except Exception as e:
-        print(f"PDF generation error: {e}")
+        await log_system_error(request, e, context="pdf_generation")
         raise HTTPException(
             status_code=500,
             detail="Failed to generate PDF report. Please try again later."

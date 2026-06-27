@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Create non-root user
 RUN useradd -m -r appuser
+RUN mkdir -p /app/models && chown -R appuser:appuser /app/models
 
 # Copy Python dependencies from builder to the new user's home
 COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local

@@ -95,6 +95,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Cross-Origin Policies
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
         
         # Cache-Control: Prevent caching of API responses
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

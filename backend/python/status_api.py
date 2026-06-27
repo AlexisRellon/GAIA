@@ -562,11 +562,14 @@ async def get_system_status():
                 services.append(ServiceStatusResponse(
                     name="Unknown Service",
                     status=ServiceStatus.DOWN,
-                    message=f"Check error: {str(result)}",
+                    message="Check encountered an unexpected error",
                     last_checked=datetime.now(),
-                    details={"error": str(result)}
+                    details={"error": "internal error"}
                 ))
             else:
+                if result.details and "error" in result.details:
+                    result.message = "Service check failed"
+                    result.details["error"] = "internal error"
                 services.append(result)
 
         # Determine overall status. Critical dependencies (Backend API and
