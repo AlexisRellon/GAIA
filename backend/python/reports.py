@@ -1043,6 +1043,7 @@ async def generate_report(
         )
         
     except Exception as e:
+        from backend.python.middleware.error_logger import log_system_error
         await log_system_error(request, e, context="pdf_generation")
         raise HTTPException(
             status_code=500,

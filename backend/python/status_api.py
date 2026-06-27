@@ -554,13 +554,24 @@ async def get_system_status():
 
         results = await asyncio.gather(*checks, return_exceptions=True)
 
+        check_names = [
+            "Backend API",
+            "Supabase Database",
+            "Supabase Realtime",
+            "AI Classifier",
+            "Geo-NER",
+            "RSS Processor",
+            "External RSS Feeds"
+        ]
+
         # Handle any exceptions
         services = []
-        for result in results:
+        for i, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error(f"Status check exception: {str(result)}")
+                service_name = check_names[i] if i < len(check_names) else "Unknown Service"
+                logger.error(f"Status check exception for {service_name}: {str(result)}")
                 services.append(ServiceStatusResponse(
-                    name="Unknown Service",
+                    name=service_name,
                     status=ServiceStatus.DOWN,
                     message="Check encountered an unexpected error",
                     last_checked=datetime.now(),
