@@ -174,7 +174,10 @@ async def check_supabase_realtime() -> ServiceStatusResponse:
     realtime_probe_url = f"{supabase_url}/realtime/v1/api/tenants/health"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            headers = {"apikey": anon_key} if anon_key else {}
+            headers = {
+                "apikey": anon_key,
+                "Authorization": f"Bearer {anon_key}"
+            } if anon_key else {}
             response = await client.get(realtime_probe_url, headers=headers)
             response_time = (datetime.now() - start_time).total_seconds() * 1000
 
