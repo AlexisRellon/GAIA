@@ -92,6 +92,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "accelerometer=()"
         )
         
+        # Cross-Origin Policies
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        
+        # Cache-Control: Prevent caching of API responses
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        
         # Remove server information leakage (use del for MutableHeaders)
         if "Server" in response.headers:
             del response.headers["Server"]

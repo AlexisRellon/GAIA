@@ -1046,7 +1046,7 @@ async def generate_report(
         print(f"PDF generation error: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate PDF report: {str(e)}"
+            detail="Failed to generate PDF report. Please try again later."
         )
 
 # ============================================================================
@@ -1439,7 +1439,7 @@ async def export_csv(
         await log_system_error(request, e, context="csv_export")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate CSV export",
+            detail="Failed to generate CSV export. Please try again later.",
         )
 
 

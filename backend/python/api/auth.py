@@ -226,7 +226,7 @@ async def log_auth_event(
         logger.error(f"Error logging auth event: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to log auth event: {str(e)}"
+            detail="Failed to log auth event. Please try again later."
         )
 
 
@@ -299,5 +299,5 @@ async def invalidate_other_sessions(
         logger.error(f"Error logging session invalidation: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to log session invalidation: {str(e)}"
+            detail="Failed to log session invalidation. Please try again later."
         )

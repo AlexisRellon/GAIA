@@ -234,7 +234,7 @@ async def get_hazards(
         logger.error(f"Error fetching hazards: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch hazards: {str(e)}"
+            detail="Failed to fetch hazards. Please try again later."
         )
 
 
@@ -329,7 +329,7 @@ async def get_hazard_stats(
         logger.error(f"Error fetching hazard stats: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch statistics: {str(e)}"
+            detail="Failed to fetch statistics. Please try again later."
         )
 
 
@@ -403,7 +403,7 @@ async def get_hazard_by_id(
         logger.error(f"Error fetching hazard {hazard_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch hazard: {str(e)}"
+            detail="Failed to fetch hazard. Please try again later."
         )
 
 
@@ -493,7 +493,7 @@ async def update_hazard_location(
         logger.error(f"Error updating hazard location: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update hazard location: {str(e)}"
+            detail="Failed to update hazard location. Please try again later."
         )
 
 
@@ -611,5 +611,5 @@ async def get_nearby_hazards(
         logger.error(f"Error fetching nearby hazards: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch nearby hazards: {str(e)}"
+            detail="Failed to fetch nearby hazards. Please try again later."
         )

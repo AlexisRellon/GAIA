@@ -612,7 +612,7 @@ async def get_system_status():
         logger.error(f"System status check failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to retrieve system status: {str(e)}"
+            detail="Failed to retrieve system status. Please try again later."
         )
 
 
