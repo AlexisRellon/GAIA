@@ -153,7 +153,6 @@ const StatusPage: React.FC = () => {
               alt="GAIA"
               className="h-8 w-auto"
               loading="eager"
-              fetchPriority="high"
               decoding="async"
             />
           </Link>

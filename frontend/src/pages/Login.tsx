@@ -114,7 +114,6 @@ export default function Login() {
             alt="AGAILA Logo"
             className="w-44 h-auto"
             loading="eager"
-            fetchPriority="high"
             decoding="async"
           />
 
@@ -146,7 +145,6 @@ export default function Login() {
               alt="AGAILA Logo"
               className="h-14 w-auto"
               loading="eager"
-              fetchPriority="high"
               decoding="async"
             />
           </div>

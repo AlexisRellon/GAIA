@@ -37,7 +37,6 @@ const Register = () => {
             alt="AGAILA Logo"
             className="w-44 h-auto"
             loading="eager"
-            fetchPriority="high"
             decoding="async"
           />
 
@@ -69,7 +68,6 @@ const Register = () => {
               alt="AGAILA Logo"
               className="h-14 w-auto"
               loading="eager"
-              fetchPriority="high"
               decoding="async"
             />
           </div>

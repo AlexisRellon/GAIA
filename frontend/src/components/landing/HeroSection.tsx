@@ -15,7 +15,6 @@ export const HeroSection: React.FC = () => {
             alt=""
             aria-hidden="true"
             className="w-auto h-auto min-w-[100vw] min-h-[500px] sm:min-h-[650px] md:min-h-[750px] object-cover"
-            fetchPriority="high"
             loading="eager"
             width={1920}
             height={1125}
