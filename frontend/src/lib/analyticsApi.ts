@@ -49,6 +49,7 @@ export interface SourceBreakdown {
   count: number;
   percentage: number;
   avg_confidence: number;
+  [key: string]: string | number;
 }
 
 export interface RecentAlert {

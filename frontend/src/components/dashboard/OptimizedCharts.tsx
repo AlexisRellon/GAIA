@@ -447,6 +447,7 @@ interface SourceBreakdownData {
   source_type: string;
   count: number;
   percentage: number;
+  [key: string]: string | number;
 }
 
 interface OptimizedSourcePieChartProps {
