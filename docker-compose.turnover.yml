@@ -1,0 +1,72 @@
+services:
+  # Backend API
+  backend:
+    image: alexisrellon/gaia-backend:latest
+    container_name: gaia-backend
+    command: uvicorn backend.python.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file: .env
+    networks:
+      - gaia-network
+    restart: unless-stopped
+
+  # Frontend Web App
+  frontend:
+    image: alexisrellon/gaia-frontend:latest
+    container_name: gaia-frontend
+    command: npm start
+    ports:
+      - "3000:3000"
+    env_file: .env
+    networks:
+      - gaia-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Redis (Standard image, no custom code needed)
+  redis:
+    image: redis:7-alpine
+    container_name: gaia-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - gaia-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+  # Celery Worker (Reuses the backend image!)
+  celery_worker:
+    image: alexisrellon/gaia-backend:latest
+    container_name: gaia-celery-worker
+    command: celery -A backend.python.celery_worker worker --loglevel=info --pool=prefork --concurrency=2
+    env_file: .env
+    networks:
+      - gaia-network
+    depends_on:
+      - redis
+      - backend
+    restart: unless-stopped
+
+  # Celery Beat (Reuses the backend image!)
+  celery_beat:
+    image: alexisrellon/gaia-backend:latest
+    container_name: gaia-celery-beat
+    command: celery -A backend.python.celery_worker beat --loglevel=info
+    env_file: .env
+    networks:
+      - gaia-network
+    depends_on:
+      - redis
+      - celery_worker
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+
+networks:
+  gaia-network:
+    driver: bridge
