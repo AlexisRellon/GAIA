@@ -114,7 +114,7 @@ QUICK_TEST_GUIDE*.md
 .pre-commit-config.yaml
 
 # Graphify knowledge graph outputs
-graphify-out/
+# graphify-out/
 
 # Kiro
 .kiro/
