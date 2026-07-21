@@ -1,13 +1,13 @@
 # Multi-stage build for GAIA Backend (Python AI/ML Pipeline)
 # Security-hardened version with CVE fixes
 
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS builder
 
 # Set working directory
 WORKDIR /app
 
 # Upgrade pip and install pip-tools for reproducible builds
-RUN pip install --upgrade pip pip-tools
+RUN pip install --no-cache-dir pip==26.1.1 pip-tools==8.3.0
 
 # Install system dependencies for building Python packages (minimize perl dependencies)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir --user \
 RUN pip install --no-cache-dir --user https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # Production stage with security patches
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 
 # Set working directory
 WORKDIR /app
