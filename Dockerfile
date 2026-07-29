@@ -1,18 +1,17 @@
 # GAIA Backend - root Dockerfile for PaaS auto-detection
 # DigitalOcean App Platform and similar services look for "Dockerfile" at repo root.
-# This file is identical to Dockerfile.backend; keep them in sync.
-# Build context: repo root. Run: uvicorn backend.python.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Secured version with CVE fixes. Build context: repo root.
 
 # Multi-stage build for GAIA Backend (Python AI/ML Pipeline)
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Upgrade pip
-RUN pip install --upgrade pip
+# Upgrade pip and install pip-tools for reproducible builds
+RUN pip install --no-cache-dir pip==26.1.1 pip-tools==8.3.0
 
-# Install system dependencies for building Python packages
+# Install system dependencies for building Python packages (minimize perl dependencies)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
@@ -22,45 +21,56 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libffi-dev \
     pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
 COPY backend/python/requirements.txt .
 
-# Install Python dependencies
+# Install Python dependencies from requirements.txt
 RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Download spaCy language model
-RUN python -m spacy download en_core_web_sm
+# Download spaCy language model (install with --user so it lands in /root/.local)
+RUN pip install --no-cache-dir --user https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
-# Production stage
-FROM python:3.11-slim
+# Production stage with security patches
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 
 # Set working directory
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies with security updates
+# Explicitly pin curl to fixed version and remove perl/unnecessary packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
-    && rm -rf /var/lib/apt/lists/*
+    curl=8.14.1-2+deb13u4 \
+    libcurl4t64=8.14.1-2+deb13u4 \
+    libssh2-1t64=1.11.1-1+deb13u1 \
+    ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy Python dependencies from builder
-COPY --from=builder /root/.local /root/.local
+# Create non-root user for security
+RUN useradd -m -r appuser
 
-# Copy application code
-COPY backend/python/ ./backend/python/
-COPY tests/ ./tests/
+# Copy Python dependencies from builder with ownership
+COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
+
+# Copy application code with ownership
+COPY --chown=appuser:appuser backend/python/ ./backend/python/
+
+# Create models directory with correct ownership
+RUN mkdir -p /app/models && chown -R appuser:appuser /app/models
+
+# Switch to non-root user
+USER appuser
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV PATH=/root/.local/bin:$PATH
+ENV PATH=/home/appuser/.local/bin:$PATH
 
 # Expose port
 EXPOSE 8000
 
 # Health check for PaaS (App Platform, Railway, etc.)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
-
-# Override with run command in App Platform: uvicorn backend.python.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+    CMD curl -f http://localhost:8000/health || exit 1

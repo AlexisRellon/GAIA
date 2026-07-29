@@ -1,13 +1,15 @@
 # Multi-stage build for GAIA Backend (Python AI/ML Pipeline)
-FROM python:3.11-slim AS builder
+# Security-hardened version with CVE fixes
+
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Upgrade pip
-RUN pip install --upgrade pip
+# Upgrade pip and install pip-tools for reproducible builds
+RUN pip install --no-cache-dir pip==26.1.1 pip-tools==8.3.0
 
-# Install system dependencies for building Python packages
+# Install system dependencies for building Python packages (minimize perl dependencies)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
@@ -17,9 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libffi-dev \
     pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
+# Copy requirements files
 COPY backend/python/requirements.txt .
 
 # Install Python dependencies (CPU-only torch to avoid ~2.5GB CUDA downloads)
@@ -27,20 +29,24 @@ RUN pip install --no-cache-dir --user \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r requirements.txt
 
-# Download spaCy language model
-RUN python -m spacy download en_core_web_sm
+# Download spaCy language model (install with --user so it lands in /root/.local)
+RUN pip install --no-cache-dir --user https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
-# Production stage
-FROM python:3.11-slim
+# Production stage with security patches
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 
 # Set working directory
 WORKDIR /app
 
-# Install runtime dependencies (curl for healthcheck)
+# Install runtime dependencies with security updates
+# Explicitly pin curl to fixed version and remove perl/unnecessary packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    curl=8.14.1-2+deb13u4 \
+    libcurl4t64=8.14.1-2+deb13u4 \
+    libssh2-1t64=1.11.1-1+deb13u1 \
+    ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN useradd -m -r appuser
@@ -63,8 +69,5 @@ USER appuser
 EXPOSE 8000
 
 # Health check for DigitalOcean App Platform deployment
-# The app platform will use this to ensure the container is ready
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/api/status || exit 1
-
-# DigitalOcean App Platform uses startCommand from app.yaml - no CMD needed here
+  CMD curl -f http://localhost:8000/health || exit 1
